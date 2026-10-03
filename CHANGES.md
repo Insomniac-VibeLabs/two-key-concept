@@ -184,9 +184,9 @@ the tagged release.
 
 ## 0.1.12 — 2026-10-03
 
-Version bump. No behavior change. The `working` line through 0.1.11 is this
-tree, now on `main`. Not a git tag. `v0.1.6` still points at the previous
-tree. Not published to PyPI.
+Tag `v0.1.12` on `main`. No behavior change in this version. The `working`
+line through 0.1.11 is this tree. `v0.1.6` stays on the previous tree.
+Not published to PyPI.
 
 
 

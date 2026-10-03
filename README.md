@@ -189,14 +189,14 @@ directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 Install from git. It is not published to PyPI. Package version 0.1.12.
-`v0.1.6` is still the latest git tag and points at the previous tree.
+Tag `v0.1.12` is this tree. `v0.1.6` stays on the previous tree.
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@main"
+pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.1.12"
 ```
 
 ## Run the offline demo

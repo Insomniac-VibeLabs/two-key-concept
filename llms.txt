@@ -7,9 +7,8 @@ Not the full Insomniac-VibeLabs/two-key repository.
 Package: two-key-concept
 Import: two_key
 Package version: 0.1.12
-On branch main. Not a git tag yet.
-Latest git tag: v0.1.6 (previous tree)
-Not on PyPI. Install from git ref `main`.
+Tag: v0.1.12 on main. v0.1.6 stays on the previous tree.
+Not on PyPI. Install from git ref `v0.1.12`.
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
