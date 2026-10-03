@@ -1,0 +1,16 @@
+# Two-Key concept
+
+Authorization layer for AI agents. A tool call runs only if Path A (a policy VM)
+and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
+Not the full Insomniac-VibeLabs/two-key repository.
+
+Package: two-key-concept
+Import: two_key
+Current tag: v0.1.2
+Not on PyPI. Install from git.
+
+Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
+Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
+Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
+
+Read README.md, then docs/HOWTO.md. Tests: python -m unittest discover -s tests

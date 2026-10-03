@@ -41,3 +41,9 @@ Private concept package. Not published to PyPI. Tag `v0.1.2`.
 - Tests cover a second-process reload and a missing witness key.
 - Bandit workflow added. CodeQL remains for when Advanced Security is enabled.
 - Crash-after-success redemption window stays documented and unchanged.
+
+## Docs — 2026-10-02
+
+Clarified the GitHub file list. The middle column is the last commit message,
+not a description of each file. README no longer calls the package private.
+Added `llms.txt` and repository topics for discovery. No behavior change.

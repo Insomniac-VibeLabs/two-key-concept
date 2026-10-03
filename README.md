@@ -36,8 +36,11 @@ Left in the full `two-key` repository, on purpose:
 - payload scanning, antivirus, and DLP hooks
 - enterprise deployment modes and permissioned-chain anchoring
 - X.509 / PKI identities and agent assertions
-- seed-phrase backup and ledger encryption at rest
+- seed-phrase backup
 - hybrid ML-DSA-65
+
+This concept line does encrypt the ledger at rest. The full repository also
+has a separate at-rest design. They are not the same code.
 
 Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
 entries and the signed head are AES-256-GCM at rest. The data key is wrapped
@@ -46,7 +49,11 @@ head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
-This is a private concept package. Install from git. It is not published to PyPI.
+Install from git. It is not published to PyPI.
+
+The middle column on the GitHub file list is the last commit that touched
+that file, not a description of the file. The layout table below is the
+description.
 
 ```bash
 pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.1.2"
