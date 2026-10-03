@@ -44,7 +44,29 @@ key. Reusing the judge credential as the session is a deny.
 Local Ollama is `http://localhost:11434` only. Plain HTTP to any other host
 is refused.
 
-## Authorize
+## Authorize from the command line
+
+This runs both paths and prints the decision. It does not execute the tool.
+
+```bash
+python -m two_key authorize \
+  --key ./keys/principal.pem \
+  --ledger ./ledger \
+  --constitution constitution.signed.json \
+  --judges examples/judges.yaml \
+  --tool email_draft \
+  --args '{"to":"ada@example"}' \
+  --proposal "draft a status note" \
+  --agent-session principal-session-1
+```
+
+Exit status is 0 on allow and 2 on deny. The ledger directory holds
+ciphertext only. `witness.pem` is created on first open. Move it off this
+host after the first checkpoint if the principal key and the ledger files
+live on the same machine.
+
+## Authorize from Python
+
 
 ```python
 from pathlib import Path
@@ -93,8 +115,12 @@ result = gw.invoke(decision.token, "email_draft", {"to": "ada@example"})
 
 The gateway checks the signature, expiry, tool, argument hash, constitution
 hashes, ledger prefix root, and that nothing revoked or reloaded the
-constitution after issuance. The token is single-use. There is no content
+constitution after issuance. The token is single-use. A tool exception does
+not consume it, so the same token can be retried. There is no content
 scanner on the way in or out.
+
+Username/password and OAuth device-code auth are rejected. Use `env`,
+`keyring`, or `callback`.
 
 ## Stop
 

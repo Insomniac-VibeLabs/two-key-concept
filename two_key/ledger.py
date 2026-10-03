@@ -1,7 +1,10 @@
 """Append-only hash-chained ledger with a signed head.
 
-This is the concept ledger: integrity and single-use redemption. It does not
-encrypt at rest, anchor to a chain, or scan payloads.
+Entries and the head are AES-256-GCM ciphertext at rest. The data key is
+wrapped by a key derived from the principal private key. The head is signed
+by the principal and by a separate witness key. A stolen principal key cannot
+produce a new head that verifies unless the witness private key is also
+present. Move ``witness.pem`` off the ledger host to keep that split.
 """
 
 from __future__ import annotations
@@ -12,26 +15,72 @@ import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .canonical import canonical_bytes, canonical_hash
-from .keys import public_from_raw, public_raw, sign, verify
+from .keys import (
+    generate_private_key, load_private_key, public_from_raw, public_key,
+    public_raw, save_private_key, save_public_key, sign, verify,
+)
+
+WRAP_FORMAT = "two-key-concept-ledger-wrap/1"
+RECORD_FORMAT = "two-key-concept-ledger-enc/1"
+_WRAP_INFO = b"two-key-concept-ledger-wrap/1"
+_RECORD_AAD = b"two-key-concept-ledger-enc/1"
 
 
 class LedgerError(RuntimeError):
     pass
 
 
-def _merkle(leaves: list[bytes]) -> bytes:
-    if not leaves:
-        return hashlib.sha256(b"empty").digest()
-    level = [hashlib.sha256(b"\x00" + leaf).digest() for leaf in leaves]
-    while len(level) > 1:
-        if len(level) % 2:
-            level.append(level[-1])
-        level = [hashlib.sha256(b"\x01" + level[i] + level[i + 1]).digest()
-                 for i in range(0, len(level), 2)]
-    return level[0]
+def merkle_root(leaves: list[bytes]) -> bytes:
+    """RFC 6962 Merkle tree hash. Empty input is SHA-256("empty"), not a leaf."""
+
+    def mth(items: list[bytes]) -> bytes:
+        n = len(items)
+        if n == 0:
+            return hashlib.sha256(b"empty").digest()
+        if n == 1:
+            return hashlib.sha256(b"\x00" + items[0]).digest()
+        k = 1 << (n.bit_length() - 1)
+        if k == n:
+            k >>= 1
+        return hashlib.sha256(b"\x01" + mth(items[:k]) + mth(items[k:])).digest()
+
+    return mth(leaves)
+
+
+def _kek(private_key) -> bytes:
+    raw = private_key.private_bytes_raw() if hasattr(private_key, "private_bytes_raw") else None
+    if raw is None:
+        from cryptography.hazmat.primitives import serialization
+        raw = private_key.private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption())
+    return HKDF(SHA256(), 32, salt=b"two-key-concept-ledger", info=_WRAP_INFO).derive(raw)
+
+
+def _seal(data_key: bytes, plaintext: str) -> str:
+    nonce = os.urandom(12)
+    ct = AESGCM(data_key).encrypt(nonce, plaintext.encode("utf-8"), _RECORD_AAD)
+    return json.dumps({"enc": RECORD_FORMAT, "n": nonce.hex(), "c": ct.hex()}, separators=(",", ":"))
+
+
+def _open(data_key: bytes, record: str) -> str:
+    try:
+        blob = json.loads(record)
+        if blob.get("enc") != RECORD_FORMAT:
+            raise LedgerError("ledger record is not encrypted")
+        return AESGCM(data_key).decrypt(
+            bytes.fromhex(blob["n"]), bytes.fromhex(blob["c"]), _RECORD_AAD).decode("utf-8")
+    except LedgerError:
+        raise
+    except Exception as e:
+        raise LedgerError("ledger record rejected (wrong key or tampered ciphertext)") from e
 
 
 @dataclass(frozen=True)
@@ -56,6 +105,8 @@ class Ledger:
         self._lock = threading.Lock()
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
+        self._data_key = self._open_data_key()
+        self._witness = self._open_witness()
         self._load()
 
     @property
@@ -66,6 +117,40 @@ class Ledger:
     def head_path(self) -> Path:
         return self.path / "head.json"
 
+    @property
+    def wrap_path(self) -> Path:
+        return self.path / "keywrap.json"
+
+    @property
+    def witness_path(self) -> Path:
+        return self.path / "witness.pem"
+
+    def _open_data_key(self) -> bytes:
+        kek = _kek(self.private_key)
+        if not self.wrap_path.exists():
+            data_key = os.urandom(32)
+            nonce = os.urandom(12)
+            blob = {"format": WRAP_FORMAT, "nonce": nonce.hex(),
+                    "wrapped": AESGCM(kek).encrypt(nonce, data_key, _WRAP_INFO).hex()}
+            self.wrap_path.write_text(json.dumps(blob, indent=2) + "\n", encoding="utf-8")
+            os.chmod(self.wrap_path, 0o600)
+            return data_key
+        blob = json.loads(self.wrap_path.read_text(encoding="utf-8"))
+        if blob.get("format") != WRAP_FORMAT:
+            raise LedgerError("ledger key file is not a concept wrapped data key")
+        try:
+            return AESGCM(kek).decrypt(bytes.fromhex(blob["nonce"]), bytes.fromhex(blob["wrapped"]), _WRAP_INFO)
+        except Exception as e:
+            raise LedgerError("ledger data key rejected (wrong principal key)") from e
+
+    def _open_witness(self):
+        if not self.witness_path.exists():
+            key = generate_private_key()
+            save_private_key(self.witness_path, key)
+            save_public_key(self.path / "witness.pub.pem", public_key(key))
+            return key
+        return load_private_key(self.witness_path)
+
     def _load(self) -> None:
         if not self.entries_path.exists():
             return
@@ -73,7 +158,7 @@ class Ledger:
         for line in self.entries_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
-            raw = json.loads(line)
+            raw = json.loads(_open(self._data_key, line))
             entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
             expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
             if entry.entry_hash != expect or entry.prev != prev or entry.seq != len(self.entries):
@@ -95,7 +180,7 @@ class Ledger:
             seq = len(self.entries)
             entry_hash = self._hash(seq, prev, kind, body)
             entry = Entry(seq, prev, kind, body, entry_hash)
-            line = json.dumps(entry.to_json(), separators=(",", ":"), sort_keys=True)
+            line = _seal(self._data_key, json.dumps(entry.to_json(), separators=(",", ":"), sort_keys=True))
             with self.entries_path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
                 fh.flush()
@@ -107,29 +192,38 @@ class Ledger:
 
     def checkpoint(self) -> dict:
         with self._lock:
+            if not self.witness_path.exists():
+                raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
             head = {
                 "size": len(self.entries),
                 "tip": self.entries[-1].entry_hash if self.entries else "0" * 64,
                 "merkle_root": self.merkle_root(),
                 "public_key": public_raw(self.public_key),
+                "witness_public_key": public_raw(self._witness.public_key()),
             }
             signed = canonical_bytes(head)
-            head["signature"] = sign(self.private_key, signed)
+            stored = dict(head)
+            stored["signature"] = sign(self.private_key, signed)
+            stored["witness_signature"] = sign(self._witness, signed)
             tmp = self.head_path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(head, indent=2) + "\n", encoding="utf-8")
+            tmp.write_text(_seal(self._data_key, json.dumps(stored)) + "\n", encoding="utf-8")
             os.replace(tmp, self.head_path)
-            return head
+            return stored
 
     def _verify_head(self) -> None:
         if not self.entries:
             return
         if not self.head_path.exists():
             raise LedgerError("ledger has entries but no signed head")
-        head = json.loads(self.head_path.read_text(encoding="utf-8"))
-        body = {k: head[k] for k in ("size", "tip", "merkle_root", "public_key")}
-        pub = public_from_raw(body["public_key"])
-        if not verify(pub, canonical_bytes(body), head.get("signature") or ""):
-            raise LedgerError("signed head failed verification")
+        stored = json.loads(_open(self._data_key, self.head_path.read_text(encoding="utf-8")))
+        body = {k: stored[k] for k in ("size", "tip", "merkle_root", "public_key", "witness_public_key")}
+        message = canonical_bytes(body)
+        if not verify(public_from_raw(body["public_key"]), message, stored.get("signature") or ""):
+            raise LedgerError("principal head signature failed")
+        if not verify(public_from_raw(body["witness_public_key"]), message, stored.get("witness_signature") or ""):
+            raise LedgerError("witness head signature failed")
+        if body["public_key"] != public_raw(self.public_key):
+            raise LedgerError("head principal key does not match the ledger key")
         if body["size"] != len(self.entries) or body["tip"] != self.entries[-1].entry_hash:
             raise LedgerError("signed head does not match the chain")
         if body["merkle_root"] != self.merkle_root():
@@ -138,7 +232,7 @@ class Ledger:
     def merkle_root(self, size: int | None = None) -> str:
         entries = self.entries if size is None else self.entries[:size]
         leaves = [bytes.fromhex(e.entry_hash) for e in entries]
-        return _merkle(leaves).hex()
+        return merkle_root(leaves).hex()
 
     def size(self) -> int:
         return len(self.entries)

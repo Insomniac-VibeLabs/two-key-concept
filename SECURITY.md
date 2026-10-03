@@ -18,5 +18,9 @@ security bug.
   intentionally absent here.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
 
-The ledger file is integrity-protected by the principal signature. It is not
-encrypted. Anyone who can read the directory can read the entries.
+Ledger entries and the head are AES-256-GCM ciphertext. The data key is
+wrapped by the principal key. The head also needs a witness signature.
+Someone who steals only the principal key cannot mint a verifying head
+while `witness.pem` is elsewhere. Someone who steals both keys can.
+
+Code scanning is the CodeQL workflow in `.github/workflows/codeql.yml`.

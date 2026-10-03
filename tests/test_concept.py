@@ -1,16 +1,22 @@
 """Concept invariants: both paths, ledger, token, agent hook, no execution."""
 
+import hashlib
+import io
 import json
 import tempfile
 import unittest
 import urllib.error
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from two_key.agents import MonitoredAgent, parse_proposal
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
 from two_key.gateway import ToolGateway
+from two_key.judges.config import JudgeConfigError, build_credential
 from two_key.judges.openai_compat import OpenAICompatibleJudge
+from two_key.ledger import LedgerError, merkle_root
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
@@ -133,6 +139,78 @@ class ConceptTests(unittest.TestCase):
     def test_proposal_parser_rejects_extra_keys(self):
         with self.assertRaises(Exception):
             parse_proposal(json.dumps({"tool": "search", "arguments": {}, "proposal": "x", "exec": True}))
+
+
+
+    def test_tool_error_does_not_consume_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            decision = tk.authorize(
+                {"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"to": "ada"}, "draft")
+            calls = {"n": 0}
+            def flaky(args):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise RuntimeError("backend down")
+                return {"ok": True}
+            gw = ToolGateway(tk.ledger, tk.issuer, tk.compiled, tools={"email_draft": flaky})
+            first = gw.invoke(decision.token, "email_draft", {"to": "ada"})
+            second = gw.invoke(decision.token, "email_draft", {"to": "ada"})
+            self.assertFalse(first.allowed)
+            self.assertTrue(first.reason.startswith("tool_error:"))
+            self.assertTrue(second.allowed)
+            self.assertEqual(calls["n"], 2)
+
+    def test_merkle_does_not_duplicate_odd_leaf(self):
+        leaves = [hashlib.sha256(str(i).encode()).digest() for i in range(3)]
+        root = merkle_root(leaves)
+        duplicated = hashlib.sha256(b"\x01" + hashlib.sha256(b"\x01" + hashlib.sha256(b"\x00" + leaves[0]).digest() + hashlib.sha256(b"\x00" + leaves[1]).digest()).digest() + hashlib.sha256(b"\x01" + hashlib.sha256(b"\x00" + leaves[2]).digest() + hashlib.sha256(b"\x00" + leaves[2]).digest()).digest()).digest()
+        self.assertNotEqual(root, duplicated)
+        self.assertEqual(len(root), 32)
+
+    def test_ledger_ciphertext_and_witness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            raw = Path(tmp, "entries.jsonl").read_text()
+            self.assertNotIn("constitution_loaded", raw)
+            self.assertIn("two-key-concept-ledger-enc/1", raw)
+            self.assertTrue(Path(tmp, "witness.pem").exists())
+            other = generate_private_key()
+            with self.assertRaises(LedgerError):
+                Ledger(tmp, other)
+
+    def test_stub_auth_rejected(self):
+        with self.assertRaises(JudgeConfigError):
+            build_credential({"type": "username_password", "username": "me", "password_env": "PW"})
+        with self.assertRaises(JudgeConfigError):
+            build_credential({"type": "oauth_device_code", "client_id": "x",
+                              "device_authorization_endpoint": "https://example/device",
+                              "token_endpoint": "https://example/token"})
+
+    def test_cli_authorize_does_not_execute(self):
+        from two_key.cli import main
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            from two_key.keys import save_private_key
+            from two_key.constitution import save_envelope
+            save_private_key(Path(tmp, "principal.pem"), key)
+            save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key))
+            judges = [FixedJudge("a", "yes", provider="p0"), FixedJudge("b", "yes", provider="p1")]
+            buf = io.StringIO()
+            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))):
+                with redirect_stdout(buf):
+                    rc = main(["authorize", "--key", str(Path(tmp, "principal.pem")),
+                               "--ledger", str(Path(tmp, "ledger")),
+                               "--constitution", str(Path(tmp, "c.json")),
+                               "--judges", str(Path(tmp, "unused.yaml")),
+                               "--tool", "email_draft", "--args", '{"to":"ada"}',
+                               "--proposal", "draft", "--allow-test-doubles"])
+            self.assertEqual(rc, 0)
+            self.assertIn("both_paths_allow", buf.getvalue())
+            self.assertNotIn("tool_output", buf.getvalue())
+            self.assertTrue(Path(tmp, "ledger", "entries.jsonl").exists())
+
 
 
 if __name__ == "__main__":

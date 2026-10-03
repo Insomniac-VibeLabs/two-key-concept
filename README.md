@@ -39,8 +39,12 @@ Left in the full `two-key` repository, on purpose:
 - seed-phrase backup and ledger encryption at rest
 - hybrid ML-DSA-65
 
-Crypto here is Ed25519 and SHA-256 via the `cryptography` package. It is a
-prototype. It is not a FIPS 140-3 validated module.
+Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
+entries and the signed head are AES-256-GCM at rest. The head is signed by
+the principal key and by a witness key created in the ledger directory
+(`witness.pem`). Move that file off the ledger host; a stolen principal key
+alone cannot then sign a new head. It is a prototype. It is not a FIPS
+140-3 validated module.
 
 ## Run the offline demo
 
@@ -50,6 +54,7 @@ python3 -m venv .venv
 pip install -e ".[yaml]"
 python -m unittest discover -s tests
 python -m two_key demo
+python -m two_key authorize --help
 ```
 
 The demo uses fixed test-double judges. Real judges are configured in
@@ -63,7 +68,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/agents.py` | Monitored-agent hooks |
-| `two_key/ledger.py` | Hash-chained signed ledger |
+| `two_key/ledger.py` | Encrypted hash-chained ledger, principal and witness head |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption, no scanning |
 | `examples/` | Constitution, hard rules, judges, agents |
 | `docs/HOWTO.md` | Operator how-to |

@@ -2,6 +2,7 @@
 
   two-key init-key DIR
   two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE
+  two-key authorize --key KEY --ledger DIR --constitution FILE --judges FILE --tool NAME
   two-key demo
 """
 
@@ -71,6 +72,30 @@ def _demo(_args) -> int:
     return 0 if denied.allowed is False and allowed.allowed and redeemed and redeemed.allowed and replay and not replay.allowed else 1
 
 
+
+def _authorize(args) -> int:
+    from .constitution import load_envelope
+    from .core import TwoKey
+    from .judges.config import load_config_file
+    from .keys import load_private_key
+    from .ledger import Ledger
+    key = load_private_key(args.key)
+    judges, policy = load_config_file(Path(args.judges))
+    ledger = Ledger(args.ledger, key)
+    tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
+                     private_key=key, quorum=policy, allow_test_doubles=args.allow_test_doubles)
+    arguments = json.loads(args.args)
+    if not isinstance(arguments, dict):
+        raise SystemExit("args must be a JSON object")
+    action = {"tool": args.tool, "amount_usd": args.amount_usd, "data_class": args.data_class,
+              "irreversible": args.irreversible}
+    if args.counterparty:
+        action["counterparty"] = args.counterparty
+    decision = tk.authorize(action, arguments, args.proposal, agent_session=args.agent_session)
+    print(json.dumps(decision.to_record(), indent=2))
+    return 0 if decision.allowed else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="two-key")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -83,6 +108,22 @@ def main(argv: list[str] | None = None) -> int:
     sign.add_argument("--rules", required=True)
     sign.add_argument("--out", required=True)
     sign.set_defaults(func=_sign)
+    auth = sub.add_parser("authorize", help="run Path A and Path B; do not execute the tool")
+    auth.add_argument("--key", required=True)
+    auth.add_argument("--ledger", required=True)
+    auth.add_argument("--constitution", required=True)
+    auth.add_argument("--judges", required=True)
+    auth.add_argument("--tool", required=True)
+    auth.add_argument("--args", default="{}")
+    auth.add_argument("--proposal", required=True)
+    auth.add_argument("--amount-usd", type=float, default=0.0)
+    auth.add_argument("--data-class", default="public")
+    auth.add_argument("--irreversible", action="store_true")
+    auth.add_argument("--counterparty", default="")
+    auth.add_argument("--agent-session", default=None)
+    auth.add_argument("--allow-test-doubles", action="store_true",
+                      help="offline tests only; refused for real judges")
+    auth.set_defaults(func=_authorize)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)

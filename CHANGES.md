@@ -20,3 +20,14 @@ encryption, hybrid ML-DSA.
 
 Engineering note, not a conception entry. The dated conception record stays
 in the `two-key` repository.
+
+## 0.1.1 — 2026-10-02
+
+On branch `10.2.2026`. `prev` and `main` stay at 0.1.0.
+
+- Gateway runs the tool before redemption. A tool exception leaves the token redeemable.
+- Merkle root is RFC 6962. Odd counts no longer duplicate the last leaf.
+- Username/password and OAuth device-code auth are rejected.
+- Ledger entries and head are AES-256-GCM. Head is signed by the principal and a witness key.
+- `two-key authorize` runs both paths and does not execute the tool.
+- CodeQL workflow added so code scanning can run on this private repo.
