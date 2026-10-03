@@ -30,6 +30,106 @@ has both results. `authorize_from_agent` runs both paths and does not
 execute the tool. An agent is untrusted whether it is hosted locally or in
 the cloud.
 
+## Architecture
+
+A monitored agent and a Path B judge do not call each other, and neither
+calls the gateway. The caller runs the agent. Two-Key then runs both paths.
+Only the gateway runs a tool.
+
+```mermaid
+flowchart TD
+  constitution["Signed constitution<br/>prose and hard rules"] --> compile["compile_both"]
+  compile --> bytecode["Path A bytecode"]
+  compile --> judgeText["Path B judge text"]
+  instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
+  judgeText -->|"constitution prose only"| agent
+  agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
+  bytecode --> pathA["Path A Policy VM"]
+  authorize --> pathA
+  authorize -->|"action record and tool args"| pathB["Path B convene<br/>also runs when Path A denies"]
+  judgeText --> pathB
+  session["agent_session<br/>must not be a judge API key"] --> pathB
+  pathB -->|"parallel score, separate credentials"| judges["Judges<br/>xAI, OpenAI, Anthropic, Gemini, Ollama"]
+  judges -->|"yes, no, or abstain"| pathB
+  pathA --> gate{"both allow?"}
+  pathB --> gate
+  pathA --> ledger["Encrypted ledger"]
+  pathB --> ledger
+  gate -->|no| ledger
+  gate -->|yes| token["Single-use capability token"]
+  token --> ledger
+  token --> gateway["Tool gateway"]
+  gateway -->|"redemption_started, then the tool"| tool["Registered tool"]
+  gateway --> ledger
+```
+
+`MonitoredAgent.complete` sends the constitution prose and the instruction.
+It does not receive Path A bytecode, judge credentials, or tool credentials.
+Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
+fields. Extra keys are rejected. `authorize_from_agent` parses that JSON,
+records `agent id`, `hosting`, and `trusted: false`, and does not call the
+model again. Hosting is local or cloud. It is not trust, and it does not
+skip either path.
+
+Path A reads only the five structured fields. Path B judges see the
+normalized action record. Non-empty tool arguments are attached on that
+record as `tool_args`. The proposal string is not sent unless that judge
+has `receives_proposal: true`, or the quorum policy is
+`judge_inputs: record_and_proposal`. The code default, and
+`examples/judges.yaml`, is `record_only`.
+
+Judges are loaded into `TwoKey` from their own config and their own API
+keys. Use a different key than the agent. They vote in parallel under one
+deadline. A missing, malformed, or timed-out ballot is an abstention, and
+an abstention is not a yes. A cloud judge makes the round deny when
+`agent_session` is missing. If that string equals the judge credential, the
+ballot abstains with `cloud_judge_reused_agent_session` and the round
+denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
+session at the model host.
+
+One call, in code order:
+
+```mermaid
+sequenceDiagram
+  participant Caller
+  participant Agent as Monitored agent
+  participant TwoKey
+  participant PathA as Path A VM
+  participant PathB as Path B quorum
+  participant Judge as Judges
+  participant Ledger
+  participant Gateway
+  participant Tool
+
+  Caller->>Agent: instruction and constitution prose
+  Agent-->>Caller: JSON proposal, no tool call
+  Caller->>TwoKey: proposal and agent_session
+  TwoKey->>PathA: structured fields
+  PathA-->>TwoKey: allow or deny
+  TwoKey->>PathB: action record, tool args, binding hashes
+  PathB->>Judge: score in parallel, own credentials
+  Judge-->>PathB: yes, no, or abstain
+  PathB-->>TwoKey: quorum pass or deny
+  TwoKey->>Ledger: proposal, path_a, path_b
+  alt both allow
+    TwoKey->>Ledger: capability_issued, then decision
+    TwoKey-->>Caller: single-use token
+    Caller->>Gateway: token, tool, arguments
+    Gateway->>Ledger: redemption_started
+    Gateway->>Tool: registered function
+    Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
+  else either path denies
+    TwoKey->>Ledger: decision, no token
+    TwoKey-->>Caller: deny
+  end
+```
+
+The token is bound to the tool, the argument hash, the ledger Merkle root
+and size at issuance, and the constitution hashes. The gateway checks those,
+plus expiry, signature, and that nothing revoked or reloaded the
+constitution after issuance. It writes `redemption_started` before the tool
+runs.
+
 ## What this repo leaves out
 
 Left in the full `two-key` repository, on purpose:
