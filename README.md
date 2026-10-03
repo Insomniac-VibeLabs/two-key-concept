@@ -20,7 +20,8 @@ Apache License 2.0. See [LICENSE](LICENSE).
    count as yes.
 3. A short-lived single-use token is issued only if both paths allow. The
    token is bound to the tool, the argument hash, and the ledger Merkle
-   root at issuance.
+   root at issuance. Redemption writes an intent before the tool runs, so a
+   crash cannot run that token twice.
 4. The gateway redeems that token. It does not inspect file contents, mail,
    or tool output for DLP or malware.
 

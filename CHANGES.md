@@ -47,3 +47,9 @@ Private concept package. Not published to PyPI. Tag `v0.1.2`.
 Clarified the GitHub file list. The middle column is the last commit message,
 not a description of each file. README no longer calls the package private.
 Added `llms.txt` and repository topics for discovery. No behavior change.
+
+## 0.1.3 — 2026-10-02
+
+- Redemption writes and checkpoints an intent before the tool runs. A retry of that intent does not run the tool.
+- A tool exception appends an abort and leaves the token usable.
+- A crash after the intent and before the tool runs also blocks a retry.

@@ -109,6 +109,7 @@ class Ledger:
         self._lock = threading.Lock()
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
+        self._started: set[str] = set()
         self._ledger_key = self._open_ledger_key()
         self._data_key = self._open_data_key()
         self._witness = self._open_witness()
@@ -183,8 +184,14 @@ class Ledger:
                 raise LedgerError("ledger chain failed verification")
             self.entries.append(entry)
             prev = entry.entry_hash
-            if entry.kind == "redemption":
-                self._redeemed.add(entry.body["jti"])
+            jti = entry.body.get("jti")
+            if entry.kind == "redemption" and jti:
+                self._redeemed.add(jti)
+                self._started.discard(jti)
+            elif entry.kind == "redemption_started" and jti:
+                self._started.add(jti)
+            elif entry.kind == "redemption_aborted" and jti:
+                self._started.discard(jti)
         self._verify_head()
 
     def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
@@ -204,8 +211,14 @@ class Ledger:
                 fh.flush()
                 os.fsync(fh.fileno())
             self.entries.append(entry)
-            if kind == "redemption":
-                self._redeemed.add(body["jti"])
+            jti = body.get("jti")
+            if kind == "redemption" and jti:
+                self._redeemed.add(jti)
+                self._started.discard(jti)
+            elif kind == "redemption_started" and jti:
+                self._started.add(jti)
+            elif kind == "redemption_aborted" and jti:
+                self._started.discard(jti)
             return entry
 
     def checkpoint(self) -> dict:
@@ -258,6 +271,9 @@ class Ledger:
 
     def is_redeemed(self, jti: str) -> bool:
         return jti in self._redeemed
+
+    def redemption_started(self, jti: str) -> bool:
+        return jti in self._started and jti not in self._redeemed
 
     def kinds_after(self, size: int, kinds: set[str]) -> list[Entry]:
         return [e for e in self.entries[size:] if e.kind in kinds]

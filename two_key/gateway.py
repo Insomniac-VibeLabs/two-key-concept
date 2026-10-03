@@ -1,9 +1,9 @@
 """Redeem a capability token. No scanning, antivirus, or DLP hooks.
 
-The tool runs before the token is consumed. A tool exception leaves the token
-redeemable. A process crash after a successful tool return and before the
-redemption entry is written can allow a second run; the in-process and file
-locks close the concurrent window only.
+A redemption intent is checkpointed before the tool runs. A later retry of
+that intent does not run the tool. A tool exception appends an abort and
+leaves the token usable. A crash after a successful return cannot run the
+token again, because the intent is already on the ledger.
 """
 
 from __future__ import annotations
@@ -58,9 +58,21 @@ class ToolGateway:
         with self._hold(payload["jti"]):
             if self.ledger.is_redeemed(payload["jti"]):
                 return GatewayResult(False, "already_redeemed")
+            if self.ledger.redemption_started(payload["jti"]):
+                return GatewayResult(False, "already_attempted")
+            try:
+                self.ledger.append("redemption_started", {"jti": payload["jti"], "tool": tool})
+                self.ledger.checkpoint()
+            except LedgerError as e:
+                return GatewayResult(False, f"ledger_failed:{e}")
             try:
                 output = fn(arguments)
             except Exception as e:
+                try:
+                    self.ledger.append("redemption_aborted", {"jti": payload["jti"], "tool": tool})
+                    self.ledger.checkpoint()
+                except LedgerError as le:
+                    return GatewayResult(False, f"ledger_failed:{le}")
                 return GatewayResult(False, f"tool_error:{type(e).__name__}", None)
             try:
                 self.ledger.append("redemption", {"jti": payload["jti"], "tool": tool})

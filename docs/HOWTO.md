@@ -122,9 +122,10 @@ scanner on the way in or out.
 Username/password and OAuth device-code auth are rejected. Use `env`,
 `keyring`, or `callback`.
 
-A crash after the tool returns and before the redemption entry is written can
-run that token once more. That window is accepted on this concept line. A
-tool exception does not consume the token.
+A redemption intent is checkpointed before the tool runs. A crash after that
+intent, including after the tool has returned, does not run the token again.
+A tool exception appends an abort and leaves the token usable. A crash before
+the tool runs also blocks a retry.
 
 ## Stop
 

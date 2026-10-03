@@ -25,8 +25,9 @@ outside the ledger directory. Stealing only the principal key does not decrypt
 the log and does not sign a new head. Stealing the ledger key decrypts.
 Stealing the witness key as well allows a forged head.
 
-A crash after a successful tool return and before the redemption entry is an
-accepted limit: that token can run once more. Concurrent calls are locked.
+A redemption intent is checkpointed before the tool runs. A later retry does
+not run the tool. Concurrent calls are locked. A crash before the tool runs
+blocks a retry; a tool exception does not.
 
 Code scanning in CI is `.github/workflows/security.yml` (bandit). CodeQL is
 `.github/workflows/codeql.yml` and runs only if GitHub Advanced Security is
