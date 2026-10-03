@@ -81,4 +81,21 @@ On branch `10.3.2026.2`. `main` was not updated.
 - Workflows set an explicit `permissions` block. The CodeQL job still has `security-events: write`.
 - The 0.1.1 changelog no longer calls the repository private in the present tense.
 
+## 0.1.6 — 2026-10-03
+
+Tag `v0.1.6`. `v0.1.2`, `v0.1.3`, and `v0.1.4` stay on their earlier commits.
+
+`two-key` main is 0.1.5. This package skipped 0.1.5 so this release is higher.
+The two packages do not share a version line.
+
+Pulled in by merge of pull request #4, previously unreleased:
+
+- Fit, comparison, threat-model, and scope pages.
+- `two-key authorize` defaults match `normalize_action`: classified, and irreversible true.
+- A stale ledger refuses to append. Ledger and redemption locks stay outside the ledger directory.
+- Path B comments match the code. Both paths still run.
+
+No behavior change in this version bump itself. Not published to PyPI.
+
+
 

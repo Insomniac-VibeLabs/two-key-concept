@@ -1,6 +1,6 @@
 # Scope
 
-`two-key-concept` is the first working cut. Package version 0.1.4.
+`two-key-concept` is the first working cut. Package version 0.1.6.
 
 It keeps:
 
