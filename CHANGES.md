@@ -118,6 +118,23 @@ updated. This version is not a release tag. `v0.1.6` stays on the previous tree.
   defaults and the minting key are unchanged. Both paths still run.
 - Not published to PyPI.
 
+## 0.1.8 — 2026-10-03
+
+On branch `working`. Not a release tag. `main` was not updated. `v0.1.6` stays
+the tagged release.
+
+- `tool_specs` is required. A constitution that omits the key does not sign
+  and does not load. There is no remaining path that trusts the agent's form.
+- Diversity floors default on: two vendors, one local judge, and a yes from
+  a local judge. `QuorumPolicy.without_diversity_floors()` opts out.
+  `require_path_a_first` still defaults off and is still not a skip.
+  `TwoKey` refuses to start when the judge set misses the floor.
+- Tokens are signed by a capability key outside the ledger directory
+  (`<ledger>.capability/capability.pem`). The gateway keeps only the public
+  half. The principal key still signs the constitution and the ledger head.
+  A token signed with the principal key does not redeem.
+- Not published to PyPI.
+
 
 
 

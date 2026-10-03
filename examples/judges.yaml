@@ -16,15 +16,17 @@
 quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"
   min_responding: 2          # refuse to decide if fewer valid ballots arrive
-  min_distinct_providers: 1  # 1 = not enforced (docs/THREAT_MODEL.md)
+  min_distinct_providers: 1  # 1 = this provider count is not itself a floor
   timeout_seconds: 45        # judges run in parallel; any judge not done by then abstains
-  # Section-4 reference profile is QuorumPolicy.section4()
-  # (min_vendors: 2, min_local_judges: 1, require_path_a_first: true).
-  # TwoKey.authorize still runs both paths; it does not read require_path_a_first.
-  # DESIGN_OPTIONS.md and CONCEPTION_NOTES.md are in Insomniac-VibeLabs/two-key.
-  # The prior-art memo is not in either repository.
+  # Diversity floors are on unless you set them lower.
+  # Default: min_vendors 2, min_local_judges 1, require_local_yes true.
+  # This file's judge list has several vendors and one local Ollama judge,
+  # so the defaults pass. Opt out with, for example:
   # min_vendors: 1
   # min_local_judges: 0
+  # require_local_yes: false
+  # QuorumPolicy.section4() also sets require_path_a_first. TwoKey.authorize
+  # still runs both paths; it does not read that flag.
   # heterogeneity_scope: selection   # selection | responding
   # judge_inputs: record_only        # record_only | record_and_proposal
   # ballot_binding: stamp            # stamp | echo (echo needs echo_binding: true on every judge)

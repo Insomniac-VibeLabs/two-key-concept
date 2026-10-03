@@ -6,12 +6,11 @@ and Two-Key turns that into an explicit, logged DENY.
 
 Missing-field defaults follow disclosure section 5.2 and the missing-field rule: a missing
 ``irreversible`` means ``True`` and a missing ``data_class`` means
-``"classified"``.
-
-Open design question that remains for a constitution with no ``tool_specs``:
-who produces the action record. When ``tool_specs`` is present, ``derive.py``
-fills the form from the argument bytes and a disagreeing claim is a deny.
-Free text is still not classified. Recorded in docs/THREAT_MODEL.md.
+``"classified"``. A signed constitution must include ``tool_specs``.
+``derive.py`` then fills the form from the argument bytes. A disagreeing
+claim is a deny. The missing-field defaults still apply before that fill:
+omitted ``data_class`` stays ``classified``, and the floor cannot lower it.
+Omitted ``irreversible`` is replaced by the spec. Free text is not classified.
 The options memo is DESIGN_OPTIONS.md section 1 in
 Insomniac-VibeLabs/two-key, not in this repository.
 """

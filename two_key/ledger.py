@@ -2,9 +2,11 @@
 
 Entries and the head are AES-256-GCM ciphertext at rest. The data key is
 wrapped by a ledger key that is not the principal key. The head is signed by
-the principal and by a witness key. Both of those files live outside the
-ledger directory. A stolen principal key can neither decrypt the log nor
-sign a new head. Appends and checkpoints take `<ledger>.lock` next to the
+the principal and by a witness key. The capability minting key also lives
+outside the ledger directory (`<ledger>.capability/capability.pem`). This
+module does not load it. The gateway must not either. A stolen principal
+key can neither decrypt the log nor sign a new head, and it does not mint
+tokens. Appends and checkpoints take `<ledger>.lock` next to the
 ledger directory. A write is refused if another writer changed the file.
 Redemption locks live in `<ledger>.redeem-locks`, also outside the directory.
 """
@@ -121,6 +123,13 @@ class Ledger:
         self._data_key = self._open_data_key()
         self._witness = self._open_witness()
         self._load()
+
+    def capability_key_path(self) -> Path:
+        """Minting key. Outside the ledger directory. The gateway does not read it."""
+        path = self.path.parent / f"{self.path.name}.capability" / "capability.pem"
+        if path.resolve().is_relative_to(self.path.resolve()):
+            raise LedgerError("capability key must live outside the ledger directory")
+        return path
 
     def lock_path(self) -> Path:
         path = self.path.parent / f"{self.path.name}.lock"

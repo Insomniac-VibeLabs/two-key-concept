@@ -12,13 +12,13 @@ from typing import Any, Mapping
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import canonical_hash
 from .agents import parse_proposal
-from .capability import CapabilityIssuer
+from .capability import CapabilityIssuer, open_capability_key
 from .compiler import CompiledConstitution, compile_both
-from .constitution import Constitution, verify_signed
+from .constitution import Constitution, ConstitutionError, verify_signed
 from .derive import DeriveError, blocked_from_rules, derive, disagreement, form_for
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
-from .quorum import QuorumPolicy, convene
+from .quorum import QuorumPolicy, check_judge_set, convene
 
 
 @dataclass
@@ -41,18 +41,23 @@ class TwoKey:
                  allow_test_doubles: bool = False, clock=None):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
+        if not constitution.specs_enforced:
+            raise ConstitutionError("tool_specs required")
         self.ledger = ledger
         self.public_key = public_key
         self.private_key = private_key
         self.constitution = constitution
         self.compiled: CompiledConstitution = compile_both(
             constitution.prose, constitution.hard_rules, constitution.tool_specs,
-            specs_enforced=constitution.specs_enforced)
+            specs_enforced=True)
         self.vm = PolicyVM(self.compiled.bytecode)
         self.judges = list(judges)
         self.quorum = quorum or QuorumPolicy(required_yes=min(2, max(1, len(judges))))
+        if self.judges:
+            check_judge_set(self.judges, self.quorum)
         self.ttl_seconds = ttl_seconds
-        self.issuer = CapabilityIssuer(private_key, public_key, clock=clock) if private_key else None
+        # The minting key is not the principal key, and it is not given to the gateway.
+        self.issuer = CapabilityIssuer(open_capability_key(ledger), clock=clock) if private_key else None
         self._clock = clock
         self.ledger.append("constitution_loaded", {
             "digest": constitution.digest,

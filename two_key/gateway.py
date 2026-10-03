@@ -1,9 +1,10 @@
 """Redeem a capability token. No scanning, antivirus, or DLP hooks.
 
-A redemption intent is checkpointed before the tool runs. A later retry of
-that intent does not run the tool. A tool exception appends an abort and
-leaves the token usable. A crash after a successful return cannot run the
-token again, because the intent is already on the ledger.
+The gateway keeps a ``CapabilityVerifier``. It does not keep the minting
+key. A redemption intent is checkpointed before the tool runs. A later
+retry of that intent does not run the tool. A tool exception appends an
+abort and leaves the token usable. A crash after a successful return
+cannot run the token again, because the intent is already on the ledger.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ try:
 except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
-from .capability import TokenError, args_hash
+from .capability import CapabilityIssuer, CapabilityVerifier, TokenError, args_hash
 from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match
 from .ledger import LedgerError
 
@@ -30,10 +31,22 @@ class GatewayResult:
     output: Any = None
 
 
+def _as_verifier(issuer) -> CapabilityVerifier:
+    """The redeeming object keeps the public key only."""
+    if isinstance(issuer, CapabilityIssuer):
+        return issuer.verifier()
+    if isinstance(issuer, CapabilityVerifier):
+        return CapabilityVerifier(issuer.public_key, clock=issuer.clock)
+    public = getattr(issuer, "public_key", None)
+    if public is None or not hasattr(issuer, "verify"):
+        raise TokenError("gateway requires a token verifier")
+    return CapabilityVerifier(public, clock=getattr(issuer, "clock", None))
+
+
 class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None):
         self.ledger = ledger
-        self.issuer = issuer
+        self.issuer = _as_verifier(issuer)
         self.compiled = compiled
         self.tools = tools or {}
         self._locks: dict[str, threading.Lock] = {}
@@ -52,19 +65,21 @@ class ToolGateway:
             return GatewayResult(False, "constitution_mismatch")
         if payload.get("spec_hash", "") != self.compiled.spec_hash:
             return GatewayResult(False, "constitution_mismatch")
-        if self.compiled.specs_enforced:
-            spec = self.compiled.tool_specs.get(tool)
-            if spec is not None:
-                if "form" not in payload or "claimed_data_class" not in payload:
-                    return GatewayResult(False, "derived_mismatch")
-                try:
-                    derived = derive(spec, arguments)
-                    fresh = form_for(derived, payload["claimed_data_class"],
-                                     blocked_from_rules(self.compiled.rules))
-                except DeriveError:
-                    return GatewayResult(False, "derived_mismatch")
-                if not forms_match(payload["form"], fresh):
-                    return GatewayResult(False, "derived_mismatch")
+        if not self.compiled.specs_enforced:
+            return GatewayResult(False, "tool_specs_required")
+        spec = self.compiled.tool_specs.get(tool)
+        if spec is None:
+            return GatewayResult(False, "tool_specs_required")
+        if "form" not in payload or "claimed_data_class" not in payload:
+            return GatewayResult(False, "derived_mismatch")
+        try:
+            derived = derive(spec, arguments)
+            fresh = form_for(derived, payload["claimed_data_class"],
+                             blocked_from_rules(self.compiled.rules))
+        except DeriveError:
+            return GatewayResult(False, "derived_mismatch")
+        if not forms_match(payload["form"], fresh):
+            return GatewayResult(False, "derived_mismatch")
         size = payload["ledger_size"]
         if not isinstance(size, int) or size < 0 or size > self.ledger.size():
             return GatewayResult(False, "ledger_size_invalid")

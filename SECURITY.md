@@ -14,6 +14,7 @@ is how to report a vulnerability. It is not the model.
 - Ledger tampering that still verifies
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
+- A redeeming gateway that can mint a token it will accept
 
 ## Out of scope for this repository
 
@@ -25,8 +26,11 @@ Ledger entries and the head are AES-256-GCM ciphertext. The data key is
 wrapped by a ledger key stored outside the ledger directory. The head needs
 both the principal signature and a witness signature. The witness key is also
 outside the ledger directory. Stealing only the principal key does not decrypt
-the log and does not sign a new head. Stealing the ledger key decrypts.
-Stealing the witness key as well allows a forged head.
+the log, does not sign a new head, and does not mint a capability token.
+The minting key is `<ledger>.capability/capability.pem`, also outside the
+ledger directory. The gateway is given only the public half. Stealing the
+ledger key decrypts. Stealing the witness key as well as the principal key
+allows a forged head. Stealing the capability private key mints tokens.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

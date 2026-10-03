@@ -1,7 +1,7 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.1.7 on branch
+server in this release. Package `two-key-concept` version 0.1.8 on branch
 `working` (not a release tag; `v0.1.6` remains the tagged main release).
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
@@ -18,12 +18,12 @@ anchoring, and no seed phrase. The larger package is
   is a judge quorum. Hooks exist for xAI, OpenAI-compatible APIs, Anthropic,
   Gemini, and local Ollama.
 - The only component that runs the tool should be the gateway. It holds a
-  single-use token, 120 seconds by default, signed by the principal key.
-  The token is bound to the tool, the argument hash, the ledger Merkle root
-  and size at issuance, and the constitution hashes (`bytecode_hash`,
-  `nl_hash`, and `spec_hash`). When the constitution includes `tool_specs`,
-  the token is also bound to the form derived from the argument bytes.
-  A constitution that omits `tool_specs` does not bind that form.
+  single-use token, 120 seconds by default, signed by the capability key.
+  That private key is not on the gateway. The token is bound to the tool,
+  the argument hash, the ledger Merkle root and size at issuance, and the
+  constitution hashes (`bytecode_hash`, `nl_hash`, and `spec_hash`), plus
+  the form derived from the argument bytes. A constitution that omits
+  `tool_specs` does not load.
 - You want an encrypted ledger. Records and the head are AES-256-GCM. The
   ledger key and the witness key live outside the ledger directory. The
   principal key cannot unwrap the log and cannot sign a head alone.

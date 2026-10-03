@@ -50,10 +50,16 @@ def _demo(_args) -> int:
         {"id": "no-wires", "deny_if": {"tool": "wire_transfer"}},
         {"id": "cap", "deny_if": {"amount_usd_gt": 200}},
     ]
-    envelope = sign_constitution(prose, rules, key)
+    specs = {
+        "search": {"irreversible": False, "data_class_floor": "public"},
+        "email_draft": {"irreversible": False, "data_class_floor": "public",
+                        "counterparties": [{"json_path": "to"}]},
+    }
+    envelope = sign_constitution(prose, rules, key, specs)
     with tempfile.TemporaryDirectory() as tmp:
         ledger = Ledger(tmp, key)
-        judges = [FixedJudge("a", "yes", provider="local-a"), FixedJudge("b", "yes", provider="local-b")]
+        judges = [FixedJudge("a", "yes", provider="local-a", vendor="local", local_weights=True),
+                  FixedJudge("b", "yes", provider="cloud-b", vendor="other")]
         tk = TwoKey(ledger, key.public_key(), __import__("two_key.constitution", fromlist=["verify_signed"]).verify_signed(envelope, key.public_key()),
                     judges, private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
         denied = tk.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "public", "irreversible": True},

@@ -12,24 +12,27 @@ Fixes from the original prototype (see CHANGES.md):
   Zero judges, or too few valid responses, is a deny.
 - A judge that raises, or returns a malformed ballot, is an abstention and
   never counts as "yes".
-- ``min_distinct_providers`` is an optional, configurable independence
-  check. It defaults to 1, meaning not enforced. How independence should be
-  ensured is an open design question; see docs/THREAT_MODEL.md. The options
-  memo is DESIGN_OPTIONS.md section 2 in Insomniac-VibeLabs/two-key, which
-  is not this repository.
+- ``min_distinct_providers`` counts providers among responding ballots.
+  It still defaults to 1, so that check is not a floor by itself.
+- The diversity floors are on by default: at least two vendors, at least
+  one judge on local weights, and a yes from a local judge
+  (``require_local_yes``). Opt out with ``QuorumPolicy.without_diversity_floors``
+  or by setting those fields. ``require_path_a_first`` is not part of the
+  floor and is not a skip.
 - Judges run in parallel (one thread per judge) under an overall deadline
   ``timeout_seconds`` (default 45 s). A judge that has not answered by the
   deadline is recorded as an abstention (``error="timeout..."``), so a slow or
   hung provider can never produce a "yes" and cannot stall Two-Key beyond
   the deadline. Per-request HTTP timeouts are still set on each LLM judge.
 
-Quorum protocol specifics (the section-4 profile). The prior-art memo is
-not stored in this repository or in two-key. The decision record is
-CONCEPTION_NOTES.md Entry 2 in Insomniac-VibeLabs/two-key:
-- Vendor heterogeneity in judge-set selection: ``min_vendors`` distinct
-  vendors and ``min_local_judges`` judges on local weight files
-  (check_judge_set; Two-Key refuses to start otherwise). §4's figures are
-  >= 2 vendors including >= 1 local weight file (``QuorumPolicy.section4``).
+Quorum protocol specifics. The prior-art memo is not stored in this
+repository or in two-key. The decision record is CONCEPTION_NOTES.md
+Entry 2 in Insomniac-VibeLabs/two-key:
+- Vendor heterogeneity: ``check_judge_set`` runs when ``TwoKey`` starts, and
+  again inside ``convene``. The default is >= 2 vendors, >= 1 local weight
+  file, and ``require_local_yes``. ``QuorumPolicy.section4`` is that floor
+  plus ``require_path_a_first``, which ``TwoKey.authorize`` still does not
+  read. Opt out with ``QuorumPolicy.without_diversity_floors``.
   With ``heterogeneity_scope="responding"`` the same floor also applies to the
   judges that actually returned valid ballots.
 - Availability floor K (``min_responding``) distinct from the approval
@@ -71,19 +74,17 @@ class QuorumConfigError(ValueError):
 class QuorumPolicy:
     required_yes: int = 2            # k in k-of-n
     min_responding: int | None = None  # K in spec 5.4; defaults to required_yes
-    min_distinct_providers: int = 1  # 1 = not enforced (open design question)
+    min_distinct_providers: int = 1  # responding providers; 1 means this check is not a floor
     timeout_seconds: float | None = 45.0  # overall deadline for all judges; None = no deadline
     parallel: bool = True
-    # Permissive defaults, so earlier configurations keep working.
-    # QuorumPolicy.section4() sets the reference figures. Which should be
-    # the default is open (DESIGN_OPTIONS.md section 7 in Insomniac-VibeLabs/two-key).
-    min_vendors: int = 1
-    min_local_judges: int = 0
+    # On by default. Opt out with QuorumPolicy.without_diversity_floors().
+    min_vendors: int = 2
+    min_local_judges: int = 1
     heterogeneity_scope: str = "selection"      # selection | responding
     judge_inputs: str = "record_only"           # record_only | record_and_proposal
     ballot_binding: str = "stamp"               # stamp | echo
-    require_path_a_first: bool = False
-    require_local_yes: bool = False         # a local judge in the set must itself vote yes
+    require_path_a_first: bool = False          # stored, not a skip
+    require_local_yes: bool = True              # a local judge in the set must itself vote yes
 
 
     def __post_init__(self):
@@ -111,13 +112,24 @@ class QuorumPolicy:
             raise QuorumConfigError("ballot_binding must be 'stamp' or 'echo'")
         if not isinstance(self.require_path_a_first, bool):
             raise QuorumConfigError("require_path_a_first must be a boolean")
+        if not isinstance(self.require_local_yes, bool):
+            raise QuorumConfigError("require_local_yes must be a boolean")
+
+    @classmethod
+    def without_diversity_floors(cls, required_yes: int = 2, min_responding: int | None = None,
+                                 **kw) -> "QuorumPolicy":
+        """Opt out of the default floors. One vendor is enough, and no local judge is required."""
+        base = {"min_vendors": 1, "min_local_judges": 0, "require_local_yes": False}
+        base.update(kw)
+        return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
     def section4(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
-        """Reference profile: at least 2 vendors, at least 1 local weight file,
-        record-only judge inputs, and ``require_path_a_first`` set.
+        """Default diversity floors, plus ``require_path_a_first``.
+
         ``TwoKey.authorize`` still runs both paths; it does not read that flag.
-        K and T remain the principal's choice."""
+        K and T remain the principal's choice.
+        """
         base = {"min_vendors": 2, "min_local_judges": 1, "judge_inputs": "record_only",
                 "require_path_a_first": True, "require_local_yes": True}
         base.update(kw)
@@ -128,7 +140,8 @@ class QuorumPolicy:
                 "min_distinct_providers": self.min_distinct_providers, "timeout_seconds": self.timeout_seconds,
                 "min_vendors": self.min_vendors, "min_local_judges": self.min_local_judges,
                 "heterogeneity_scope": self.heterogeneity_scope, "judge_inputs": self.judge_inputs,
-                "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first}
+                "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first,
+                "require_local_yes": self.require_local_yes}
 
     @property
     def effective_min_responding(self) -> int:

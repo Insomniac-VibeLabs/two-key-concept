@@ -27,28 +27,25 @@ python -m two_key sign-constitution \
   --out constitution.signed.json
 ```
 
-The signature covers the prose, the hard rules, and `tool_specs` when that
-key is in the rules file. A modified file will not load. `examples/hard_rules.yaml`
-includes a spec for every allow-listed tool. Signing that file closes
-Problem F for those tools: amount, counterparty, and irreversible are read
-from the argument bytes, and a claim that disagrees is a deny. `data_class`
-is the stricter of the claim and the tool's `data_class_floor`. This package
-does not classify free text, so a public tool can mention "classified ads".
-A tool that carries medical text needs `data_class_floor: medical` (or
-`classified`). A missing amount path, a non-numeric amount, or a currency
-other than `usd` on `pay_bill` is a deny.
-
-A rules file that omits `tool_specs` still signs. That is the legacy path:
-the agent's form is trusted. A present `tool_specs` key must be a mapping.
-`null` is refused. An empty mapping is refused when the allow list has a
-tool with no spec.
+The signature covers the prose, the hard rules, and `tool_specs`. A modified
+file will not load. `tool_specs` is required. A bare rule list, a missing
+key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
+has a spec for every allow-listed tool. Amount, counterparty, and
+irreversible are read from the argument bytes, and a claim that disagrees
+is a deny. `data_class` is the stricter of the claim and the tool's
+`data_class_floor`. This package does not classify free text, so a public
+tool can mention "classified ads". A tool that carries medical text needs
+`data_class_floor: medical` (or `classified`). A missing amount path, a
+non-numeric amount, or a currency other than `usd` on `pay_bill` is a deny.
+A spec with no amount path treats the amount as 0, so money in an unmapped
+field is not seen.
 
 Missing `data_class` still defaults to `classified` before the floor, and
-a floor never lowers that. Missing `irreversible` follows the tool spec
-when a spec exists, so a reversible tool stays reversible. A present claim
-that disagrees with the spec is a deny. Pass `--data-class public` only
-when that class is allowed after the floor, and pass `--no-irreversible`
-only for a tool the spec marks reversible.
+a floor never lowers that. Missing `irreversible` follows the tool spec,
+so a reversible tool stays reversible. A present claim that disagrees with
+the spec is a deny. Pass `--data-class public` only when that class is
+allowed after the floor, and pass `--no-irreversible` only for a tool the
+spec marks reversible.
 
 ## Judges
 
@@ -64,8 +61,18 @@ HTTP error abstains.
 A cloud judge requires an `agent_session` string that is not the judge API
 key. Reusing the judge credential as the session is a deny.
 
+The diversity floors are on by default: at least two vendors, at least one
+judge with `local_weights`, and a yes from a local judge. `examples/judges.yaml`
+meets that with the cloud hooks plus local Qwen. To opt out, set
+`min_vendors: 1`, `min_local_judges: 0`, and `require_local_yes: false` in
+the quorum block, or call `QuorumPolicy.without_diversity_floors()`.
+`require_path_a_first` stays off unless you set it. `TwoKey.authorize` does
+not read it. Both paths still run. `min_distinct_providers` still defaults
+to 1, so that count is not itself a floor.
+
 Local Ollama is `http://localhost:11434` only. Plain HTTP to any other host
-is refused.
+is refused. An Ollama judge counts as local weights unless you set
+`local_weights: false`.
 
 ### Recommended local judge: Qwen2.5-7B-Instruct
 
@@ -152,17 +159,24 @@ Use a different API key for agents than for judges.
 
 ```python
 from two_key.gateway import ToolGateway
-gw = ToolGateway(tk.ledger, tk.issuer, tk.compiled, tools={
+gw = ToolGateway(tk.ledger, tk.issuer.verifier(), tk.compiled, tools={
     "email_draft": lambda args: {"drafted": args["to"]},
 })
 result = gw.invoke(decision.token, "email_draft", {"to": "ada@example"})
 ```
 
+Passing `tk.issuer` also works. The constructor keeps a verifier, so
+`gw.issuer.private_key` is `None` and `gw.issuer.issue(...)` raises
+`verifier_cannot_mint`. The minting key is `<ledger>.capability/capability.pem`,
+next to the ledger directory, not inside it. The public half is
+`capability.pub.pem` beside it. The principal key on the ledger signs the
+head. A token signed with that principal key does not redeem.
+
 The gateway checks the signature, expiry, tool, argument hash, constitution
-hashes, ledger prefix root, and that nothing revoked or reloaded the
-constitution after issuance. The token is single-use. A tool exception does
-not consume it, so the same token can be retried. There is no content
-scanner on the way in or out.
+hashes, spec hash, the recomputed form, the ledger prefix root, and that
+nothing revoked or reloaded the constitution after issuance. The token is
+single-use. A tool exception does not consume it, so the same token can be
+retried. There is no content scanner on the way in or out.
 
 Username/password and OAuth device-code auth are rejected. Use `env`,
 `keyring`, or `callback`.

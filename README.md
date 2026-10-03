@@ -19,21 +19,26 @@ Read [docs/FIT.md](docs/FIT.md) first, then
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
    structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`). It does not read English. A fault is a deny. When the
-   signed constitution includes `tool_specs`, those fields are read from the
+   `irreversible`). It does not read English. A fault is a deny. The signed
+   constitution must include `tool_specs`. Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
-   disagrees with the bytes is a deny. A constitution that omits `tool_specs`
-   still trusts the agent's form.
+   disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
+   and will not load.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. A missing or malformed ballot does not
-   count as yes.
+   count as yes. The diversity floors are on by default: two vendors, one
+   local judge, and a yes from that local judge. Opt out with
+   `QuorumPolicy.without_diversity_floors()` or the matching quorum fields.
+   `require_path_a_first` is not a floor and it is not a skip.
 3. A short-lived single-use token is issued only if both paths allow. The
-   token is bound to the tool, the argument hash, the ledger Merkle root at
-   issuance, and, when tool specs are enforced, the spec hash and the derived
-   form. Redemption writes an intent before the tool runs, so a crash cannot
-   run that token twice.
-4. The gateway redeems that token. It does not inspect file contents, mail,
-   or tool output for DLP or malware.
+   token is signed by a capability key that lives outside the ledger
+   directory, not by handing that private key to the gateway. It is bound
+   to the tool, the argument hash, the ledger Merkle root at issuance, the
+   constitution hashes, `spec_hash`, and the derived form. Redemption writes
+   an intent before the tool runs, so a crash cannot run that token twice.
+4. The gateway redeems that token with the public half of the capability
+   key. It does not hold the minting key, and it does not inspect file
+   contents, mail, or tool output for DLP or malware.
 
 Both paths always answer. A Path A deny does not skip Path B, so the ledger
 has both results. `authorize_from_agent` runs both paths and does not
@@ -48,7 +53,7 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed constitution<br/>prose and hard rules"] --> compile["compile_both"]
+  constitution["Signed constitution<br/>prose, hard rules, tool specs"] --> compile["compile_both"]
   compile --> bytecode["Path A bytecode"]
   compile --> judgeText["Path B judge text"]
   instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
@@ -56,7 +61,7 @@ flowchart TD
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
-  authorize -->|"action record and tool args"| pathB["Path B convene<br/>also runs when Path A denies"]
+  authorize -->|"action record and tool args"| pathB["Path B convene<br/>default: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
   judgeText --> pathB
   session["agent_session<br/>must not be a judge API key"] --> pathB
   pathB -->|"parallel score, separate credentials"| judges["Judges<br/>xAI, OpenAI, Anthropic, Gemini, Ollama"]
@@ -66,9 +71,9 @@ flowchart TD
   pathA --> ledger["Encrypted ledger"]
   pathB --> ledger
   gate -->|no| ledger
-  gate -->|yes| token["Single-use capability token"]
+  gate -->|yes| token["Capability token<br/>signed by the capability key"]
   token --> ledger
-  token --> gateway["Tool gateway"]
+  token --> gateway["Tool gateway<br/>public key only, cannot mint"]
   gateway -->|"redemption_started, then the tool"| tool["Registered tool"]
   gateway --> ledger
 ```
@@ -125,6 +130,7 @@ sequenceDiagram
     TwoKey->>Ledger: capability_issued, then decision
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
+    Note over Gateway: verifies with the capability public key only
     Gateway->>Ledger: redemption_started
     Gateway->>Tool: registered function
     Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
@@ -134,13 +140,17 @@ sequenceDiagram
   end
 ```
 
-The token is bound to the tool, the argument hash, the ledger Merkle root
-and size at issuance, the constitution hashes, and `spec_hash` (empty when
-the constitution omits `tool_specs`). When specs are enforced it is also
-bound to the derived form. The gateway recomputes that form from the same
-bytes. It checks expiry, signature, and that nothing revoked or reloaded
-the constitution after issuance. It writes `redemption_started` before the
-tool runs. It does not scan the bytes for sensitive text.
+The token is signed by the capability key (`<ledger>.capability/capability.pem`,
+outside the ledger directory). It is bound to the tool, the argument hash,
+the ledger Merkle root and size at issuance, the constitution hashes,
+`spec_hash`, and the derived form. The gateway is constructed with
+`issuer.verifier()` or with the issuer; either way it keeps only the public
+key. It recomputes the form from the same bytes. It checks expiry,
+signature, and that nothing revoked or reloaded the constitution after
+issuance. It writes `redemption_started` before the tool runs. It does not
+scan the bytes for sensitive text. The principal key still signs the
+constitution and the ledger head. A token signed with that principal key
+does not redeem.
 
 ## What this repo leaves out
 
@@ -163,7 +173,7 @@ directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 Install from git. It is not published to PyPI. This branch is package
-0.1.7 and is not a release tag. `v0.1.6` remains the tagged release on
+0.1.8 and is not a release tag. `v0.1.6` remains the tagged release on
 `main`.
 
 The middle column on the GitHub file list is the last commit that touched
@@ -198,7 +208,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
-| `two_key/capability.py`, `gateway.py` | Tokens and redemption, no scanning |
+| `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
 | `examples/` | Constitution, hard rules, judges, agents |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |

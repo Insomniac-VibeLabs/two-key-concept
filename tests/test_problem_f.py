@@ -1,9 +1,8 @@
 """Problem F: a signed tool spec fills the form. A disagreeing claim denies.
 
-Legacy constitutions that omit tool_specs keep the old path. These tests
-cover the enforced path only. There is no English scanner: a public tool
-may mention "classified ads", and medical text is denied only because the
-tool's floor is medical.
+A constitution cannot omit tool_specs. There is no English scanner: a
+public tool may mention "classified ads", and medical text is denied only
+because the tool's floor is medical.
 """
 
 import tempfile
@@ -54,7 +53,8 @@ def _engine(tmp, specs=SPECS, rules=RULES):
     key = generate_private_key()
     env = sign_constitution(PROSE, rules, key, specs)
     ledger = Ledger(Path(tmp), key)
-    judges = [FixedJudge("j0", "yes", provider="p0"), FixedJudge("j1", "yes", provider="p1")]
+    judges = [FixedJudge("j0", "yes", provider="p0", vendor="v0", local_weights=True),
+              FixedJudge("j1", "yes", provider="p1", vendor="v1")]
     constitution = verify_signed(env, key.public_key())
     tk = TwoKey(ledger, key.public_key(), constitution, judges, private_key=key,
                 quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
@@ -218,21 +218,36 @@ class ProblemFTests(unittest.TestCase):
         self.assertEqual(join_data_class("personal", "medical"), "classified")
         self.assertEqual(join_data_class("financial", "financial"), "financial")
 
-    def test_legacy_constitution_still_trusts_the_claim(self):
-        """Omitting tool_specs is the old path. It is not the closed one."""
+    def test_omitted_tool_specs_are_refused(self):
+        """There is no legacy path that trusts the agent's form."""
+        key = generate_private_key()
+        with self.assertRaises(ConstitutionError):
+            sign_constitution(PROSE, RULES, key)
+        from two_key.canonical import canonical_bytes
+        from two_key.keys import fingerprint, sign
+        from two_key.policy_vm import validate_rules
+        rules = validate_rules(RULES)
+        signed = {"prose": PROSE, "hard_rules": rules}
+        envelope = {
+            "format": "two-key-concept-constitution-v1",
+            "signed": signed,
+            "signature": sign(key, canonical_bytes(signed)),
+            "fingerprint": fingerprint(key.public_key()),
+        }
+        with self.assertRaises(ConstitutionError):
+            verify_signed(envelope, key.public_key())
         with tempfile.TemporaryDirectory() as tmp:
-            key = generate_private_key()
-            env = sign_constitution(PROSE, RULES, key)
-            self.assertNotIn("tool_specs", env["signed"])
-            ledger = Ledger(Path(tmp), key)
-            judges = [FixedJudge("j0", "yes", provider="p0"), FixedJudge("j1", "yes", provider="p1")]
-            tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
-                        private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
-            decision = tk.authorize(
-                {"tool": "pay_bill", "amount_usd": 0, "data_class": "public", "irreversible": False},
-                {"amount": 4800, "to": "offshore-mule.example"}, "pay")
-            self.assertTrue(decision.path_a["allowed"])
-            self.assertTrue(decision.allowed)
+            rules_path = Path(tmp, "rules.yaml")
+            prose_path = Path(tmp, "prose.md")
+            prose_path.write_text(PROSE, encoding="utf-8")
+            rules_path.write_text(
+                "hard_rules:\n  - id: tools\n    allow_only_tools: [search]\n",
+                encoding="utf-8")
+            with self.assertRaises(ConstitutionError):
+                load_unsigned(prose_path, rules_path)
+            rules_path.write_text("- id: tools\n  allow_only_tools: [search]\n", encoding="utf-8")
+            with self.assertRaises(ConstitutionError):
+                load_unsigned(prose_path, rules_path)
 
     def test_cents_unit_accepts_an_integral_float_only(self):
         spec = {

@@ -1,4 +1,4 @@
-"""Signed constitution: prose for Path B, hard rules for Path A, optional tool specs."""
+"""Signed constitution: prose for Path B, hard rules for Path A, and tool specs."""
 
 from __future__ import annotations
 
@@ -135,20 +135,19 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
     return out
 
 
-def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, dict | None]:
+def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, list, dict]:
     """Return prose, hard rules, and tool specs.
 
-    ``tool_specs`` is ``None`` only when the rules file omits the key. That is
-    the legacy constitution: the agent's form is still trusted. A present key
-    must be a mapping. An empty mapping is enforced, and is refused when an
-    allow list exists and a tool has no spec. ``null`` is not the legacy path.
+    ``tool_specs`` is required. A bare rule list, a missing key, and ``null``
+    are refused. An empty mapping is refused when an allow-listed tool has
+    no spec. There is no path that trusts the agent's form.
     """
     prose = Path(prose_path).read_text(encoding="utf-8")
     rules, specs = _load_rules_document(Path(rules_path))
     return prose, validate_rules(rules), specs
 
 
-def _load_rules_document(path: Path) -> tuple[list, dict | None]:
+def _load_rules_document(path: Path) -> tuple[list, dict]:
     text = path.read_text(encoding="utf-8")
     if path.suffix == ".json":
         data = json.loads(text)
@@ -159,7 +158,7 @@ def _load_rules_document(path: Path) -> tuple[list, dict | None]:
             raise ConstitutionError("reading YAML rules needs the yaml extra (pip install pyyaml)") from e
         data = yaml.safe_load(text)
     if isinstance(data, list):
-        return data, None
+        raise ConstitutionError("tool_specs required: a bare rule list cannot be signed")
     if isinstance(data, dict) and "hard_rules" in data:
         extra = set(data) - {"hard_rules", "tool_specs"}
         if extra:
@@ -168,7 +167,7 @@ def _load_rules_document(path: Path) -> tuple[list, dict | None]:
         if not isinstance(rules, list):
             raise ConstitutionError("hard rules must be a list")
         if "tool_specs" not in data:
-            return rules, None
+            raise ConstitutionError("tool_specs required")
         specs = data["tool_specs"]
         if not isinstance(specs, Mapping):
             raise ConstitutionError("tool_specs must be a mapping")
@@ -178,9 +177,15 @@ def _load_rules_document(path: Path) -> tuple[list, dict | None]:
 
 def sign_constitution(prose: str, rules: list, private_key, tool_specs: Any = None) -> dict:
     rules = validate_rules(rules)
-    signed: dict[str, Any] = {"prose": prose, "hard_rules": rules}
-    if tool_specs is not None:
-        signed["tool_specs"] = validate_tool_specs(tool_specs, rules)
+    if tool_specs is None:
+        raise ConstitutionError(
+            "tool_specs required: every allow-listed tool needs a spec"
+        )
+    signed: dict[str, Any] = {
+        "prose": prose,
+        "hard_rules": rules,
+        "tool_specs": validate_tool_specs(tool_specs, rules),
+    }
     signature = sign(private_key, canonical_bytes(signed))
     return {
         "format": "two-key-concept-constitution-v1",
@@ -211,10 +216,7 @@ def verify_signed(envelope: dict, public_key) -> Constitution:
     if not isinstance(prose, str) or not prose.strip():
         raise ConstitutionError("constitution prose is empty")
     rules = validate_rules(rules)
-    if "tool_specs" in signed:
-        specs = validate_tool_specs(signed["tool_specs"], rules)
-        enforced = True
-    else:
-        specs = {}
-        enforced = False
-    return Constitution(prose, rules, envelope, specs, enforced)
+    if "tool_specs" not in signed:
+        raise ConstitutionError("tool_specs required")
+    specs = validate_tool_specs(signed["tool_specs"], rules)
+    return Constitution(prose, rules, envelope, specs, True)

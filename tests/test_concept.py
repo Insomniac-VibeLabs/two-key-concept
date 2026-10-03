@@ -22,7 +22,7 @@ from two_key.judges.openai_compat import OpenAICompatibleJudge
 from two_key.ledger import LedgerError, merkle_root
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
-from two_key.quorum import QuorumPolicy
+from two_key.quorum import QuorumConfigError, QuorumPolicy
 from two_key.testing import FixedJudge
 
 
@@ -32,16 +32,26 @@ RULES = [
     {"id": "cap", "deny_if": {"amount_usd_gt": 200}},
     {"id": "sensitive", "deny_if": {"data_class_in": ["medical", "classified"]}},
 ]
+SPECS = {
+    "search": {"irreversible": False, "data_class_floor": "public"},
+    "email_draft": {
+        "irreversible": False,
+        "data_class_floor": "public",
+        "counterparties": [{"json_path": "to"}],
+    },
+}
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
 
 
-def _engine(tmp, votes=("yes", "yes")):
+def _engine(tmp, votes=("yes", "yes"), quorum=None):
     key = generate_private_key()
-    env = sign_constitution(PROSE, RULES, key)
+    env = sign_constitution(PROSE, RULES, key, SPECS)
     ledger = Ledger(Path(tmp), key)
-    judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}") for i, vote in enumerate(votes)]
+    judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", vendor=f"v{i}", local_weights=(i == 0))
+              for i, vote in enumerate(votes)]
     tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
-                private_key=key, quorum=QuorumPolicy(required_yes=len(votes)), allow_test_doubles=True)
+                private_key=key, quorum=quorum or QuorumPolicy(required_yes=len(votes)),
+                allow_test_doubles=True)
     return key, tk
 
 
@@ -117,7 +127,7 @@ class ConceptTests(unittest.TestCase):
 
     def test_unsigned_constitution_refused(self):
         key = generate_private_key()
-        env = sign_constitution(PROSE, RULES, key)
+        env = sign_constitution(PROSE, RULES, key, SPECS)
         env["signature"] = "aa"
         with self.assertRaises(Exception):
             verify_signed(env, key.public_key())
@@ -253,20 +263,22 @@ class ConceptTests(unittest.TestCase):
             from two_key.keys import save_private_key
             from two_key.constitution import save_envelope
             save_private_key(Path(tmp, "principal.pem"), key)
-            save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key))
-            judges = [FixedJudge("a", "yes", provider="p0"), FixedJudge("b", "yes", provider="p1")]
+            save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key, SPECS))
+            judges = [FixedJudge("a", "yes", provider="p0", vendor="v0", local_weights=True),
+                      FixedJudge("b", "yes", provider="p1", vendor="v1")]
             with self.assertRaises(SystemExit):
                 main(["authorize", "--allow-test-doubles"])
             buf = io.StringIO()
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))):
                 with redirect_stdout(buf):
-                    with self.assertRaises(ValueError):
+                    with self.assertRaises(ValueError) as raised:
                         main(["authorize", "--key", str(Path(tmp, "principal.pem")),
                               "--ledger", str(Path(tmp, "ledger")),
                               "--constitution", str(Path(tmp, "c.json")),
                               "--judges", str(Path(tmp, "unused.yaml")),
                               "--tool", "email_draft", "--args", '{"to":"ada"}',
                               "--proposal", "draft"])
+            self.assertIn("test-double", str(raised.exception))
             self.assertNotIn("both_paths_allow", buf.getvalue())
 
     def test_cli_authorize_defaults_match_library(self):
@@ -284,7 +296,7 @@ class ConceptTests(unittest.TestCase):
             from two_key.keys import save_private_key
             from two_key.constitution import save_envelope
             save_private_key(Path(tmp, "principal.pem"), key)
-            save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key))
+            save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key, SPECS))
             judges = [FixedJudge("a", "yes", provider="p0")]
             buf = io.StringIO()
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
@@ -334,6 +346,70 @@ class ConceptTests(unittest.TestCase):
             self.assertFalse((path / ".redeem-abc.lock").exists())
             self.assertTrue(first.lock_path().is_file())
             self.assertFalse(str(first.lock_path()).startswith(str(path) + os.sep))
+
+    def test_diversity_floors_default_on_and_can_be_opted_out(self):
+        policy = QuorumPolicy()
+        self.assertEqual(policy.min_vendors, 2)
+        self.assertEqual(policy.min_local_judges, 1)
+        self.assertTrue(policy.require_local_yes)
+        self.assertFalse(policy.require_path_a_first)
+        same = [FixedJudge("a", "yes", provider="p", vendor="v"),
+                FixedJudge("b", "yes", provider="p", vendor="v")]
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            env = sign_constitution(PROSE, RULES, key, SPECS)
+            ledger = Ledger(Path(tmp), key)
+            constitution = verify_signed(env, key.public_key())
+            with self.assertRaises(QuorumConfigError):
+                TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
+                       quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+            tk = TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
+                        quorum=QuorumPolicy.without_diversity_floors(required_yes=2),
+                        allow_test_doubles=True)
+            decision = tk.authorize(
+                {"tool": "search", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"q": "weather"}, "search")
+            self.assertTrue(decision.allowed, decision.reason)
+
+    def test_section4_does_not_skip_path_b(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp, quorum=QuorumPolicy.section4(required_yes=2))
+            decision = tk.authorize(
+                {"tool": "wire_transfer", "amount_usd": 10, "data_class": "public", "irreversible": True},
+                {"to": "bob"}, "wire it")
+            self.assertFalse(decision.allowed)
+            self.assertEqual(decision.path_a["denied_by"], "tools")
+            self.assertIn("path_b", [e.kind for e in tk.ledger.entries])
+            self.assertTrue(tk.quorum.require_path_a_first)
+
+    def test_gateway_cannot_mint(self):
+        from two_key.capability import CapabilityIssuer, TokenError
+        from two_key.keys import fingerprint
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            self.assertIsNotNone(tk.issuer.private_key)
+            self.assertNotEqual(fingerprint(tk.issuer.public_key), fingerprint(tk.public_key))
+            cap = tk.ledger.capability_key_path()
+            self.assertTrue(cap.is_file())
+            self.assertFalse(str(cap).startswith(str(Path(tmp)) + os.sep))
+            decision = tk.authorize(
+                {"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False,
+                 "counterparty": "ada"},
+                {"to": "ada"}, "draft")
+            self.assertTrue(decision.allowed, decision.reason)
+            gw = ToolGateway(tk.ledger, tk.issuer, tk.compiled,
+                             tools={"email_draft": lambda a: {"ok": True}})
+            self.assertIsNone(gw.issuer.private_key)
+            with self.assertRaises(TokenError):
+                gw.issuer.issue(tool="email_draft", arguments={"to": "ada"}, ledger_root="x",
+                                ledger_size=0, bytecode_hash="x", nl_hash="x")
+            forged = CapabilityIssuer(tk.ledger.private_key, clock=tk.issuer.clock)
+            bad = forged.issue(tool="email_draft", arguments={"to": "ada"},
+                               ledger_root=tk.ledger.merkle_root(), ledger_size=tk.ledger.size(),
+                               bytecode_hash=tk.compiled.bytecode_hash, nl_hash=tk.compiled.nl_hash,
+                               spec_hash=tk.compiled.spec_hash)
+            self.assertEqual(gw.invoke(bad.token, "email_draft", {"to": "ada"}).reason, "bad_signature")
+            self.assertTrue(gw.invoke(decision.token, "email_draft", {"to": "ada"}).allowed)
 
 
 

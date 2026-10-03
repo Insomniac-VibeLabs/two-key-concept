@@ -6,14 +6,14 @@ Format (see examples/judges.yaml):
       required_yes: 2          # k-of-n
       min_responding: 2        # spec 5.4 "K"
       min_distinct_providers: 1
-      # Section-4 options (defaults shown; see quorum.QuorumPolicy).
-      # The prior-art memo is not in this repository.
-      min_vendors: 1           # >= 2 in the §4 reference profile
-      min_local_judges: 0      # >= 1 in the §4 reference profile
+      # Diversity floors default on (QuorumPolicy). Opt out by setting:
+      min_vendors: 2           # set 1 to opt out
+      min_local_judges: 1      # set 0 to opt out
+      require_local_yes: true  # set false to opt out
       heterogeneity_scope: selection   # selection | responding
       judge_inputs: record_only        # record_only | record_and_proposal
       ballot_binding: stamp            # stamp | echo
-      require_path_a_first: false
+      require_path_a_first: false      # stored, not a skip
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
