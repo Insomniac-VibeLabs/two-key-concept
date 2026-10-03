@@ -23,16 +23,23 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    constitution must include `tool_specs`. Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
-   and will not load. A key the spec does not name is unread payload.
-   `deny_unmapped` defaults off. Set it true to deny that key. A `payload`
-   path names a value that is not interpreted, and it covers that value's
-   children. The spec does not list every nested key.
+   and will not load. A key the spec does not name does not reach the tool.
+   `deny_unmapped` defaults off, so the call can still be allowed and that
+   key is dropped at the gateway. Set it true to deny the key instead. A
+   `payload` path names a value that is not interpreted, and it covers that
+   value's children. The spec does not list every nested key. A counterparty
+   path must list `allow`. A party that is not on that list is
+   `counterparty_not_allowed`. The tool receives the canonical party, not
+   the raw spelling.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. A missing or malformed ballot does not
    count as yes. The diversity floors are on by default: two vendors, one
    local judge, and a yes from that local judge. Opt out with
    `QuorumPolicy.without_diversity_floors()` or the matching quorum fields.
-   `require_path_a_first` is not a floor and it is not a skip.
+   `require_path_a_first` is not a floor and it is not a skip. After a derive
+   deny, judges do not receive the argument bytes unless
+   `tool_args_on_derive_deny` is set. Path B still runs. Other denies still
+   attach non-empty arguments.
 3. A short-lived single-use token is issued only if both paths allow. The
    token is signed by a capability key that lives outside the ledger
    directory, not by handing that private key to the gateway. It is bound
@@ -56,7 +63,7 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed constitution<br/>prose, hard rules, tool specs<br/>unnamed keys allowed unless deny_unmapped"] --> compile["compile_both"]
+  constitution["Signed constitution<br/>prose, hard rules, tool specs<br/>unnamed keys dropped unless deny_unmapped"] --> compile["compile_both"]
   compile --> bytecode["Path A bytecode"]
   compile --> judgeText["Path B judge text"]
   instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
@@ -64,7 +71,7 @@ flowchart TD
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
-  authorize -->|"action record and tool args"| pathB["Path B convene<br/>default: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
+  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B convene<br/>default: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
   judgeText --> pathB
   session["agent_session<br/>must not be a judge API key"] --> pathB
   pathB -->|"parallel score, separate credentials"| judges["Judges<br/>xAI, OpenAI, Anthropic, Gemini, Ollama"]
@@ -77,7 +84,7 @@ flowchart TD
   gate -->|yes| token["Capability token<br/>signed by the capability key"]
   token --> ledger
   token --> gateway["Tool gateway<br/>public key only, cannot mint"]
-  gateway -->|"redemption_started, then the tool"| tool["Registered tool"]
+  gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
   gateway --> ledger
 ```
 
@@ -91,8 +98,11 @@ skip either path.
 
 Path A reads only the five structured fields. Path B judges see the
 normalized action record. Non-empty tool arguments are attached on that
-record as `tool_args`. The proposal string is not sent unless that judge
-has `receives_proposal: true`, or the quorum policy is
+record as `tool_args`, except after a derive deny. Set
+`tool_args_on_derive_deny: true` on the quorum policy to send those bytes
+anyway. Path B still runs either way. A rule deny that is not a derive deny
+still attaches the arguments. The proposal string is not sent unless that
+judge has `receives_proposal: true`, or the quorum policy is
 `judge_inputs: record_and_proposal`. The code default, and
 `examples/judges.yaml`, is `record_only`.
 
@@ -124,7 +134,8 @@ sequenceDiagram
   Caller->>TwoKey: proposal and agent_session
   TwoKey->>PathA: structured fields
   PathA-->>TwoKey: allow or deny
-  TwoKey->>PathB: action record, tool args, binding hashes
+  TwoKey->>PathB: action record and binding hashes
+  Note over PathB: tool args omitted after a derive deny unless tool_args_on_derive_deny
   PathB->>Judge: score in parallel, own credentials
   Judge-->>PathB: yes, no, or abstain
   PathB-->>TwoKey: quorum pass or deny
@@ -176,7 +187,7 @@ directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 Install from git. It is not published to PyPI. This branch is package
-0.1.9 and is not a release tag. `v0.1.6` remains the tagged release on
+0.1.10 and is not a release tag. `v0.1.6` remains the tagged release on
 `main`.
 
 The middle column on the GitHub file list is the last commit that touched

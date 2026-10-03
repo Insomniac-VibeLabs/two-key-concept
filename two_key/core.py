@@ -15,10 +15,17 @@ from .agents import parse_proposal
 from .capability import CapabilityIssuer, open_capability_key
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
-from .derive import DeriveError, blocked_from_rules, derive, disagreement, form_for
+from .derive import DeriveError, blocked_from_rules, derive, disagreement, disallowed_party, form_for
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene
+
+
+_DERIVE_DENIALS = {"amount_mismatch", "counterparty_mismatch", "irreversible_mismatch"}
+
+
+def _derive_deny(reason: str | None) -> bool:
+    return bool(reason) and (reason.startswith("derive_failed:") or reason in _DERIVE_DENIALS)
 
 
 @dataclass
@@ -117,6 +124,12 @@ class TwoKey:
                     counterparty=party,
                     irreversible=bool(form["irreversible"]),
                 )
+                if (
+                    deny_reason is None
+                    and disallowed_party(spec, arguments)
+                    and not (set(derived.counterparties) & blocked)
+                ):
+                    deny_reason = "counterparty_not_allowed"
         path_a = self.vm.eval(normalized)
         path_a_rec = {"allowed": path_a.allowed, "reason": path_a.reason, "denied_by": path_a.denied_by}
         binding = {
@@ -126,8 +139,13 @@ class TwoKey:
             "bytecode_hash": self.compiled.bytecode_hash,
         }
         # Both paths always answer. A Path A deny does not skip Path B.
+        # After a derive deny, judges do not receive the argument bytes unless
+        # the quorum policy opts in. The normalized record still goes to Path B.
+        judge_args: Mapping | None = arguments
+        if _derive_deny(deny_reason) and not self.quorum.tool_args_on_derive_deny:
+            judge_args = None
         quorum = convene(self.judges, self.compiled.judge_text, normalized, proposal,
-                         self.quorum, binding, arguments, agent_session)
+                         self.quorum, binding, judge_args, agent_session)
         path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
                       "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
         allowed = bool(path_a.allowed and quorum.passed and deny_reason is None)

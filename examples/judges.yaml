@@ -31,6 +31,9 @@ quorum:
   # judge_inputs: record_only        # record_only | record_and_proposal
   # ballot_binding: stamp            # stamp | echo (echo needs echo_binding: true on every judge)
   # require_path_a_first: false
+  # tool_args_on_derive_deny: false
+  # Set true to send argument bytes to judges after a derive deny.
+  # The default withholds those bytes. Path B still runs either way.
 
 judges:
   - id: grok

@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.1.9 on branch `working`.
+This is the design model for `two-key-concept` 0.1.10 on branch `working`.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -42,15 +42,21 @@ the code wins, then this file should be corrected.
 - Caller to Path A. The VM sees the normalized action record, not the proposal.
 - Caller to Path B. Judges see the constitution prose and the normalized
   record. Non-empty tool arguments are attached on that record as
-  `tool_args`. The proposal is withheld unless that judge sets
+  `tool_args`, except after a derive deny (`derive_failed:*`,
+  `amount_mismatch`, `counterparty_mismatch`, `irreversible_mismatch`).
+  `tool_args_on_derive_deny` defaults false. Set it true to send those
+  bytes. Path B still runs either way. Other denies still attach the
+  arguments. The proposal is withheld unless that judge sets
   `receives_proposal` or the quorum policy is `judge_inputs: record_and_proposal`.
   The default is record-only.
 - Both paths always run. `require_path_a_first` is stored on the policy and
   copied into `to_record`. `TwoKey.authorize` does not read it. There is no
   `short_circuit_path_b` setting on `TwoKey`.
-- Gateway to the tool. The token is checked, then `redemption_started` is
-  checkpointed, then the registered function is called with the same
-  argument mapping. Nothing in this package scans those bytes.
+- Gateway to the tool. The token is checked against the caller's argument
+  bytes, then `redemption_started` is checkpointed, then the registered
+  function is called with declared paths only. Unnamed keys are not passed
+  in. A counterparty path is the canonical party, not the raw spelling.
+  Nothing in this package scans those bytes.
 - Process to the ledger. Appends and checkpoints take a POSIX `flock` on
   `<ledger>.lock` next to the ledger directory. If the file changed since
   this process loaded it, the write is refused. Redemption also takes a
@@ -82,8 +88,11 @@ the code wins, then this file should be corrected.
   attacker's hands.
 - The action record describes the real call only for fields the tool spec
   names. Every loaded constitution has `tool_specs`. A tool with no spec
-  does not redeem. `deny_unmapped` defaults off, so an unnamed key is unread
-  payload. A tool that sets it denies that key.
+  does not redeem. A counterparty path requires `allow`. A party off that
+  list does not authorize (`counterparty_not_allowed`), unless a blocked
+  party is also present, in which case the block rule still denies.
+  `deny_unmapped` defaults off. An unnamed key does not reach the tool.
+  Setting the flag denies the call instead (`unmapped_field`).
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are on by default and can be turned off.
 
@@ -105,15 +114,19 @@ claims to close.
   form. The gateway recomputes the form from the same bytes and refuses a
   mismatch. Changing a spec changes `spec_hash`, so outstanding tokens fail
   at the gateway. This package does not classify free text and does not
-  track per-value information flow. A value the spec copies is still that
-  value, including a well-formed address that is the wrong party. A path the
-  spec does not declare does not change the form. With `deny_unmapped` left
-  off (the default), that value is unread payload, so a number in an unnamed
-  field is not the amount and an unnamed address is not the counterparty.
-  With `deny_unmapped` set, the unnamed key is `unmapped_field` instead.
-  That still does not interpret it. `payload` names a value that may be
-  present. The path covers that value and its children, and the value is
-  not classified. Missing `data_class` still becomes
+  track per-value information flow. A counterparty the spec copies must be
+  on that path's `allow` list. The tool receives the canonical value
+  (`strip`, casefold), not the raw spelling. A party that is not listed is
+  `counterparty_not_allowed`, unless a blocked party is also present, in
+  which case the block rule denies. A currency path is delivered as `usd`.
+  A path the spec does not declare does not
+  change the form and is not passed to the tool. With `deny_unmapped` left
+  off (the default), the call can still allow. With `deny_unmapped` set,
+  the unnamed key is `unmapped_field`. Neither mode interprets the value.
+  `payload` names a value that may be present. The path covers that value
+  and its children, and the value is not classified. The token still binds
+  the caller's original argument bytes. Redeem with those same bytes. The
+  function is called with the projection. Missing `data_class` still becomes
   `classified` before the floor, and the floor cannot lower that default.
   Missing `irreversible` is taken from the spec, so a tool signed as
   reversible stays reversible. A present `irreversible` claim that differs
@@ -122,10 +135,10 @@ claims to close.
   `deny_counterparties`, so a blocked party is not hidden behind an allowed
   one. A derived amount that is not finite or above the action sanity cap
   is `amount_unreadable`.
-- A derive deny does not skip Path B. Judges still receive the action record,
-  and that record still carries `tool_args` when the arguments are non-empty.
-  The default withholds the English proposal. It does not withhold the
-  argument bytes. The tool still does not run.
+- A derive deny does not skip Path B. Judges still receive the normalized
+  action record. They do not receive `tool_args` unless
+  `tool_args_on_derive_deny` is true. A deny that is not a derive deny still
+  attaches non-empty arguments. The tool still does not run on a deny.
 - The gateway's verifier has no private key. The minting key is the
   capability key outside the ledger directory. The principal key still sits
   on the ledger object, because the head signature needs it. A token signed
@@ -162,8 +175,8 @@ claims to close.
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off. A declared path covers its children.
-- `two_key/quorum.py`: an abstention is not a yes, diversity floors default on, and `require_path_a_first` is not a skip.
-- `two_key/gateway.py`: argument check, spec hash, recomputed form, then `redemption_started`, then the tool. The verifier has no private key. No scanner.
+- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. A declared path covers its children.
+- `two_key/quorum.py`: an abstention is not a yes, diversity floors default on, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
+- `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append.

@@ -150,6 +150,25 @@ the tagged release.
   still see `tool_args`.
 - Not published to PyPI.
 
+## 0.1.10 — 2026-10-03
+
+On branch `working`. Not a release tag. `main` was not updated. `v0.1.6` stays
+the tagged release.
+
+- After a derive deny, judges do not receive `tool_args` unless
+  `QuorumPolicy.tool_args_on_derive_deny` is set. Path B still runs. Other
+  denies still attach non-empty arguments. An allow still attaches them.
+- An unnamed argument key does not reach the tool. `deny_unmapped` still
+  defaults off: the call can allow, and the gateway drops the key. Setting
+  the flag denies (`unmapped_field`). The token still binds the caller's
+  original argument bytes.
+- A counterparty path requires `allow`. A party that is not listed is
+  `counterparty_not_allowed`, unless a blocked party is also present, in
+  which case the block rule still denies. The tool receives the canonical
+  party, not the raw spelling.
+- A `payload` path is still not classified. Both paths still run.
+- Not published to PyPI.
+
 
 
 

@@ -30,13 +30,13 @@ SPECS = {
     "email_draft": {
         "irreversible": False,
         "data_class_floor": "public",
-        "counterparties": [{"json_path": "to"}],
+        "counterparties": [{"json_path": "to", "allow": ["ada@example"]}],
     },
     "pay_bill": {
         "irreversible": True,
         "data_class_floor": "financial",
         "amount": {"json_path": "amount", "unit": "usd", "currency_path": "currency"},
-        "counterparties": [{"json_path": "to"}],
+        "counterparties": [{"json_path": "to", "allow": ["power-co.example", "aaa-good.example"]}],
     },
     "summarize": {
         "irreversible": False,
@@ -397,6 +397,86 @@ class ProblemFTests(unittest.TestCase):
         )
         with self.assertRaises(ConstitutionError):
             sign_constitution(PROSE, RULES, key, duplicate)
+
+    def test_unnamed_values_do_not_reach_the_tool(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            args = {
+                "amount": 10,
+                "currency": "USD",
+                "to": "  Power-Co.Example ",
+                "memo": "do not deliver",
+            }
+            decision = tk.authorize(
+                {"tool": "pay_bill", "amount_usd": 10, "data_class": "financial", "irreversible": True,
+                 "counterparty": "power-co.example"},
+                args, "pay")
+            self.assertTrue(decision.allowed, decision.reason)
+            gateway = ToolGateway(tk.ledger, tk.issuer, tk.compiled,
+                                  tools={"pay_bill": lambda a: calls.append(a) or {"paid": a["to"]}})
+            redeemed = gateway.invoke(decision.token, "pay_bill", args)
+            self.assertTrue(redeemed.allowed, redeemed.reason)
+            self.assertEqual(calls, [{
+                "amount": 10,
+                "currency": "usd",
+                "to": "power-co.example",
+            }])
+
+    def test_a_party_off_the_allow_list_is_not_copied_through(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            decision = tk.authorize(
+                {"tool": "pay_bill", "amount_usd": 10, "data_class": "financial", "irreversible": True},
+                {"amount": 10, "currency": "usd", "to": "someone-else.example"},
+                "pay")
+            self.assertFalse(decision.allowed)
+            self.assertEqual(decision.reason, "counterparty_not_allowed")
+            self.assertIn("path_b", [entry.kind for entry in tk.ledger.entries])
+        key = generate_private_key()
+        specs = {name: dict(spec) for name, spec in SPECS.items()}
+        specs["email_draft"] = dict(SPECS["email_draft"], counterparties=[{"json_path": "to"}])
+        with self.assertRaises(ConstitutionError):
+            sign_constitution(PROSE, RULES, key, specs)
+
+    def test_derive_deny_hides_arguments_from_judges_unless_opted_in(self):
+        key = generate_private_key()
+        envelope = sign_constitution(PROSE, RULES, key, SPECS)
+
+        def run(policy):
+            seen = []
+
+            class Rec(FixedJudge):
+                def score(self, constitution_text, action, proposal):
+                    seen.append(dict(action.raw))
+                    return super().score(constitution_text, action, proposal)
+
+            with tempfile.TemporaryDirectory() as tmp:
+                ledger = Ledger(Path(tmp), key)
+                judges = [Rec("j0", "yes", provider="p0", vendor="v0", local_weights=True),
+                          Rec("j1", "yes", provider="p1", vendor="v1")]
+                tk = TwoKey(ledger, key.public_key(), verify_signed(envelope, key.public_key()), judges,
+                            private_key=key, quorum=policy, allow_test_doubles=True)
+                denied = tk.authorize(
+                    {"tool": "pay_bill", "data_class": "financial", "irreversible": True},
+                    {"currency": "usd", "to": "power-co.example", "secret": "hide-me"},
+                    "pay")
+                self.assertEqual(denied.reason, "derive_failed:amount_missing")
+                self.assertIn("path_b", [entry.kind for entry in tk.ledger.entries])
+                allowed = tk.authorize(
+                    {"tool": "pay_bill", "amount_usd": 10, "data_class": "financial", "irreversible": True,
+                     "counterparty": "power-co.example"},
+                    {"amount": 10, "currency": "usd", "to": "power-co.example", "memo": "visible-on-allow"},
+                    "pay")
+                self.assertTrue(allowed.allowed, allowed.reason)
+            return seen
+
+        hidden = run(QuorumPolicy(required_yes=2, parallel=False))
+        self.assertTrue(hidden)
+        self.assertNotIn("tool_args", hidden[0])
+        self.assertEqual(hidden[-1]["tool_args"]["memo"], "visible-on-allow")
+        shown = run(QuorumPolicy(required_yes=2, parallel=False, tool_args_on_derive_deny=True))
+        self.assertEqual(shown[0]["tool_args"]["secret"], "hide-me")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ SPECS = {
     "email_draft": {
         "irreversible": False,
         "data_class_floor": "public",
-        "counterparties": [{"json_path": "to"}],
+        "counterparties": [{"json_path": "to", "allow": ["ada", "ada@example"]}],
     },
 }
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."

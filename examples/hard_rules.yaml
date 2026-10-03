@@ -15,9 +15,12 @@ hard_rules:
     deny_counterparties: [offshore-mule.example, acme-scam.example]
 
 # JSON paths only. This file does not classify free text.
-# A key the spec does not name is unread payload. deny_unmapped defaults off.
-# Set it true to deny an unnamed key. payload names a value that may be
-# present and is not interpreted. That path covers the value and its children.
+# A key the spec does not name does not reach the tool. deny_unmapped
+# defaults off. Set it true to deny an unnamed key instead of dropping it.
+# payload names a value that may be present and is not interpreted. That
+# path covers the value and its children.
+# A counterparty path lists the only values it may copy (allow). The tool
+# receives the canonical value, not the raw spelling.
 # pay_bill.amount.currency_path must be the string usd or the call is denied.
 tool_specs:
   search:
@@ -31,11 +34,19 @@ tool_specs:
     data_class_floor: public
     counterparties:
       - json_path: to
+        allow: [ada@example]
+    payload:
+      - json_path: subject
+      - json_path: body
   email_send:
     irreversible: true
     data_class_floor: personal
     counterparties:
       - json_path: to
+        allow: [ada@example]
+    payload:
+      - json_path: subject
+      - json_path: body
   pay_bill:
     irreversible: true
     data_class_floor: financial
@@ -45,6 +56,7 @@ tool_specs:
       currency_path: currency
     counterparties:
       - json_path: to
+        allow: [power-co.example]
   summarize:
     irreversible: false
     data_class_floor: public

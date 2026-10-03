@@ -6,10 +6,11 @@ values Path A sees come from the spec and the arguments. A claim that
 disagrees is a deny. This module does not read English and it does not
 classify free text.
 
-Keys the spec does not name are unread payload. ``deny_unmapped`` defaults
-off. When a spec sets it, a key that is not a declared path is a deny. A
-declared path covers that value and everything under it. Naming a payload
-path does not interpret the value.
+Keys the spec does not name do not reach the tool. ``deny_unmapped`` defaults
+off: those keys are dropped at the gateway. When a spec sets it, an unnamed
+key is a deny instead. A declared path covers that value and everything
+under it. A counterparty path copies only values on its allow list, and the
+tool receives the canonical value. A payload path is not interpreted.
 """
 
 from __future__ import annotations
@@ -58,6 +59,99 @@ def lookup(document: Mapping[str, Any], path: str) -> tuple[bool, Any]:
             return False, None
         current = current[part]
     return True, current
+
+
+def _parties_at(raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        values = [raw]
+    elif isinstance(raw, list) and raw and all(isinstance(item, str) for item in raw):
+        values = list(raw)
+    else:
+        raise DeriveError("counterparty_unreadable")
+    parties: list[str] = []
+    for value in values:
+        party = value.strip().casefold()
+        if not party:
+            raise DeriveError("counterparty_missing")
+        parties.append(party)
+    return parties
+
+
+def _clone(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _clone(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clone(item) for item in value]
+    return value
+
+
+def _assign(dest: dict, path: str, value: Any) -> None:
+    parts = path.split(".")
+    current = dest
+    for part in parts[:-1]:
+        nxt = current.get(part)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            current[part] = nxt
+        current = nxt
+    current[parts[-1]] = value
+
+
+def disallowed_party(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> bool:
+    """True when a copied party is not on that path's allow list."""
+    for entry in spec.get("counterparties") or []:
+        if not isinstance(entry, Mapping):
+            continue
+        found, raw = lookup(arguments, entry["json_path"])
+        if not found:
+            continue
+        allow = set(entry.get("allow") or [])
+        if any(party not in allow for party in _parties_at(raw)):
+            return True
+    return False
+
+
+def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> dict:
+    """Arguments the tool may see.
+
+    Unnamed keys are dropped. A counterparty path is the canonical party
+    Path A checked, not the raw spelling. A payload path is copied whole,
+    including its children, and is not interpreted.
+    """
+    if not isinstance(arguments, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    for entry in spec.get("payload") or []:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("json_path"), str):
+            continue
+        found, raw = lookup(arguments, entry["json_path"])
+        if found:
+            _assign(out, entry["json_path"], _clone(raw))
+    amount = spec.get("amount")
+    if isinstance(amount, Mapping):
+        path = amount.get("json_path")
+        if isinstance(path, str):
+            found, raw = lookup(arguments, path)
+            if found:
+                _assign(out, path, _clone(raw))
+        currency_path = amount.get("currency_path")
+        if isinstance(currency_path, str):
+            found, raw = lookup(arguments, currency_path)
+            if found:
+                _assign(out, currency_path, raw.strip().casefold() if isinstance(raw, str) else _clone(raw))
+    for entry in spec.get("counterparties") or []:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("json_path"), str):
+            continue
+        path = entry["json_path"]
+        found, raw = lookup(arguments, path)
+        if not found:
+            continue
+        parties = _parties_at(raw)
+        if isinstance(raw, str):
+            _assign(out, path, parties[0])
+        else:
+            _assign(out, path, list(dict.fromkeys(parties)))
+    return out
 
 
 def _declared_paths(spec: Mapping[str, Any]) -> tuple[str, ...]:
@@ -138,17 +232,7 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         found, raw = lookup(arguments, entry["json_path"])
         if not found:
             raise DeriveError("counterparty_missing")
-        if isinstance(raw, str):
-            values = [raw]
-        elif isinstance(raw, list) and raw and all(isinstance(item, str) for item in raw):
-            values = list(raw)
-        else:
-            raise DeriveError("counterparty_unreadable")
-        for value in values:
-            party = value.strip().casefold()
-            if not party:
-                raise DeriveError("counterparty_missing")
-            parties.append(party)
+        parties.extend(_parties_at(raw))
     if spec.get("deny_unmapped") is True and _unmapped(arguments, _declared_paths(spec)):
         raise DeriveError("unmapped_field")
     return Derived(

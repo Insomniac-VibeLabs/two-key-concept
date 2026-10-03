@@ -48,7 +48,8 @@ Entry 2 in Insomniac-VibeLabs/two-key:
 - Judge inputs: ``judge_inputs="record_only"`` (default) gives judges only the
   normalized action record and the constitution, never the agent's proposal
   text (transcript) or tool outputs. "record_and_proposal" restores the
-  earlier behaviour.
+  earlier behaviour. After a derive deny, ``tool_args`` is omitted unless
+  ``tool_args_on_derive_deny`` is set. Path B still runs.
 - Both paths always run. A Path A deny does not skip Path B.
   ``require_path_a_first`` is stored on the policy and copied into
   ``to_record``. ``TwoKey.authorize`` does not read it. There is no
@@ -85,6 +86,9 @@ class QuorumPolicy:
     ballot_binding: str = "stamp"               # stamp | echo
     require_path_a_first: bool = False          # stored, not a skip
     require_local_yes: bool = True              # a local judge in the set must itself vote yes
+    # After a derive deny, do not attach tool arguments to the judge record.
+    # Set true to send those bytes anyway. Path B still runs either way.
+    tool_args_on_derive_deny: bool = False
 
 
     def __post_init__(self):
@@ -114,6 +118,8 @@ class QuorumPolicy:
             raise QuorumConfigError("require_path_a_first must be a boolean")
         if not isinstance(self.require_local_yes, bool):
             raise QuorumConfigError("require_local_yes must be a boolean")
+        if not isinstance(self.tool_args_on_derive_deny, bool):
+            raise QuorumConfigError("tool_args_on_derive_deny must be a boolean")
 
     @classmethod
     def without_diversity_floors(cls, required_yes: int = 2, min_responding: int | None = None,
@@ -141,7 +147,8 @@ class QuorumPolicy:
                 "min_vendors": self.min_vendors, "min_local_judges": self.min_local_judges,
                 "heterogeneity_scope": self.heterogeneity_scope, "judge_inputs": self.judge_inputs,
                 "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first,
-                "require_local_yes": self.require_local_yes}
+                "require_local_yes": self.require_local_yes,
+                "tool_args_on_derive_deny": self.tool_args_on_derive_deny}
 
     @property
     def effective_min_responding(self) -> int:

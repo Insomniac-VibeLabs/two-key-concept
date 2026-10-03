@@ -62,10 +62,12 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
     A spec says which argument paths Path A may read. It is not an English
     scanner. ``amount.unit`` is ``usd`` or ``cents``. A currency path, when
     set, must be the string ``usd`` at authorization time or the call is
-    denied. ``deny_unmapped`` defaults to false: a key the spec does not name
-    is unread payload. Set it true to deny that key. ``payload`` names paths
-    that may be present and are not interpreted. A named path covers that
-    value and its children.
+    denied. A counterparty path copies only values on its ``allow`` list.
+    The tool receives that canonical value, not the raw spelling.
+    ``deny_unmapped`` defaults to false: a key the spec does not name
+    does not reach the tool. Set it true to deny that key instead.
+    ``payload`` names paths that may be present and are not interpreted. A
+    named path covers that value and its children.
     """
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
@@ -132,9 +134,14 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
         party_out = []
         for index, entry in enumerate(parties):
             where = f"tool_specs.{tool}.counterparties[{index}]"
-            if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
-                raise ConstitutionError(f"{where}: expected json_path only")
-            party_out.append({"json_path": take(_json_path(entry["json_path"], where), where)})
+            if not isinstance(entry, Mapping) or set(entry) != {"json_path", "allow"}:
+                raise ConstitutionError(f"{where}: expected json_path and allow")
+            path = take(_json_path(entry["json_path"], where), where)
+            allow = entry["allow"]
+            if not isinstance(allow, list) or not allow or any(not isinstance(item, str) or not item.strip() for item in allow):
+                raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
+            canonical = sorted({item.strip().casefold() for item in allow})
+            party_out.append({"json_path": path, "allow": canonical})
         payload = spec.get("payload", [])
         if not isinstance(payload, list):
             raise ConstitutionError(f"tool_specs.{tool}.payload: expected a list")

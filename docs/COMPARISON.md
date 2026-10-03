@@ -28,8 +28,9 @@ There are no scanner hooks in this package.
 Path A is only as good as the fields the signed tool spec can read. Those
 fields are derived from the argument bytes and a disagreeing claim is a
 deny. A constitution without `tool_specs` does not load. An unnamed argument
-key is unread payload unless that tool sets `deny_unmapped` (off by default).
-This package does
+key does not reach the tool. `deny_unmapped` (off by default) denies the call
+instead of dropping the key. A copied counterparty must be on that path's
+`allow` list. This package does
 not classify free text and does not track per-value information flow. The
 package that adds scanning, PKI, and anchoring is
 [two-key](https://github.com/Insomniac-VibeLabs/two-key).

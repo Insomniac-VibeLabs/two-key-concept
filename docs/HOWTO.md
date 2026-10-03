@@ -38,12 +38,21 @@ carries text the rules must treat as sensitive needs that class as its
 `data_class_floor`. A missing amount path, a non-numeric amount, or a
 currency other than `usd` on `pay_bill` is a deny.
 
-A key the spec does not name is unread payload. It does not change the form,
-and the spec does not have to list every nested key. `deny_unmapped` defaults
-off. Set it true on a tool to deny an unnamed key. `payload` names a value
-that may be present and is not interpreted. That path covers the value and
-its children. A value copied from a declared path is still that value. No
-check here decides that a well-formed value is the wrong one.
+A key the spec does not name does not change the form and does not reach
+the tool. The spec does not have to list every nested key. `deny_unmapped`
+defaults off: the call can still allow, and the gateway drops the unnamed
+key. Set it true to deny that key (`unmapped_field`). `payload` names a
+value that may be present and is not interpreted. That path covers the
+value and its children.
+
+A counterparty path must include `allow`, a non-empty list of strings. A
+party that is not on that list is `counterparty_not_allowed`. The tool
+receives the canonical party (trimmed, lower case), not the raw spelling.
+`examples/hard_rules.yaml` allows `ada@example` on the mail tools and
+`power-co.example` on `pay_bill`. Those mail tools also name `subject` and
+`body` as payload, so those values reach the tool and are not interpreted.
+A field that is neither a control path nor a payload path is dropped. A
+blocked party still denies through `deny_counterparties` when one is present.
 
 Missing `data_class` still defaults to `classified` before the floor, and
 a floor never lowers that. Missing `irreversible` follows the tool spec,
@@ -72,8 +81,11 @@ meets that with the cloud hooks plus local Qwen. To opt out, set
 `min_vendors: 1`, `min_local_judges: 0`, and `require_local_yes: false` in
 the quorum block, or call `QuorumPolicy.without_diversity_floors()`.
 `require_path_a_first` stays off unless you set it. `TwoKey.authorize` does
-not read it. Both paths still run. `min_distinct_providers` still defaults
-to 1, so that count is not itself a floor.
+not read it. Both paths still run. After a derive deny, judges do not
+receive the argument bytes unless the quorum block sets
+`tool_args_on_derive_deny: true`. Other denies still attach non-empty
+arguments. `min_distinct_providers` still defaults to 1, so that count is
+not itself a floor.
 
 Local Ollama is `http://localhost:11434` only. Plain HTTP to any other host
 is refused. An Ollama judge counts as local weights unless you set
@@ -179,7 +191,10 @@ head. A token signed with that principal key does not redeem.
 
 The gateway checks the signature, expiry, tool, argument hash, constitution
 hashes, spec hash, the recomputed form, the ledger prefix root, and that
-nothing revoked or reloaded the constitution after issuance. The token is
+nothing revoked or reloaded the constitution after issuance. Pass the same
+argument object you authorized. The hash covers those bytes. The registered
+function is called with declared paths only: unnamed keys are omitted, and
+a counterparty path is the canonical party. The token is
 single-use. A tool exception does not consume it, so the same token can be
 retried. There is no content scanner on the way in or out.
 

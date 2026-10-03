@@ -14,6 +14,7 @@ Format (see examples/judges.yaml):
       judge_inputs: record_only        # record_only | record_and_proposal
       ballot_binding: stamp            # stamp | echo
       require_path_a_first: false      # stored, not a skip
+      tool_args_on_derive_deny: false # true sends argument bytes after a derive deny
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
@@ -61,7 +62,7 @@ JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
               "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
-               "require_path_a_first", "require_local_yes"}
+               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny"}
 
 
 class JudgeConfigError(ValueError):

@@ -11,9 +11,10 @@ Missing-field defaults follow disclosure section 5.2 and the missing-field rule:
 claim is a deny. The missing-field defaults still apply before that fill:
 omitted ``data_class`` stays ``classified``, and the floor cannot lower it.
 Omitted ``irreversible`` is replaced by the spec. Free text is not classified.
-``deny_unmapped`` defaults off, so an unnamed argument key stays unread
-payload. Setting it denies that key. It does not interpret the key.
-The options memo is DESIGN_OPTIONS.md section 1 in
+``deny_unmapped`` defaults off. An unnamed argument key does not reach the
+tool. Setting the flag denies that key instead. A counterparty path copies
+only values on its allow list, canonicalized. A payload path is not
+interpreted. The options memo is DESIGN_OPTIONS.md section 1 in
 Insomniac-VibeLabs/two-key, not in this repository.
 """
 

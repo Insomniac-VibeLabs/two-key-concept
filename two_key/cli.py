@@ -53,7 +53,7 @@ def _demo(_args) -> int:
     specs = {
         "search": {"irreversible": False, "data_class_floor": "public"},
         "email_draft": {"irreversible": False, "data_class_floor": "public",
-                        "counterparties": [{"json_path": "to"}]},
+                        "counterparties": [{"json_path": "to", "allow": ["ada@example"]}]},
     }
     envelope = sign_constitution(prose, rules, key, specs)
     with tempfile.TemporaryDirectory() as tmp:

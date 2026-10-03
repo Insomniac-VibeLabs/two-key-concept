@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
 from .capability import CapabilityIssuer, CapabilityVerifier, TokenError, args_hash
-from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match
+from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match, project_arguments
 from .ledger import LedgerError
 
 
@@ -101,7 +101,7 @@ class ToolGateway:
             except LedgerError as e:
                 return GatewayResult(False, f"ledger_failed:{e}")
             try:
-                output = fn(arguments)
+                output = fn(project_arguments(spec, arguments))
             except Exception as e:
                 try:
                     self.ledger.append("redemption_aborted", {"jti": payload["jti"], "tool": tool})
