@@ -4,6 +4,9 @@ This is a prototype. Report vulnerabilities privately to the repository
 admins of Insomniac-VibeLabs. Do not open a public issue for an unfixed
 security bug.
 
+The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
+is how to report a vulnerability. It is not the model.
+
 ## In scope
 
 - Fail-open on either path (a deny or a missing ballot must not become allow)
@@ -30,5 +33,5 @@ not run the tool. Concurrent calls are locked. A crash before the tool runs
 blocks a retry; a tool exception does not.
 
 Code scanning in CI is `.github/workflows/security.yml` (bandit). CodeQL is
-`.github/workflows/codeql.yml` and runs only if GitHub Advanced Security is
-enabled for this private repository.
+`.github/workflows/codeql.yml`. It uploads results when code scanning is
+enabled for this repository.

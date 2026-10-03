@@ -59,3 +59,13 @@ Added `llms.txt` and repository topics for discovery. No behavior change.
 Tag `v0.1.4`. No behavior change. The `v0.1.3` tag stays on the earlier tree.
 
 - README architecture diagram: a monitored agent only proposes, Path B judges vote with their own credentials, and the token is returned to the caller. Path B still runs when Path A denies.
+
+## Docs — 2026-10-03
+
+On branch `10.3.2026.2`, cut from `main`. `main` was not updated.
+
+- Added `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, and `docs/SCOPE.md` for this package, not for the full `two-key` repository.
+- `README.md`, `docs/HOWTO.md`, `llms.txt`, `SECURITY.md`, and `CONTRIBUTING.md` point at them.
+- `SECURITY.md` no longer calls this repository private.
+- No behavior change. Package version stays 0.1.4.
+

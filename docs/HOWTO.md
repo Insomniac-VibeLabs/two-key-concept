@@ -1,5 +1,10 @@
 # How to run the concept
 
+Whether this package is the right control is [FIT.md](FIT.md). What it is
+not a substitute for is [COMPARISON.md](COMPARISON.md). Boundaries and
+residual risk are [THREAT_MODEL.md](THREAT_MODEL.md). What this package
+leaves out is [SCOPE.md](SCOPE.md).
+
 Commands are from the repository root.
 
 ## Install
@@ -60,8 +65,13 @@ python -m two_key authorize \
   --agent-session principal-session-1
 ```
 
-Exit status is 0 on allow and 2 on deny. The ledger directory holds
-ciphertext only. First open writes `<ledger>.ledger-key/ledger.key` and
+`--data-class` on this command defaults to `public`, and `--irreversible`
+defaults to false. A field omitted from `normalize_action` defaults the
+other way: `classified`, and `irreversible` true.
+
+Exit status is 0 on allow and 2 on deny. The ledger records and the head
+are ciphertext. Redemption also writes `.redeem-<jti>.lock` in that
+directory. First open writes `<ledger>.ledger-key/ledger.key` and
 `<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
 The authorize command does not accept test-double judges.
 
