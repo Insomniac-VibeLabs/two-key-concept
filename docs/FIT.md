@@ -1,7 +1,7 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.1.4. Apache-2.0.
+server in this release. Package `two-key-concept` version 0.1.6. Apache-2.0.
 Crypto is Ed25519 and SHA-256.
 
 This is the smaller package. It has a ledger, Path A, Path B, and judge and

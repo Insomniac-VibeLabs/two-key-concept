@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.1.4. It is not a
+This is the design model for `two-key-concept` 0.1.6. It is not a
 penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
