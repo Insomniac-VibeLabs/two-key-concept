@@ -6,7 +6,8 @@ Format (see examples/judges.yaml):
       required_yes: 2          # k-of-n
       min_responding: 2        # spec 5.4 "K"
       min_distinct_providers: 1
-      # PRIOR_ART.md §4 (iii) options (defaults shown; see quorum.QuorumPolicy):
+      # Section-4 options (defaults shown; see quorum.QuorumPolicy).
+      # The prior-art memo is not in this repository.
       min_vendors: 1           # >= 2 in the §4 reference profile
       min_local_judges: 0      # >= 1 in the §4 reference profile
       heterogeneity_scope: selection   # selection | responding

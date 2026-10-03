@@ -10,6 +10,11 @@ not scan payloads and it has no antivirus or DLP hooks.
 
 Apache License 2.0. See [LICENSE](LICENSE).
 
+Read [docs/FIT.md](docs/FIT.md) first, then
+[docs/COMPARISON.md](docs/COMPARISON.md),
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), and
+[docs/SCOPE.md](docs/SCOPE.md), before relying on it.
+
 ## What turns
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
@@ -186,3 +191,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption, no scanning |
 | `examples/` | Constitution, hard rules, judges, agents |
 | `docs/HOWTO.md` | Operator how-to |
+| `docs/FIT.md` | Whether this package is the right control |
+| `docs/COMPARISON.md` | What this package is not a substitute for |
+| `docs/THREAT_MODEL.md` | Boundaries and residual risk |
+| `docs/SCOPE.md` | What this package leaves in the full repository |

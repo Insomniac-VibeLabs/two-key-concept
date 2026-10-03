@@ -30,7 +30,7 @@ On branch `10.2.2026`. `prev` and `main` stay at 0.1.0.
 - Username/password and OAuth device-code auth are rejected.
 - Ledger entries and head are AES-256-GCM. Head is signed by the principal and a witness key.
 - `two-key authorize` runs both paths and does not execute the tool.
-- CodeQL workflow added so code scanning can run on this private repo.
+- CodeQL workflow added so code scanning could run while the repository was private.
 
 ## 0.1.2 — 2026-10-02
 
@@ -59,3 +59,26 @@ Added `llms.txt` and repository topics for discovery. No behavior change.
 Tag `v0.1.4`. No behavior change. The `v0.1.3` tag stays on the earlier tree.
 
 - README architecture diagram: a monitored agent only proposes, Path B judges vote with their own credentials, and the token is returned to the caller. Path B still runs when Path A denies.
+
+## Docs — 2026-10-03
+
+On branch `10.3.2026.2`, cut from `main`. `main` was not updated.
+
+- Added `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, and `docs/SCOPE.md` for this package, not for the full `two-key` repository.
+- `README.md`, `docs/HOWTO.md`, `llms.txt`, `SECURITY.md`, and `CONTRIBUTING.md` point at them.
+- `SECURITY.md` no longer calls this repository private.
+- No behavior change. Package version stays 0.1.4.
+
+## Fixes — 2026-10-03
+
+On branch `10.3.2026.2`. `main` was not updated.
+
+- Path B comments match the code. Both paths always run. `require_path_a_first` is recorded and not consulted. The unused `judge_proposal` value in `convene` is gone; per-judge filtering is unchanged.
+- Comments no longer point at `DESIGN_OPTIONS.md`, `PRIOR_ART.md`, or `CONCEPTION_NOTES.md` as files in this repository. `docs/HOWTO.md` has the Qwen2.5 section the example config links to.
+- `two-key authorize` defaults `--data-class` to `classified` and `--irreversible` to true, matching `normalize_action`. `--no-irreversible` turns that flag off.
+- A mismatched principal key on the ledger head reports a principal-key mismatch, not a ledger-key mismatch.
+- Appends and checkpoints take `<ledger>.lock` outside the ledger directory and refuse if another writer changed the file. Redemption locks moved to `<ledger>.redeem-locks/`, also outside. `fcntl` is optional, so the package still imports where that module is absent.
+- Workflows set an explicit `permissions` block. The CodeQL job still has `security-events: write`.
+- The 0.1.1 changelog no longer calls the repository private in the present tense.
+
+

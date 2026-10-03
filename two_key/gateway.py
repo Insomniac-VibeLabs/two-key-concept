@@ -8,11 +8,15 @@ token again, because the intent is already on the ledger.
 
 from __future__ import annotations
 
-import fcntl
 import os
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - POSIX only
+    fcntl = None
 
 from .capability import TokenError, args_hash
 from .ledger import LedgerError
@@ -88,12 +92,23 @@ class ToolGateway:
                 with gateway._locks_guard:
                     self.lock = gateway._locks.setdefault(jti, threading.Lock())
                 self.lock.acquire()
-                path = gateway.ledger.path / f".redeem-{jti}.lock"
-                self.fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
-                fcntl.flock(self.fd, fcntl.LOCK_EX)
-                return self
+                self.fd = None
+                if fcntl is None:
+                    return self
+                try:
+                    path = gateway.ledger.redeem_lock_path(jti)
+                    self.fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+                    fcntl.flock(self.fd, fcntl.LOCK_EX)
+                    return self
+                except BaseException:
+                    if self.fd is not None:
+                        os.close(self.fd)
+                    self.lock.release()
+                    raise
+
             def __exit__(self, *exc):
-                fcntl.flock(self.fd, fcntl.LOCK_UN)
-                os.close(self.fd)
+                if self.fd is not None:
+                    fcntl.flock(self.fd, fcntl.LOCK_UN)
+                    os.close(self.fd)
                 self.lock.release()
         return _Hold()
