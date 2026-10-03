@@ -1,7 +1,7 @@
 # Scope
 
-`two-key-concept` is the first working cut. Package version 0.1.11 on branch
-`working`. Not a release tag. `v0.1.6` remains the tagged release on `main`.
+`two-key-concept` is the first working cut. Package version 0.1.12 on `main`.
+Not a git tag yet. `v0.1.6` remains the latest tag and points at the previous tree.
 
 It keeps:
 

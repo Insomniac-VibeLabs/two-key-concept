@@ -188,16 +188,15 @@ head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
-Install from git. It is not published to PyPI. This branch is package
-0.1.11 and is not a release tag. `v0.1.6` remains the tagged release on
-`main`.
+Install from git. It is not published to PyPI. Package version 0.1.12.
+`v0.1.6` is still the latest git tag and points at the previous tree.
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@working"
+pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@main"
 ```
 
 ## Run the offline demo

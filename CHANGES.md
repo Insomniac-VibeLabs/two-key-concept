@@ -182,6 +182,12 @@ the tagged release.
   in the full `two-key` repository.
 - Not published to PyPI.
 
+## 0.1.12 — 2026-10-03
+
+Version bump. No behavior change. The `working` line through 0.1.11 is this
+tree, now on `main`. Not a git tag. `v0.1.6` still points at the previous
+tree. Not published to PyPI.
+
 
 
 

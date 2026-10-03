@@ -1,8 +1,8 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.1.11 on branch
-`working` (not a release tag; `v0.1.6` remains the tagged main release).
+server in this release. Package `two-key-concept` version 0.1.12 on `main`
+(not a git tag yet; `v0.1.6` remains the latest tag and points at the previous tree).
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
 
