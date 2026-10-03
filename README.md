@@ -40,11 +40,17 @@ Left in the full `two-key` repository, on purpose:
 - hybrid ML-DSA-65
 
 Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
-entries and the signed head are AES-256-GCM at rest. The head is signed by
-the principal key and by a witness key created in the ledger directory
-(`witness.pem`). Move that file off the ledger host; a stolen principal key
-alone cannot then sign a new head. It is a prototype. It is not a FIPS
-140-3 validated module.
+entries and the signed head are AES-256-GCM at rest. The data key is wrapped
+by a ledger key outside the ledger directory, not by the principal key. The
+head is signed by the principal and by a witness key, also outside the ledger
+directory. A stolen principal key cannot decrypt the log or sign a new head.
+It is a prototype. It is not a FIPS 140-3 validated module.
+
+This is a private concept package. Install from git. It is not published to PyPI.
+
+```bash
+pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.1.2"
+```
 
 ## Run the offline demo
 
@@ -68,7 +74,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/agents.py` | Monitored-agent hooks |
-| `two_key/ledger.py` | Encrypted hash-chained ledger, principal and witness head |
+| `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption, no scanning |
 | `examples/` | Constitution, hard rules, judges, agents |
 | `docs/HOWTO.md` | Operator how-to |

@@ -3,6 +3,8 @@
 import hashlib
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -175,10 +177,40 @@ class ConceptTests(unittest.TestCase):
             raw = Path(tmp, "entries.jsonl").read_text()
             self.assertNotIn("constitution_loaded", raw)
             self.assertIn("two-key-concept-ledger-enc/1", raw)
-            self.assertTrue(Path(tmp, "witness.pem").exists())
-            other = generate_private_key()
+            self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp).iterdir()))
+            self.assertTrue(tk.ledger.witness_path.exists())
+            self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp)) + "/"))
+            key = tk.ledger.private_key
+            Ledger(tmp, key).verify()
             with self.assertRaises(LedgerError):
-                Ledger(tmp, other)
+                Ledger(tmp, key, ledger_key_path=Path(tmp, "missing.key"))
+            with self.assertRaises(LedgerError):
+                Ledger(tmp, generate_private_key())
+
+    def test_missing_witness_refuses_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            witness = tk.ledger.witness_path
+            witness.unlink()
+            with self.assertRaises(LedgerError):
+                tk.ledger.append("revocation", {"reason": "stop"})
+                tk.ledger.checkpoint()
+
+    def test_encrypted_ledger_reloads_in_second_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            from two_key.keys import save_private_key
+            save_private_key(Path(tmp, "principal.pem"), key)
+            ledger = Path(tmp, "ledger")
+            led = Ledger(ledger, key)
+            led.append("note", {"ok": True})
+            led.checkpoint()
+            script = "from two_key.ledger import Ledger; from two_key.keys import load_private_key; " \
+                     "led = Ledger(%r, load_private_key(%r)); led.verify(); print(led.size())" % (str(ledger), str(Path(tmp, "principal.pem")))
+            proc = subprocess.run([sys.executable, "-c", script], cwd="/tmp/two-key-concept", env={"PYTHONPATH": "/tmp/two-key-concept"},
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout.strip(), "1")
 
     def test_stub_auth_rejected(self):
         with self.assertRaises(JudgeConfigError):
@@ -197,19 +229,19 @@ class ConceptTests(unittest.TestCase):
             save_private_key(Path(tmp, "principal.pem"), key)
             save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key))
             judges = [FixedJudge("a", "yes", provider="p0"), FixedJudge("b", "yes", provider="p1")]
+            with self.assertRaises(SystemExit):
+                main(["authorize", "--allow-test-doubles"])
             buf = io.StringIO()
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))):
                 with redirect_stdout(buf):
-                    rc = main(["authorize", "--key", str(Path(tmp, "principal.pem")),
-                               "--ledger", str(Path(tmp, "ledger")),
-                               "--constitution", str(Path(tmp, "c.json")),
-                               "--judges", str(Path(tmp, "unused.yaml")),
-                               "--tool", "email_draft", "--args", '{"to":"ada"}',
-                               "--proposal", "draft", "--allow-test-doubles"])
-            self.assertEqual(rc, 0)
-            self.assertIn("both_paths_allow", buf.getvalue())
-            self.assertNotIn("tool_output", buf.getvalue())
-            self.assertTrue(Path(tmp, "ledger", "entries.jsonl").exists())
+                    with self.assertRaises(ValueError):
+                        main(["authorize", "--key", str(Path(tmp, "principal.pem")),
+                              "--ledger", str(Path(tmp, "ledger")),
+                              "--constitution", str(Path(tmp, "c.json")),
+                              "--judges", str(Path(tmp, "unused.yaml")),
+                              "--tool", "email_draft", "--args", '{"to":"ada"}',
+                              "--proposal", "draft"])
+            self.assertNotIn("both_paths_allow", buf.getvalue())
 
 
 

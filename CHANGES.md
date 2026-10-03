@@ -31,3 +31,13 @@ On branch `10.2.2026`. `prev` and `main` stay at 0.1.0.
 - Ledger entries and head are AES-256-GCM. Head is signed by the principal and a witness key.
 - `two-key authorize` runs both paths and does not execute the tool.
 - CodeQL workflow added so code scanning can run on this private repo.
+
+## 0.1.2 — 2026-10-02
+
+Private concept package. Not published to PyPI. Tag `v0.1.2`.
+
+- Ledger key and witness key are created outside the ledger directory. The principal key neither decrypts the log nor signs a head alone.
+- `authorize` no longer accepts `--allow-test-doubles`.
+- Tests cover a second-process reload and a missing witness key.
+- Bandit workflow added. CodeQL remains for when Advanced Security is enabled.
+- Crash-after-success redemption window stays documented and unchanged.

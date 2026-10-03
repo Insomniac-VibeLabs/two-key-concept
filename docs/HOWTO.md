@@ -61,9 +61,9 @@ python -m two_key authorize \
 ```
 
 Exit status is 0 on allow and 2 on deny. The ledger directory holds
-ciphertext only. `witness.pem` is created on first open. Move it off this
-host after the first checkpoint if the principal key and the ledger files
-live on the same machine.
+ciphertext only. First open writes `<ledger>.ledger-key/ledger.key` and
+`<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
+The authorize command does not accept test-double judges.
 
 ## Authorize from Python
 
@@ -121,6 +121,10 @@ scanner on the way in or out.
 
 Username/password and OAuth device-code auth are rejected. Use `env`,
 `keyring`, or `callback`.
+
+A crash after the tool returns and before the redemption entry is written can
+run that token once more. That window is accepted on this concept line. A
+tool exception does not consume the token.
 
 ## Stop
 

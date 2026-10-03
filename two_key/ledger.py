@@ -1,10 +1,10 @@
 """Append-only hash-chained ledger with a signed head.
 
 Entries and the head are AES-256-GCM ciphertext at rest. The data key is
-wrapped by a key derived from the principal private key. The head is signed
-by the principal and by a separate witness key. A stolen principal key cannot
-produce a new head that verifies unless the witness private key is also
-present. Move ``witness.pem`` off the ledger host to keep that split.
+wrapped by a ledger key that is not the principal key. The head is signed by
+the principal and by a witness key. Both of those files live outside the
+ledger directory. A stolen principal key can neither decrypt the log nor
+sign a new head.
 """
 
 from __future__ import annotations
@@ -53,15 +53,10 @@ def merkle_root(leaves: list[bytes]) -> bytes:
     return mth(leaves)
 
 
-def _kek(private_key) -> bytes:
-    raw = private_key.private_bytes_raw() if hasattr(private_key, "private_bytes_raw") else None
-    if raw is None:
-        from cryptography.hazmat.primitives import serialization
-        raw = private_key.private_bytes(
-            serialization.Encoding.Raw,
-            serialization.PrivateFormat.Raw,
-            serialization.NoEncryption())
-    return HKDF(SHA256(), 32, salt=b"two-key-concept-ledger", info=_WRAP_INFO).derive(raw)
+def _kek(ledger_key: bytes) -> bytes:
+    if len(ledger_key) != 32:
+        raise LedgerError("ledger key must be 32 bytes")
+    return HKDF(SHA256(), 32, salt=b"two-key-concept-ledger", info=_WRAP_INFO).derive(ledger_key)
 
 
 def _seal(data_key: bytes, plaintext: str) -> str:
@@ -97,14 +92,24 @@ class Entry:
 
 
 class Ledger:
-    def __init__(self, path: Path | str, private_key, public_key=None):
+    def __init__(self, path: Path | str, private_key, public_key=None, *,
+                 witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None):
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
+        if self.path.resolve() == self.path.parent.resolve():
+            raise LedgerError("ledger path must be a directory, not a filesystem root")
         self.private_key = private_key
         self.public_key = public_key or private_key.public_key()
+        self.witness_path = Path(witness_path) if witness_path else self.path.parent / f"{self.path.name}.witness" / "witness.pem"
+        self.ledger_key_path = Path(ledger_key_path) if ledger_key_path else self.path.parent / f"{self.path.name}.ledger-key" / "ledger.key"
+        if self.witness_path.resolve().is_relative_to(self.path.resolve()):
+            raise LedgerError("witness key must live outside the ledger directory")
+        if self.ledger_key_path.resolve().is_relative_to(self.path.resolve()):
+            raise LedgerError("ledger key must live outside the ledger directory")
         self._lock = threading.Lock()
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
+        self._ledger_key = self._open_ledger_key()
         self._data_key = self._open_data_key()
         self._witness = self._open_witness()
         self._load()
@@ -121,12 +126,22 @@ class Ledger:
     def wrap_path(self) -> Path:
         return self.path / "keywrap.json"
 
-    @property
-    def witness_path(self) -> Path:
-        return self.path / "witness.pem"
+    def _open_ledger_key(self) -> bytes:
+        if not self.ledger_key_path.exists():
+            if self.wrap_path.exists():
+                raise LedgerError("ledger key missing; refusing to open ciphertext with the principal key")
+            self.ledger_key_path.parent.mkdir(parents=True, exist_ok=True)
+            key = os.urandom(32)
+            self.ledger_key_path.write_bytes(key)
+            os.chmod(self.ledger_key_path, 0o600)
+            return key
+        key = self.ledger_key_path.read_bytes()
+        if len(key) != 32:
+            raise LedgerError("ledger key must be 32 bytes")
+        return key
 
     def _open_data_key(self) -> bytes:
-        kek = _kek(self.private_key)
+        kek = _kek(self._ledger_key)
         if not self.wrap_path.exists():
             data_key = os.urandom(32)
             nonce = os.urandom(12)
@@ -141,13 +156,16 @@ class Ledger:
         try:
             return AESGCM(kek).decrypt(bytes.fromhex(blob["nonce"]), bytes.fromhex(blob["wrapped"]), _WRAP_INFO)
         except Exception as e:
-            raise LedgerError("ledger data key rejected (wrong principal key)") from e
+            raise LedgerError("ledger data key rejected (wrong ledger key)") from e
 
     def _open_witness(self):
         if not self.witness_path.exists():
+            if self.head_path.exists():
+                raise LedgerError("witness key missing; refusing to open a head the principal key alone could replace")
             key = generate_private_key()
+            self.witness_path.parent.mkdir(parents=True, exist_ok=True)
             save_private_key(self.witness_path, key)
-            save_public_key(self.path / "witness.pub.pem", public_key(key))
+            save_public_key(self.witness_path.with_suffix(".pub.pem"), public_key(key))
             return key
         return load_private_key(self.witness_path)
 
@@ -194,6 +212,7 @@ class Ledger:
         with self._lock:
             if not self.witness_path.exists():
                 raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
+            self._witness = load_private_key(self.witness_path)
             head = {
                 "size": len(self.entries),
                 "tip": self.entries[-1].entry_hash if self.entries else "0" * 64,

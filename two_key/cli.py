@@ -83,7 +83,7 @@ def _authorize(args) -> int:
     judges, policy = load_config_file(Path(args.judges))
     ledger = Ledger(args.ledger, key)
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
-                     private_key=key, quorum=policy, allow_test_doubles=args.allow_test_doubles)
+                     private_key=key, quorum=policy)
     arguments = json.loads(args.args)
     if not isinstance(arguments, dict):
         raise SystemExit("args must be a JSON object")
@@ -121,8 +121,6 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--irreversible", action="store_true")
     auth.add_argument("--counterparty", default="")
     auth.add_argument("--agent-session", default=None)
-    auth.add_argument("--allow-test-doubles", action="store_true",
-                      help="offline tests only; refused for real judges")
     auth.set_defaults(func=_authorize)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)

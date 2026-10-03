@@ -19,8 +19,15 @@ security bug.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
 
 Ledger entries and the head are AES-256-GCM ciphertext. The data key is
-wrapped by the principal key. The head also needs a witness signature.
-Someone who steals only the principal key cannot mint a verifying head
-while `witness.pem` is elsewhere. Someone who steals both keys can.
+wrapped by a ledger key stored outside the ledger directory. The head needs
+both the principal signature and a witness signature. The witness key is also
+outside the ledger directory. Stealing only the principal key does not decrypt
+the log and does not sign a new head. Stealing the ledger key decrypts.
+Stealing the witness key as well allows a forged head.
 
-Code scanning is the CodeQL workflow in `.github/workflows/codeql.yml`.
+A crash after a successful tool return and before the redemption entry is an
+accepted limit: that token can run once more. Concurrent calls are locked.
+
+Code scanning in CI is `.github/workflows/security.yml` (bandit). CodeQL is
+`.github/workflows/codeql.yml` and runs only if GitHub Advanced Security is
+enabled for this private repository.
