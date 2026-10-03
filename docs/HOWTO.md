@@ -49,6 +49,19 @@ key. Reusing the judge credential as the session is a deny.
 Local Ollama is `http://localhost:11434` only. Plain HTTP to any other host
 is refused.
 
+### Recommended local judge: Qwen2.5-7B-Instruct
+
+`examples/judges.yaml` sets the local judge to `qwen2.5:7b`
+(Qwen2.5-7B-Instruct, Apache-2.0, Copyright 2024 Alibaba Cloud). The weights
+are not in this repository. Pull them with Ollama, then leave the example
+`base_url` as it is:
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+The model card is <https://huggingface.co/Qwen/Qwen2.5-7B-Instruct>.
+
 ## Authorize from the command line
 
 This runs both paths and prints the decision. It does not execute the tool.
@@ -62,16 +75,20 @@ python -m two_key authorize \
   --tool email_draft \
   --args '{"to":"ada@example"}' \
   --proposal "draft a status note" \
+  --data-class public \
+  --no-irreversible \
   --agent-session principal-session-1
 ```
 
-`--data-class` on this command defaults to `public`, and `--irreversible`
-defaults to false. A field omitted from `normalize_action` defaults the
-other way: `classified`, and `irreversible` true.
+`--data-class` defaults to `classified`, and `--irreversible` defaults to
+true. Those are the same fail-closed defaults as a missing field in
+`normalize_action`. The command above sets public and reversible so the
+example rules allow a draft. `--no-irreversible` is the off switch.
 
 Exit status is 0 on allow and 2 on deny. The ledger records and the head
-are ciphertext. Redemption also writes `.redeem-<jti>.lock` in that
-directory. First open writes `<ledger>.ledger-key/ledger.key` and
+are ciphertext. The append lock is `<ledger>.lock` next to the ledger
+directory. Redemption locks are `<ledger>.redeem-locks/` there too, not
+inside the ledger directory. First open writes `<ledger>.ledger-key/ledger.key` and
 `<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
 The authorize command does not accept test-double judges.
 

@@ -14,15 +14,18 @@ Fixes from the original prototype (see CHANGES.md):
   never counts as "yes".
 - ``min_distinct_providers`` is an optional, configurable independence
   check. It defaults to 1, meaning not enforced. How independence should be
-  ensured is an open design question; see DESIGN_OPTIONS.md section 2.
+  ensured is an open design question; see docs/THREAT_MODEL.md. The options
+  memo is DESIGN_OPTIONS.md section 2 in Insomniac-VibeLabs/two-key, which
+  is not this repository.
 - Judges run in parallel (one thread per judge) under an overall deadline
   ``timeout_seconds`` (default 45 s). A judge that has not answered by the
   deadline is recorded as an abstention (``error="timeout..."``), so a slow or
   hung provider can never produce a "yes" and cannot stall Two-Key beyond
   the deadline. Per-request HTTP timeouts are still set on each LLM judge.
 
-Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by the author on
-2026-09-30, CONCEPTION_NOTES.md Entry 2 "C"):
+Quorum protocol specifics (the section-4 profile). The prior-art memo is
+not stored in this repository or in two-key. The decision record is
+CONCEPTION_NOTES.md Entry 2 in Insomniac-VibeLabs/two-key:
 - Vendor heterogeneity in judge-set selection: ``min_vendors`` distinct
   vendors and ``min_local_judges`` judges on local weight files
   (check_judge_set; Two-Key refuses to start otherwise). §4's figures are
@@ -43,9 +46,10 @@ Quorum protocol specifics (PRIOR_ART.md §4 (iii), selected by the author on
   normalized action record and the constitution, never the agent's proposal
   text (transcript) or tool outputs. "record_and_proposal" restores the
   earlier behaviour.
-- Path B only after Path A returns true: Two-Key's default
-  (short_circuit_path_b=True). ``require_path_a_first=True`` makes Two-Key
-  refuse to run otherwise.
+- Both paths always run. A Path A deny does not skip Path B.
+  ``require_path_a_first`` is stored on the policy and copied into
+  ``to_record``. ``TwoKey.authorize`` does not read it. There is no
+  ``short_circuit_path_b`` setting in this package.
 """
 
 from __future__ import annotations
@@ -70,8 +74,9 @@ class QuorumPolicy:
     min_distinct_providers: int = 1  # 1 = not enforced (open design question)
     timeout_seconds: float | None = 45.0  # overall deadline for all judges; None = no deadline
     parallel: bool = True
-    # PRIOR_ART.md §4 (iii). The defaults are permissive, so earlier configurations keep working;
-    # QuorumPolicy.section4() gives §4's figures. Which should be the default is open (DESIGN_OPTIONS §7).
+    # Permissive defaults, so earlier configurations keep working.
+    # QuorumPolicy.section4() sets the reference figures. Which should be
+    # the default is open (DESIGN_OPTIONS.md section 7 in Insomniac-VibeLabs/two-key).
     min_vendors: int = 1
     min_local_judges: int = 0
     heterogeneity_scope: str = "selection"      # selection | responding
@@ -109,8 +114,10 @@ class QuorumPolicy:
 
     @classmethod
     def section4(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
-        """Reference profile with PRIOR_ART.md §4 (iii)'s figures: >= 2 vendors, >= 1 local weight file,
-        record-only judge inputs, Path A first. K and T remain the principal's choice."""
+        """Reference profile: at least 2 vendors, at least 1 local weight file,
+        record-only judge inputs, and ``require_path_a_first`` set.
+        ``TwoKey.authorize`` still runs both paths; it does not read that flag.
+        K and T remain the principal's choice."""
         base = {"min_vendors": 2, "min_local_judges": 1, "judge_inputs": "record_only",
                 "require_path_a_first": True, "require_local_yes": True}
         base.update(kw)
@@ -295,7 +302,6 @@ def convene(
     """
     policy = policy or QuorumPolicy()
     k_floor = policy.effective_min_responding
-    judge_proposal = proposal if policy.judge_inputs == "record_and_proposal" else ""
     judge_action = action
     if tool_args:
         raw = dict(action.raw)

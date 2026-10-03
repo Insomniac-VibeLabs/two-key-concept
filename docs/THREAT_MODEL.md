@@ -47,10 +47,11 @@ the code wins, then this file should be corrected.
 - Gateway to the tool. The token is checked, then `redemption_started` is
   checkpointed, then the registered function is called with the same
   argument mapping. Nothing in this package scans those bytes.
-- Process to the ledger. Appends in one process share a lock. Redemption
-  also takes a POSIX `flock` on `.redeem-<jti>.lock` inside the ledger
-  directory. `fcntl` is imported at load, so this package does not import
-  where that module is absent.
+- Process to the ledger. Appends and checkpoints take a POSIX `flock` on
+  `<ledger>.lock` next to the ledger directory. If the file changed since
+  this process loaded it, the write is refused. Redemption also takes a
+  `flock` under `<ledger>.redeem-locks/`, outside the ledger directory.
+  Where `fcntl` is absent, only the in-process lock remains.
 
 ## What this design is meant to stop
 
@@ -91,18 +92,9 @@ claims to close.
   else. The gateway binds those bytes. It does not check that they match
   the structured fields. The token is not bound to amount, data class, or
   counterparty. Missing `data_class` becomes `classified` and missing
-  `irreversible` becomes true, but only when the field is absent.
-  `two-key authorize` always passes the fields: `--data-class` defaults to
-  `public`, and `--irreversible` defaults to false.
-- `two_key/quorum.py` still says Path B runs only after Path A allows.
-  `two_key/core.py` always runs both paths.
-- `two_key/ledger.py` reports "head principal key does not match the ledger
-  key" when the principal public key mismatches. That check is not the
-  encryption key.
-- Comments in `two_key/action.py`, `two_key/quorum.py`, and
-  `examples/judges.yaml` point at `DESIGN_OPTIONS.md`, `PRIOR_ART.md`,
-  `CONCEPTION_NOTES.md`, and a Qwen how-to anchor. None of those exist in
-  this repository.
+  `irreversible` becomes true. `two-key authorize` uses those same defaults.
+  Pass `--data-class public` and `--no-irreversible` when the call is public
+  and reversible.
 - The issuer object holds the principal private key. `verify` uses the
   public key, but this package does not give the gateway a verify-only
   issuer. A process that can redeem can also mint if it has that object.
@@ -112,9 +104,8 @@ claims to close.
   are enough to rewrite a ledger that never leaves the machine.
 - A crash after `redemption_started` and before the tool runs refuses a
   retry, even if the tool did not run. Exactly-once execution is not claimed.
-- Ledger appends are not locked across processes. The cross-process lock is
-  only the per-token redemption flock. Redemption lock files sit inside the
-  ledger directory.
+- Where `fcntl` is absent, another process can still append. This package
+  does not claim cross-process exclusion on those platforms.
 - There is no TEE. Username/password and OAuth device-code judge auth are
   rejected. Use `env`, `keyring`, or `callback`.
 
@@ -136,4 +127,4 @@ claims to close.
 - `two_key/quorum.py`: an abstention is not a yes, and `require_path_a_first` is not a skip.
 - `two_key/gateway.py`: argument check, then `redemption_started`, then the tool. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, and the two constitution hashes. TTL default is 120 seconds.
-- `two_key/ledger.py`: the ledger key and the witness key stay outside the directory, and the principal key is not a decryption key.
+- `two_key/ledger.py`: the ledger key, the witness key, the append lock, and the redemption locks stay outside the directory. The principal key is not a decryption key. A stale in-memory ledger refuses to append.

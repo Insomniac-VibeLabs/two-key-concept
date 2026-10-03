@@ -15,12 +15,12 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Tests: python -m unittest discover -s tests
-(16 tests, no network).
+(18 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths always run. There is no scanner, no PKI, and no anchor.
 The token TTL default is 120 seconds. It binds the tool, the argument hash,
 the ledger root and size, and the two constitution hashes. It does not bind
 amount, data class, or counterparty.
-two-key authorize defaults --data-class to public and --irreversible to false.
-normalize_action defaults a missing field to classified and irreversible true.
+two-key authorize uses the same fail-closed defaults as normalize_action:
+--data-class classified, and --irreversible true. --no-irreversible turns that off.

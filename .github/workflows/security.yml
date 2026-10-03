@@ -1,5 +1,7 @@
 name: security
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   bandit:
     runs-on: ubuntu-latest

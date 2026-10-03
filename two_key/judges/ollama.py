@@ -1,9 +1,10 @@
 """Local Ollama judge (native /api/chat with format=json). No auth by default.
 
 ``local_weights`` defaults to True: an Ollama judge is assumed to run a local
-weight file (PRIOR_ART.md §4 (iii), "at least one local weight file"). This is a
+weight file (the section-4 local-judge figure). This is a
 declaration, not an attestation; set ``local_weights: false`` for remote or
-cloud-hosted Ollama models. See DESIGN_OPTIONS.md §7.
+cloud-hosted Ollama models. See DESIGN_OPTIONS.md section 7 in
+Insomniac-VibeLabs/two-key, not in this repository.
 
 ``keep_alive`` asks Ollama not to unload the weights between ballots. It does
 not change the ballot.

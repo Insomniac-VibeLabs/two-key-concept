@@ -117,8 +117,10 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--args", default="{}")
     auth.add_argument("--proposal", required=True)
     auth.add_argument("--amount-usd", type=float, default=0.0)
-    auth.add_argument("--data-class", default="public")
-    auth.add_argument("--irreversible", action="store_true")
+    auth.add_argument("--data-class", default="classified",
+                      help="defaults to classified, matching normalize_action")
+    auth.add_argument("--irreversible", action=argparse.BooleanOptionalAction, default=True,
+                      help="defaults to true; pass --no-irreversible for a reversible call")
     auth.add_argument("--counterparty", default="")
     auth.add_argument("--agent-session", default=None)
     auth.set_defaults(func=_authorize)

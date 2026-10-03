@@ -6,14 +6,15 @@ Every connector:
   written as JSON in which every "<", ">" and "&" is escaped (\u003c,
   \u003e, \u0026), so untrusted text can't contain a section tag such as
   </untrusted_action_record> and close its section early (F_REVIEW finding
-  3; approved by the author, CONCEPTION_NOTES Entry 10). The values decode
+  3; approved by the author, CONCEPTION_NOTES Entry 10 in
+  Insomniac-VibeLabs/two-key). The values decode
   unchanged,
 - requires a strict JSON ballot: exactly
   {"consistent": <bool>, "confidence": <number 0..1>, "rationale": <string>}.
   Anything else (prose, code fences, extra keys, wrong types) is malformed,
   and a malformed response is an ABSTAIN, never a yes,
 - turns transport, HTTP, and credential errors into abstentions,
-- with ``echo_binding=True`` (PRIOR_ART.md §4 (iii)), gives the model the
+- with ``echo_binding=True`` (section-4 ballot binding), gives the model the
   ballot binding (H(action record), H(constitution)) and requires it to be
   echoed as two extra JSON keys. A missing or different echo is malformed,
   that is, an abstention,

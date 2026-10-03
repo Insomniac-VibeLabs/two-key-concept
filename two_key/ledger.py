@@ -4,7 +4,9 @@ Entries and the head are AES-256-GCM ciphertext at rest. The data key is
 wrapped by a ledger key that is not the principal key. The head is signed by
 the principal and by a witness key. Both of those files live outside the
 ledger directory. A stolen principal key can neither decrypt the log nor
-sign a new head.
+sign a new head. Appends and checkpoints take `<ledger>.lock` next to the
+ledger directory. A write is refused if another writer changed the file.
+Redemption locks live in `<ledger>.redeem-locks`, also outside the directory.
 """
 
 from __future__ import annotations
@@ -15,6 +17,11 @@ import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - POSIX only
+    fcntl = None
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
@@ -115,6 +122,61 @@ class Ledger:
         self._witness = self._open_witness()
         self._load()
 
+    def lock_path(self) -> Path:
+        path = self.path.parent / f"{self.path.name}.lock"
+        if path.resolve().is_relative_to(self.path.resolve()):
+            raise LedgerError("ledger lock must live outside the ledger directory")
+        return path
+
+    def redeem_lock_path(self, jti: str) -> Path:
+        if not isinstance(jti, str) or not jti:
+            raise LedgerError("jti required")
+        directory = self.path.parent / f"{self.path.name}.redeem-locks"
+        if directory.resolve().is_relative_to(self.path.resolve()):
+            raise LedgerError("redemption lock must live outside the ledger directory")
+        directory.mkdir(parents=True, exist_ok=True)
+        os.chmod(directory, 0o700)
+        return directory / hashlib.sha256(jti.encode("utf-8")).hexdigest()
+
+    def _disk_count(self) -> int:
+        if not self.entries_path.exists():
+            return 0
+        return sum(1 for line in self.entries_path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+    def _exclusive(self, *, check_stale: bool = True):
+        ledger = self
+
+        class _Guard:
+            def __enter__(self):
+                ledger._lock.acquire()
+                self.held = True
+                self.fd = None
+                try:
+                    if fcntl is not None:
+                        self.fd = os.open(ledger.lock_path(), os.O_CREAT | os.O_RDWR, 0o600)
+                        fcntl.flock(self.fd, fcntl.LOCK_EX)
+                    if check_stale and ledger._disk_count() != len(ledger.entries):
+                        raise LedgerError("ledger file changed by another writer; reopen the ledger")
+                    return self
+                except BaseException:
+                    self._release()
+                    raise
+
+            def __exit__(self, exc_type, exc, tb):
+                self._release()
+                return False
+
+            def _release(self):
+                if self.fd is not None:
+                    fcntl.flock(self.fd, fcntl.LOCK_UN)
+                    os.close(self.fd)
+                    self.fd = None
+                if self.held:
+                    ledger._lock.release()
+                    self.held = False
+
+        return _Guard()
+
     @property
     def entries_path(self) -> Path:
         return self.path / "entries.jsonl"
@@ -171,28 +233,29 @@ class Ledger:
         return load_private_key(self.witness_path)
 
     def _load(self) -> None:
-        if not self.entries_path.exists():
-            return
-        prev = "0" * 64
-        for line in self.entries_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            raw = json.loads(_open(self._data_key, line))
-            entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
-            expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
-            if entry.entry_hash != expect or entry.prev != prev or entry.seq != len(self.entries):
-                raise LedgerError("ledger chain failed verification")
-            self.entries.append(entry)
-            prev = entry.entry_hash
-            jti = entry.body.get("jti")
-            if entry.kind == "redemption" and jti:
-                self._redeemed.add(jti)
-                self._started.discard(jti)
-            elif entry.kind == "redemption_started" and jti:
-                self._started.add(jti)
-            elif entry.kind == "redemption_aborted" and jti:
-                self._started.discard(jti)
-        self._verify_head()
+        with self._exclusive(check_stale=False):
+            if not self.entries_path.exists():
+                return
+            prev = "0" * 64
+            for line in self.entries_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                raw = json.loads(_open(self._data_key, line))
+                entry = Entry(raw["seq"], raw["prev"], raw["kind"], raw["body"], raw["entry_hash"])
+                expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
+                if entry.entry_hash != expect or entry.prev != prev or entry.seq != len(self.entries):
+                    raise LedgerError("ledger chain failed verification")
+                self.entries.append(entry)
+                prev = entry.entry_hash
+                jti = entry.body.get("jti")
+                if entry.kind == "redemption" and jti:
+                    self._redeemed.add(jti)
+                    self._started.discard(jti)
+                elif entry.kind == "redemption_started" and jti:
+                    self._started.add(jti)
+                elif entry.kind == "redemption_aborted" and jti:
+                    self._started.discard(jti)
+            self._verify_head()
 
     def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
         return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
@@ -200,7 +263,7 @@ class Ledger:
     def append(self, kind: str, body: dict) -> Entry:
         if not isinstance(body, dict):
             raise LedgerError("ledger body must be an object")
-        with self._lock:
+        with self._exclusive():
             prev = self.entries[-1].entry_hash if self.entries else "0" * 64
             seq = len(self.entries)
             entry_hash = self._hash(seq, prev, kind, body)
@@ -222,7 +285,7 @@ class Ledger:
             return entry
 
     def checkpoint(self) -> dict:
-        with self._lock:
+        with self._exclusive():
             if not self.witness_path.exists():
                 raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
             self._witness = load_private_key(self.witness_path)
@@ -255,7 +318,7 @@ class Ledger:
         if not verify(public_from_raw(body["witness_public_key"]), message, stored.get("witness_signature") or ""):
             raise LedgerError("witness head signature failed")
         if body["public_key"] != public_raw(self.public_key):
-            raise LedgerError("head principal key does not match the ledger key")
+            raise LedgerError("head principal public key does not match this ledger's principal key")
         if body["size"] != len(self.entries) or body["tip"] != self.entries[-1].entry_hash:
             raise LedgerError("signed head does not match the chain")
         if body["merkle_root"] != self.merkle_root():

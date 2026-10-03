@@ -3,6 +3,7 @@
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -85,6 +86,9 @@ class ConceptTests(unittest.TestCase):
             mismatch = gw.invoke(decision.token, "email_draft", {"to": "eve"})
             self.assertTrue(first.allowed)
             self.assertEqual(calls, [{"to": "ada"}])
+            self.assertFalse(any(p.name.startswith(".redeem-") for p in Path(tmp).iterdir()))
+            self.assertTrue((Path(tmp).parent / f"{Path(tmp).name}.redeem-locks").is_dir())
+            self.assertTrue((Path(tmp).parent / f"{Path(tmp).name}.lock").is_file())
             self.assertEqual(replay.reason, "already_redeemed")
             self.assertFalse(mismatch.allowed)
 
@@ -226,7 +230,10 @@ class ConceptTests(unittest.TestCase):
             led.checkpoint()
             script = "from two_key.ledger import Ledger; from two_key.keys import load_private_key; " \
                      "led = Ledger(%r, load_private_key(%r)); led.verify(); print(led.size())" % (str(ledger), str(Path(tmp, "principal.pem")))
-            proc = subprocess.run([sys.executable, "-c", script], cwd="/tmp/two-key-concept", env={"PYTHONPATH": "/tmp/two-key-concept"},
+            root = Path(__file__).resolve().parents[1]
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(root)
+            proc = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env,
                                   capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertEqual(proc.stdout.strip(), "1")
@@ -261,6 +268,73 @@ class ConceptTests(unittest.TestCase):
                               "--tool", "email_draft", "--args", '{"to":"ada"}',
                               "--proposal", "draft"])
             self.assertNotIn("both_paths_allow", buf.getvalue())
+
+    def test_cli_authorize_defaults_match_library(self):
+        from two_key.cli import main
+        from two_key.core import Decision
+        captured = {}
+
+        class _Stopped:
+            def authorize(self, action, arguments, proposal, agent_session=None):
+                captured["action"] = action
+                return Decision(False, "stopped", None, {}, {}, 0, None)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            from two_key.keys import save_private_key
+            from two_key.constitution import save_envelope
+            save_private_key(Path(tmp, "principal.pem"), key)
+            save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key))
+            judges = [FixedJudge("a", "yes", provider="p0")]
+            buf = io.StringIO()
+            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
+                 patch("two_key.ledger.Ledger", return_value=object()), \
+                 patch("two_key.core.TwoKey.load", return_value=_Stopped()), \
+                 redirect_stdout(buf):
+                code = main(["authorize", "--key", str(Path(tmp, "principal.pem")),
+                             "--ledger", str(Path(tmp, "ledger")),
+                             "--constitution", str(Path(tmp, "c.json")),
+                             "--judges", str(Path(tmp, "unused.yaml")),
+                             "--tool", "email_draft", "--args", "{}",
+                             "--proposal", "draft"])
+            self.assertEqual(code, 2)
+            self.assertEqual(captured["action"]["data_class"], "classified")
+            self.assertIs(captured["action"]["irreversible"], True)
+            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
+                 patch("two_key.ledger.Ledger", return_value=object()), \
+                 patch("two_key.core.TwoKey.load", return_value=_Stopped()), \
+                 redirect_stdout(buf):
+                main(["authorize", "--key", str(Path(tmp, "principal.pem")),
+                      "--ledger", str(Path(tmp, "ledger")),
+                      "--constitution", str(Path(tmp, "c.json")),
+                      "--judges", str(Path(tmp, "unused.yaml")),
+                      "--tool", "email_draft", "--args", "{}",
+                      "--proposal", "draft", "--data-class", "public",
+                      "--no-irreversible"])
+            self.assertEqual(captured["action"]["data_class"], "public")
+            self.assertIs(captured["action"]["irreversible"], False)
+
+    def test_stale_ledger_refuses_to_append(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            path = Path(tmp, "ledger")
+            first = Ledger(path, key)
+            first.append("note", {"n": 1})
+            first.checkpoint()
+            second = Ledger(path, key)
+            first.append("note", {"n": 2})
+            first.checkpoint()
+            with self.assertRaises(LedgerError) as raised:
+                second.append("note", {"n": 3})
+            self.assertIn("another writer", str(raised.exception))
+            reopened = Ledger(path, key)
+            self.assertEqual(reopened.size(), 2)
+            reopened.append("note", {"n": 3})
+            self.assertEqual(reopened.size(), 3)
+            self.assertFalse((path / ".redeem-abc.lock").exists())
+            self.assertTrue(first.lock_path().is_file())
+            self.assertFalse(str(first.lock_path()).startswith(str(path) + os.sep))
+
 
 
 

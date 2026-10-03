@@ -10,7 +10,9 @@ Missing-field defaults follow disclosure section 5.2 and the missing-field rule:
 
 Open design question, not decided here: *who* produces the action record
 (the proposing model, the gateway working from the literal tool-call
-arguments, or a separate classifier). See DESIGN_OPTIONS.md section 1.
+arguments, or a separate classifier). Recorded in docs/THREAT_MODEL.md.
+The options memo is DESIGN_OPTIONS.md section 1 in
+Insomniac-VibeLabs/two-key, not in this repository.
 """
 
 from __future__ import annotations
