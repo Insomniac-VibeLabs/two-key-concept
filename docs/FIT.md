@@ -1,7 +1,7 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.1.10 on branch
+server in this release. Package `two-key-concept` version 0.1.11 on branch
 `working` (not a release tag; `v0.1.6` remains the tagged main release).
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
@@ -25,7 +25,8 @@ anchoring, and no seed phrase. The larger package is
   the form derived from the argument bytes. A constitution that omits
   `tool_specs` does not load. Unnamed argument keys do not reach the tool.
   `deny_unmapped` defaults off and drops them; set it to deny the call. A
-  counterparty path copies only parties on its `allow` list.
+  counterparty path copies only parties on its `allow` list. A payload
+  `shape`, when set, checks the kind of value and does not read it.
 - You want an encrypted ledger. Records and the head are AES-256-GCM. The
   ledger key and the witness key live outside the ledger directory. The
   principal key cannot unwrap the log and cannot sign a head alone.

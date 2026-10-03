@@ -11,6 +11,9 @@ off: those keys are dropped at the gateway. When a spec sets it, an unnamed
 key is a deny instead. A declared path covers that value and everything
 under it. A counterparty path copies only values on its allow list, and the
 tool receives the canonical value. A payload path is not interpreted.
+``shape``, when set, only checks the kind of value: string, number, or a
+list of strings. It does not read the contents. Omit ``shape`` and the
+value, including its children, is copied unread.
 """
 
 from __future__ import annotations
@@ -97,6 +100,36 @@ def _assign(dest: dict, path: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+def _payload_shape(entry: Mapping[str, Any], raw: Any) -> None:
+    """Refuse a payload value whose kind is not the declared shape.
+
+    This does not interpret the value. ``string`` is any string. ``number``
+    is a finite int or float, not a boolean. ``list`` is a list of strings.
+    ``max_length`` bounds characters or list items. No shape means no check.
+    """
+    shape = entry.get("shape")
+    if not shape:
+        return
+    limit = entry.get("max_length")
+    if shape == "string":
+        if not isinstance(raw, str) or (isinstance(limit, int) and len(raw) > limit):
+            raise DeriveError("payload_shape")
+        return
+    if shape == "number":
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise DeriveError("payload_shape")
+        if math.isnan(float(raw)) or math.isinf(float(raw)):
+            raise DeriveError("payload_shape")
+        return
+    if shape == "list":
+        if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
+            raise DeriveError("payload_shape")
+        if isinstance(limit, int) and len(raw) > limit:
+            raise DeriveError("payload_shape")
+        return
+    raise DeriveError("payload_shape")
+
+
 def disallowed_party(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> bool:
     """True when a copied party is not on that path's allow list."""
     for entry in spec.get("counterparties") or []:
@@ -115,8 +148,9 @@ def project_arguments(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> 
     """Arguments the tool may see.
 
     Unnamed keys are dropped. A counterparty path is the canonical party
-    Path A checked, not the raw spelling. A payload path is copied whole,
-    including its children, and is not interpreted.
+    Path A checked, not the raw spelling. A payload path with no shape is
+    copied whole, including its children, and is not interpreted. A shaped
+    payload is that value only, still unread.
     """
     if not isinstance(arguments, Mapping):
         return {}
@@ -233,6 +267,12 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         if not found:
             raise DeriveError("counterparty_missing")
         parties.extend(_parties_at(raw))
+    for entry in spec.get("payload") or []:
+        if not isinstance(entry, Mapping) or not entry.get("shape"):
+            continue
+        found, raw = lookup(arguments, entry["json_path"])
+        if found:
+            _payload_shape(entry, raw)
     if spec.get("deny_unmapped") is True and _unmapped(arguments, _declared_paths(spec)):
         raise DeriveError("unmapped_field")
     return Derived(

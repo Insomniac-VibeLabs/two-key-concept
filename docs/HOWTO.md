@@ -42,16 +42,21 @@ A key the spec does not name does not change the form and does not reach
 the tool. The spec does not have to list every nested key. `deny_unmapped`
 defaults off: the call can still allow, and the gateway drops the unnamed
 key. Set it true to deny that key (`unmapped_field`). `payload` names a
-value that may be present and is not interpreted. That path covers the
-value and its children.
+value that may be present and is not interpreted. With no `shape`, that
+path covers the value and its children. `shape` is optional: `string`,
+`number`, or `list` (a list of strings). `max_length` bounds a string or
+a list. A nested value, a boolean, or a too-long value is
+`payload_shape`. Shape does not read the contents. Classification of what
+the text means is left to Path B, or to DLP in the full `two-key`
+repository.
 
 A counterparty path must include `allow`, a non-empty list of strings. A
 party that is not on that list is `counterparty_not_allowed`. The tool
 receives the canonical party (trimmed, lower case), not the raw spelling.
 `examples/hard_rules.yaml` allows `ada@example` on the mail tools and
-`power-co.example` on `pay_bill`. Those mail tools also name `subject` and
-`body` as payload, so those values reach the tool and are not interpreted.
-A field that is neither a control path nor a payload path is dropped. A
+`power-co.example` on `pay_bill`. Those mail tools name `subject` and
+`body` as strings (`max_length` 200 and 8000). The words are not read. A
+field that is neither a control path nor a payload path is dropped. A
 blocked party still denies through `deny_counterparties` when one is present.
 
 Missing `data_class` still defaults to `classified` before the floor, and

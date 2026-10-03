@@ -66,8 +66,10 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
     The tool receives that canonical value, not the raw spelling.
     ``deny_unmapped`` defaults to false: a key the spec does not name
     does not reach the tool. Set it true to deny that key instead.
-    ``payload`` names paths that may be present and are not interpreted. A
-    named path covers that value and its children.
+    ``payload`` names paths that may be present and are not interpreted. With
+    no ``shape``, a named path covers that value and its children. ``shape``
+    is ``string``, ``number``, or ``list`` (a list of strings). ``max_length``
+    bounds a string or a list. A shape does not classify the contents.
     """
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
@@ -148,9 +150,22 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
         payload_out = []
         for index, entry in enumerate(payload):
             where = f"tool_specs.{tool}.payload[{index}]"
-            if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
-                raise ConstitutionError(f"{where}: expected json_path only")
-            payload_out.append({"json_path": take(_json_path(entry["json_path"], where), where)})
+            if not isinstance(entry, Mapping) or "json_path" not in entry:
+                raise ConstitutionError(f"{where}: expected json_path")
+            extra = set(entry) - {"json_path", "shape", "max_length"}
+            if extra:
+                raise ConstitutionError(f"{where}: unknown key(s) {sorted(extra)}")
+            path = take(_json_path(entry["json_path"], where), where)
+            shape = entry.get("shape")
+            if shape is not None and shape not in ("string", "number", "list"):
+                raise ConstitutionError(f"{where}.shape: expected string, number, or list")
+            limit = entry.get("max_length")
+            if limit is not None:
+                if shape not in ("string", "list"):
+                    raise ConstitutionError(f"{where}.max_length: only valid for string or list")
+                if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+                    raise ConstitutionError(f"{where}.max_length: expected a positive integer")
+            payload_out.append({"json_path": path, "shape": shape, "max_length": limit})
         out[tool] = {
             "irreversible": spec["irreversible"],
             "data_class_floor": floor.strip().casefold(),

@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.1.10 on branch `working`.
+This is the design model for `two-key-concept` 0.1.11 on branch `working`.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -123,8 +123,12 @@ claims to close.
   change the form and is not passed to the tool. With `deny_unmapped` left
   off (the default), the call can still allow. With `deny_unmapped` set,
   the unnamed key is `unmapped_field`. Neither mode interprets the value.
-  `payload` names a value that may be present. The path covers that value
-  and its children, and the value is not classified. The token still binds
+  `payload` names a value that may be present. With no `shape`, the path
+  covers that value and its children, and the value is not classified.
+  `shape` of `string`, `number`, or `list` (strings only) refuses a
+  different kind. `max_length` bounds a string or a list. A boolean is not
+  a number. `payload_shape` is a derive deny. Shape does not read contents.
+  Meaning stays with Path B, or with DLP in the full repository. The token still binds
   the caller's original argument bytes. Redeem with those same bytes. The
   function is called with the projection. Missing `data_class` still becomes
   `classified` before the floor, and the floor cannot lower that default.
@@ -175,7 +179,7 @@ claims to close.
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. A declared path covers its children.
+- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
 - `two_key/quorum.py`: an abstention is not a yes, diversity floors default on, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds.

@@ -26,8 +26,10 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    and will not load. A key the spec does not name does not reach the tool.
    `deny_unmapped` defaults off, so the call can still be allowed and that
    key is dropped at the gateway. Set it true to deny the key instead. A
-   `payload` path names a value that is not interpreted, and it covers that
-   value's children. The spec does not list every nested key. A counterparty
+   `payload` path names a value that is not interpreted. With no `shape`, it
+   covers that value's children. `shape` may lock it to a string, a number,
+   or a list of strings. `max_length` bounds a string or a list. Shape does
+   not read the contents. The spec does not list every nested key. A counterparty
    path must list `allow`. A party that is not on that list is
    `counterparty_not_allowed`. The tool receives the canonical party, not
    the raw spelling.
@@ -187,7 +189,7 @@ directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 Install from git. It is not published to PyPI. This branch is package
-0.1.10 and is not a release tag. `v0.1.6` remains the tagged release on
+0.1.11 and is not a release tag. `v0.1.6` remains the tagged release on
 `main`.
 
 The middle column on the GitHub file list is the last commit that touched

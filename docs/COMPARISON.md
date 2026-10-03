@@ -30,7 +30,8 @@ fields are derived from the argument bytes and a disagreeing claim is a
 deny. A constitution without `tool_specs` does not load. An unnamed argument
 key does not reach the tool. `deny_unmapped` (off by default) denies the call
 instead of dropping the key. A copied counterparty must be on that path's
-`allow` list. This package does
+`allow` list. A payload `shape`, when set, checks only the kind of value.
+It does not read the contents. This package does
 not classify free text and does not track per-value information flow. The
 package that adds scanning, PKI, and anchoring is
 [two-key](https://github.com/Insomniac-VibeLabs/two-key).

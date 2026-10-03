@@ -478,6 +478,61 @@ class ProblemFTests(unittest.TestCase):
         shown = run(QuorumPolicy(required_yes=2, parallel=False, tool_args_on_derive_deny=True))
         self.assertEqual(shown[0]["tool_args"]["secret"], "hide-me")
 
+    def test_payload_shape_locks_kind_and_does_not_read_contents(self):
+        specs = {name: dict(spec) for name, spec in SPECS.items()}
+        specs["summarize"] = dict(SPECS["summarize"], payload=[
+            {"json_path": "note", "shape": "string", "max_length": 20},
+            {"json_path": "count", "shape": "number"},
+            {"json_path": "tags", "shape": "list", "max_length": 3},
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp, specs=specs)
+            args = {"note": "classified ads", "count": 2, "tags": ["a", "b"]}
+            decision = tk.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                args, "summarize")
+            self.assertTrue(decision.allowed, decision.reason)
+            form = [entry for entry in tk.ledger.entries if entry.kind == "action_normalized"][-1]
+            self.assertEqual(form.body["form"]["data_class"], "public")
+            calls = []
+            gateway = ToolGateway(tk.ledger, tk.issuer, tk.compiled,
+                                  tools={"summarize": lambda a: calls.append(a) or a})
+            redeemed = gateway.invoke(decision.token, "summarize", args)
+            self.assertTrue(redeemed.allowed, redeemed.reason)
+            self.assertEqual(calls, [{"note": "classified ads", "count": 2, "tags": ["a", "b"]}])
+            nested = tk.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"note": {"text": "hello"}, "count": 1, "tags": []},
+                "summarize")
+            self.assertEqual(nested.reason, "derive_failed:payload_shape")
+            self.assertIn("path_b", [entry.kind for entry in tk.ledger.entries])
+            too_long = tk.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"note": "x" * 21, "count": 1, "tags": []},
+                "summarize")
+            self.assertEqual(too_long.reason, "derive_failed:payload_shape")
+            flagged = tk.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"note": "ok", "count": True, "tags": []},
+                "summarize")
+            self.assertEqual(flagged.reason, "derive_failed:payload_shape")
+            mixed = tk.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"note": "ok", "count": 1, "tags": ["a", {"x": 1}]},
+                "summarize")
+            self.assertEqual(mixed.reason, "derive_failed:payload_shape")
+        key = generate_private_key()
+        bad_shape = {name: dict(spec) for name, spec in SPECS.items()}
+        bad_shape["summarize"] = dict(SPECS["summarize"], payload=[{"json_path": "note", "shape": "object"}])
+        with self.assertRaises(ConstitutionError):
+            sign_constitution(PROSE, RULES, key, bad_shape)
+        bad_limit = {name: dict(spec) for name, spec in SPECS.items()}
+        bad_limit["summarize"] = dict(
+            SPECS["summarize"], payload=[{"json_path": "count", "shape": "number", "max_length": 4}],
+        )
+        with self.assertRaises(ConstitutionError):
+            sign_constitution(PROSE, RULES, key, bad_limit)
+
 
 if __name__ == "__main__":
     unittest.main()

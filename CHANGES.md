@@ -169,6 +169,19 @@ the tagged release.
 - A `payload` path is still not classified. Both paths still run.
 - Not published to PyPI.
 
+## 0.1.11 — 2026-10-03
+
+On branch `working`. Not a release tag. `main` was not updated. `v0.1.6` stays
+the tagged release.
+
+- A payload path may set `shape` to `string`, `number`, or `list` (a list of
+  strings). `max_length` bounds a string or a list. A different kind is
+  `payload_shape`, which is a derive deny. Shape does not read the contents.
+  Omit `shape` and the value, including its children, is still copied unread.
+- No payload class floor. What the text means stays with Path B, or with DLP
+  in the full `two-key` repository.
+- Not published to PyPI.
+
 
 
 
