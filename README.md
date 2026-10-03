@@ -19,14 +19,19 @@ Read [docs/FIT.md](docs/FIT.md) first, then
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
    structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
-   `irreversible`). It does not read English. A fault is a deny.
+   `irreversible`). It does not read English. A fault is a deny. When the
+   signed constitution includes `tool_specs`, those fields are read from the
+   argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
+   disagrees with the bytes is a deny. A constitution that omits `tool_specs`
+   still trusts the agent's form.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. A missing or malformed ballot does not
    count as yes.
 3. A short-lived single-use token is issued only if both paths allow. The
-   token is bound to the tool, the argument hash, and the ledger Merkle
-   root at issuance. Redemption writes an intent before the tool runs, so a
-   crash cannot run that token twice.
+   token is bound to the tool, the argument hash, the ledger Merkle root at
+   issuance, and, when tool specs are enforced, the spec hash and the derived
+   form. Redemption writes an intent before the tool runs, so a crash cannot
+   run that token twice.
 4. The gateway redeems that token. It does not inspect file contents, mail,
    or tool output for DLP or malware.
 
@@ -130,10 +135,12 @@ sequenceDiagram
 ```
 
 The token is bound to the tool, the argument hash, the ledger Merkle root
-and size at issuance, and the constitution hashes. The gateway checks those,
-plus expiry, signature, and that nothing revoked or reloaded the
-constitution after issuance. It writes `redemption_started` before the tool
-runs.
+and size at issuance, the constitution hashes, and `spec_hash` (empty when
+the constitution omits `tool_specs`). When specs are enforced it is also
+bound to the derived form. The gateway recomputes that form from the same
+bytes. It checks expiry, signature, and that nothing revoked or reloaded
+the constitution after issuance. It writes `redemption_started` before the
+tool runs. It does not scan the bytes for sensitive text.
 
 ## What this repo leaves out
 
@@ -155,14 +162,16 @@ head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
-Install from git. It is not published to PyPI.
+Install from git. It is not published to PyPI. This branch is package
+0.1.7 and is not a release tag. `v0.1.6` remains the tagged release on
+`main`.
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.1.6"
+pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@working"
 ```
 
 ## Run the offline demo
@@ -185,6 +194,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | --- | --- |
 | `two_key/core.py` | `TwoKey.authorize` and `authorize_from_agent` |
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
+| `two_key/derive.py` | Tool-spec derivation for Path A's form |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |

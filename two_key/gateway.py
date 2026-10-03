@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
 from .capability import TokenError, args_hash
+from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match
 from .ledger import LedgerError
 
 
@@ -49,6 +50,21 @@ class ToolGateway:
             return GatewayResult(False, "args_mismatch")
         if payload["bytecode_hash"] != self.compiled.bytecode_hash or payload["nl_hash"] != self.compiled.nl_hash:
             return GatewayResult(False, "constitution_mismatch")
+        if payload.get("spec_hash", "") != self.compiled.spec_hash:
+            return GatewayResult(False, "constitution_mismatch")
+        if self.compiled.specs_enforced:
+            spec = self.compiled.tool_specs.get(tool)
+            if spec is not None:
+                if "form" not in payload or "claimed_data_class" not in payload:
+                    return GatewayResult(False, "derived_mismatch")
+                try:
+                    derived = derive(spec, arguments)
+                    fresh = form_for(derived, payload["claimed_data_class"],
+                                     blocked_from_rules(self.compiled.rules))
+                except DeriveError:
+                    return GatewayResult(False, "derived_mismatch")
+                if not forms_match(payload["form"], fresh):
+                    return GatewayResult(False, "derived_mismatch")
         size = payload["ledger_size"]
         if not isinstance(size, int) or size < 0 or size > self.ledger.size():
             return GatewayResult(False, "ledger_size_invalid")

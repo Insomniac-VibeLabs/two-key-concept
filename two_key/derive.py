@@ -1,0 +1,191 @@
+"""Derive Path A's form from the argument bytes and a signed tool spec.
+
+The agent may still send amount, data class, counterparty, and irreversible.
+Those are claims. When the signed constitution has a spec for the tool, the
+values Path A sees come from the spec and the arguments. A claim that
+disagrees is a deny. This module does not read English and it does not
+classify free text.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from typing import Any, Mapping
+
+from .action import DATA_CLASSES, MAX_AMOUNT_USD
+
+
+class DeriveError(ValueError):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class Derived:
+    amount_usd: float | None
+    counterparties: tuple[str, ...]
+    irreversible: bool
+    data_class_floor: str
+
+
+def _cents(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise DeriveError("amount_unreadable")
+    number = float(value)
+    if math.isnan(number) or math.isinf(number) or number < 0:
+        raise DeriveError("amount_unreadable")
+    cents = round(number * 100)
+    if abs(number * 100 - cents) > 1e-6:
+        raise DeriveError("amount_unreadable")
+    return int(cents)
+
+
+def lookup(document: Mapping[str, Any], path: str) -> tuple[bool, Any]:
+    current: Any = document
+    for part in path.split("."):
+        if not isinstance(current, Mapping) or part not in current:
+            return False, None
+        current = current[part]
+    return True, current
+
+
+def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
+    """Read amount and counterparties from ``arguments`` using ``spec`` paths."""
+    if not isinstance(arguments, Mapping):
+        raise DeriveError("arguments_not_object")
+    amount_spec = spec.get("amount")
+    amount: float | None = None
+    if amount_spec:
+        found, raw = lookup(arguments, amount_spec["json_path"])
+        if not found:
+            raise DeriveError("amount_missing")
+        if amount_spec["unit"] == "cents":
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                raise DeriveError("amount_unreadable")
+            if isinstance(raw, float) and not raw.is_integer():
+                raise DeriveError("amount_unreadable")
+            cents = int(raw)
+            if cents < 0 or cents > int(MAX_AMOUNT_USD * 100):
+                raise DeriveError("amount_unreadable")
+            amount = cents / 100.0
+        else:
+            amount = _cents(raw) / 100.0
+        if math.isnan(amount) or math.isinf(amount) or amount > MAX_AMOUNT_USD:
+            raise DeriveError("amount_unreadable")
+        currency_path = amount_spec.get("currency_path")
+        if currency_path:
+            seen, currency = lookup(arguments, currency_path)
+            if not seen or not isinstance(currency, str) or currency.strip().casefold() != "usd":
+                raise DeriveError("amount_unit_rejected")
+    parties: list[str] = []
+    for entry in spec.get("counterparties") or []:
+        found, raw = lookup(arguments, entry["json_path"])
+        if not found:
+            raise DeriveError("counterparty_missing")
+        if isinstance(raw, str):
+            values = [raw]
+        elif isinstance(raw, list) and raw and all(isinstance(item, str) for item in raw):
+            values = list(raw)
+        else:
+            raise DeriveError("counterparty_unreadable")
+        for value in values:
+            party = value.strip().casefold()
+            if not party:
+                raise DeriveError("counterparty_missing")
+            parties.append(party)
+    return Derived(
+        amount_usd=amount,
+        counterparties=tuple(sorted(set(parties))),
+        irreversible=bool(spec["irreversible"]),
+        data_class_floor=str(spec["data_class_floor"]),
+    )
+
+
+def join_data_class(claimed: str, floor: str) -> str:
+    """Return the stricter class. Two different middle classes become classified.
+
+    The order is public, then personal/medical/financial, then classified.
+    A floor never lowers a claim, and a claim never lowers a floor.
+    """
+    if claimed not in DATA_CLASSES or floor not in DATA_CLASSES:
+        raise DeriveError("data_class_unreadable")
+    if claimed == floor:
+        return claimed
+    middle = {"personal", "medical", "financial"}
+    if claimed in middle and floor in middle:
+        return "classified"
+    rank = {"public": 0, "personal": 1, "medical": 1, "financial": 1, "classified": 2}
+    return claimed if rank[claimed] > rank[floor] else floor
+
+
+def blocked_from_rules(rules: list) -> set[str]:
+    found: set[str] = set()
+    for rule in rules:
+        parties = rule.get("deny_counterparties") if isinstance(rule, Mapping) else None
+        if parties:
+            found.update(parties)
+    return found
+
+
+def vm_counterparty(parties: tuple[str, ...], blocked: set[str]) -> str:
+    """One string for the policy VM. Prefer a blocked party so Path A can deny it."""
+    if not parties:
+        return ""
+    hits = sorted(set(parties) & blocked)
+    if hits:
+        return hits[0]
+    return parties[0]
+
+
+def disagreement(proposed: Mapping[str, Any], derived: Derived) -> str | None:
+    """A present claim that is not what the bytes say. Omission is not a lie."""
+    if not isinstance(proposed, Mapping):
+        return "malformed_action"
+    if "amount_usd" in proposed:
+        try:
+            claimed_cents = _cents(proposed["amount_usd"])
+            derived_cents = 0 if derived.amount_usd is None else _cents(derived.amount_usd)
+        except DeriveError as exc:
+            return exc.reason
+        if claimed_cents != derived_cents:
+            return "amount_mismatch"
+    elif derived.amount_usd is not None:
+        pass
+    if "counterparty" in proposed and str(proposed.get("counterparty") or "").strip():
+        claimed = str(proposed["counterparty"]).strip().casefold()
+        if set(derived.counterparties) != {claimed}:
+            return "counterparty_mismatch"
+    if "irreversible" in proposed and proposed["irreversible"] is not derived.irreversible:
+        return "irreversible_mismatch"
+    return None
+
+
+def form_for(derived: Derived, claimed_data_class: str, blocked: set[str]) -> dict[str, Any]:
+    """The form Path A saw. Amount and parties come from the bytes, not the claim."""
+    if derived.counterparties:
+        party = vm_counterparty(derived.counterparties, blocked)
+    else:
+        party = ""
+    amount = 0.0 if derived.amount_usd is None else derived.amount_usd
+    return {
+        "amount_usd": amount,
+        "data_class": join_data_class(claimed_data_class, derived.data_class_floor),
+        "counterparty": party,
+        "irreversible": derived.irreversible,
+        "counterparties": list(derived.counterparties),
+    }
+
+
+def forms_match(signed: Mapping[str, Any], fresh: Mapping[str, Any]) -> bool:
+    if set(signed) != set(fresh):
+        return False
+    if _cents(signed["amount_usd"]) != _cents(fresh["amount_usd"]):
+        return False
+    for key in ("data_class", "counterparty", "irreversible"):
+        if signed[key] != fresh[key]:
+            return False
+    if list(signed["counterparties"]) != list(fresh["counterparties"]):
+        return False
+    return True

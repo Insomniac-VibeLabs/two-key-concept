@@ -1,7 +1,7 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.1.6. It is not a
-penetration test and it is not an independent review. The package is a
+This is the design model for `two-key-concept` 0.1.7 on branch `working`.
+It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
 
@@ -74,9 +74,9 @@ the code wins, then this file should be corrected.
   stop an agent that can call the tool by another path.
 - The principal key, the witness key, and the ledger key are not all in the
   attacker's hands.
-- The action record describes the real call. This package does not derive
-  `amount_usd`, `data_class`, `counterparty`, or `irreversible` from the
-  argument bytes. That is problem F, below.
+- The action record describes the real call only when the signed constitution
+  includes `tool_specs` and the tool has a spec. Otherwise the agent's form
+  is still trusted. That remainder is problem F, below.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default.
 
@@ -86,15 +86,32 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
-- Problem F is open. Path A is only as good as the structured fields it is
-  given. A lie in `amount_usd`, `data_class`, `counterparty`, or
-  `irreversible` can pass Path A while the argument bytes say something
-  else. The gateway binds those bytes. It does not check that they match
-  the structured fields. The token is not bound to amount, data class, or
-  counterparty. Missing `data_class` becomes `classified` and missing
-  `irreversible` becomes true. `two-key authorize` uses those same defaults.
-  Pass `--data-class public` and `--no-irreversible` when the call is public
-  and reversible.
+- Problem F is closed only for a constitution that includes `tool_specs`.
+  `two_key/derive.py` reads amount and counterparties by JSON path. It does
+  not read English. A present claim that disagrees with the bytes is a deny
+  (`amount_mismatch`, `counterparty_mismatch`, `irreversible_mismatch`). An
+  omitted amount or counterparty is filled from the bytes. A missing amount
+  path, a non-numeric amount, or a currency path that is not `usd` denies.
+  `data_class` is the stricter of the claim and `data_class_floor`. Two
+  different middle classes (`personal`, `medical`, `financial`) join to
+  `classified`. The token binds `spec_hash` and that form. The gateway
+  recomputes the form from the same bytes and refuses a mismatch. Changing
+  a spec changes `spec_hash`, so outstanding tokens fail at the gateway.
+  A constitution that omits `tool_specs` is the legacy path: a lie in the
+  form can still pass Path A. A present `tool_specs` key that is null is
+  refused, not treated as that omit. This package does not classify free
+  text and does not track per-value information flow. A poisoned address
+  that the spec copies faithfully is still that address. A spec with no
+  amount path treats the amount as 0, so money left in an unmapped field is
+  not seen, and a non-zero amount claim is a mismatch. Missing `data_class`
+  still becomes `classified` before the floor, and the floor cannot lower
+  that default. Missing `irreversible` is taken from the spec, so a tool
+  signed as reversible stays reversible. A present `irreversible` claim that
+  differs is `irreversible_mismatch`. The policy VM has one counterparty
+  string. A list is reduced to one party, preferring any party on
+  `deny_counterparties`, so a blocked party is not hidden behind an allowed
+  one. A derived amount that is not finite or above the action sanity cap
+  is `amount_unreadable`.
 - The issuer object holds the principal private key. `verify` uses the
   public key, but this package does not give the gateway a verify-only
   issuer. A process that can redeem can also mint if it has that object.
@@ -117,14 +134,17 @@ claims to close.
 - A vulnerability in a judge vendor's API.
 - Using this package as an MCP server, as user login, or as a DLP or
   antivirus product. It is none of those.
-- Scanning, PKI, anchoring, seed phrases, and hybrid ML-DSA. Those are in
+- Full per-value information-flow tracking, and a content classifier. A
+  tool-spec floor is not a taint label. Scanning, PKI, anchoring, seed
+  phrases, and hybrid ML-DSA are in
   [two-key](https://github.com/Insomniac-VibeLabs/two-key), not here. See
   [SCOPE.md](SCOPE.md).
 
 ## What to re-check when the code changes
 
-- `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool.
+- `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
+- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies.
 - `two_key/quorum.py`: an abstention is not a yes, and `require_path_a_first` is not a skip.
-- `two_key/gateway.py`: argument check, then `redemption_started`, then the tool. No scanner.
-- `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, and the two constitution hashes. TTL default is 120 seconds.
+- `two_key/gateway.py`: argument check, spec hash, recomputed form, then `redemption_started`, then the tool. No scanner.
+- `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, and `spec_hash`. Enforced specs also bind `form` and `claimed_data_class`. TTL default is 120 seconds.
 - `two_key/ledger.py`: the ledger key, the witness key, the append lock, and the redemption locks stay outside the directory. The principal key is not a decryption key. A stale in-memory ledger refuses to append.

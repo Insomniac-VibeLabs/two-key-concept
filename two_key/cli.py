@@ -28,8 +28,8 @@ def _init_key(args) -> int:
 
 def _sign(args) -> int:
     key = load_private_key(args.key)
-    prose, rules = load_unsigned(args.prose, args.rules)
-    save_envelope(args.out, sign_constitution(prose, rules, key))
+    prose, rules, specs = load_unsigned(args.prose, args.rules)
+    save_envelope(args.out, sign_constitution(prose, rules, key, specs))
     print(f"wrote {args.out}")
     return 0
 

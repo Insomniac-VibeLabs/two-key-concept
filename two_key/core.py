@@ -6,15 +6,16 @@ Hosting (local or cloud) is recorded and never treated as trust.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Any
+from dataclasses import dataclass, asdict, replace
+from typing import Any, Mapping
 
-from .action import ActionValidationError, normalize_action
+from .action import Action, ActionValidationError, normalize_action
 from .canonical import canonical_hash
 from .agents import parse_proposal
 from .capability import CapabilityIssuer
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, verify_signed
+from .derive import DeriveError, blocked_from_rules, derive, disagreement, form_for
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, convene
@@ -44,7 +45,9 @@ class TwoKey:
         self.public_key = public_key
         self.private_key = private_key
         self.constitution = constitution
-        self.compiled: CompiledConstitution = compile_both(constitution.prose, constitution.hard_rules)
+        self.compiled: CompiledConstitution = compile_both(
+            constitution.prose, constitution.hard_rules, constitution.tool_specs,
+            specs_enforced=constitution.specs_enforced)
         self.vm = PolicyVM(self.compiled.bytecode)
         self.judges = list(judges)
         self.quorum = quorum or QuorumPolicy(required_yes=min(2, max(1, len(judges))))
@@ -55,6 +58,7 @@ class TwoKey:
             "digest": constitution.digest,
             "bytecode_hash": self.compiled.bytecode_hash,
             "nl_hash": self.compiled.nl_hash,
+            "spec_hash": self.compiled.spec_hash,
         })
         self.ledger.checkpoint()
 
@@ -73,6 +77,41 @@ class TwoKey:
             normalized = normalize_action(action)
         except ActionValidationError as e:
             return self._deny(f"malformed_action:{e}", agent, None, None)
+        spec = None
+        if self.compiled.specs_enforced:
+            spec = self.compiled.tool_specs.get(normalized.tool)
+        form = None
+        claimed_data_class = normalized.data_class
+        deny_reason = None
+        if spec is not None:
+            proposed: Mapping[str, Any]
+            if isinstance(action, Action):
+                proposed = action.to_record()
+            elif isinstance(action, Mapping):
+                proposed = action
+            else:
+                proposed = {}
+            blocked = blocked_from_rules(self.compiled.rules)
+            try:
+                if not isinstance(arguments, Mapping):
+                    raise DeriveError("arguments_not_object")
+                derived = derive(spec, arguments)
+            except DeriveError as exc:
+                deny_reason = f"derive_failed:{exc.reason}"
+                normalized = replace(normalized, data_class="classified", irreversible=True)
+            else:
+                mismatch = disagreement(proposed, derived)
+                if mismatch:
+                    deny_reason = mismatch
+                form = form_for(derived, claimed_data_class, blocked)
+                party = form["counterparty"] if derived.counterparties else normalized.counterparty
+                normalized = replace(
+                    normalized,
+                    amount_usd=float(form["amount_usd"]),
+                    data_class=form["data_class"],
+                    counterparty=party,
+                    irreversible=bool(form["irreversible"]),
+                )
         path_a = self.vm.eval(normalized)
         path_a_rec = {"allowed": path_a.allowed, "reason": path_a.reason, "denied_by": path_a.denied_by}
         binding = {
@@ -86,11 +125,23 @@ class TwoKey:
                          self.quorum, binding, arguments, agent_session)
         path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
                       "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
-        allowed = bool(path_a.allowed and quorum.passed)
-        reason = "both_paths_allow" if allowed else (path_a.reason if not path_a.allowed else quorum.reason)
+        allowed = bool(path_a.allowed and quorum.passed and deny_reason is None)
+        if deny_reason:
+            reason = deny_reason
+        elif allowed:
+            reason = "both_paths_allow"
+        else:
+            reason = path_a.reason if not path_a.allowed else quorum.reason
         token = None
         try:
             self.ledger.append("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
+            if spec is not None:
+                self.ledger.append("action_normalized", {
+                    "tool": normalized.tool,
+                    "form": form,
+                    "claimed_data_class": claimed_data_class,
+                    "deny_reason": deny_reason,
+                })
             self.ledger.append("path_a", path_a_rec)
             self.ledger.append("path_b", path_b_rec)
             if allowed:
@@ -101,6 +152,8 @@ class TwoKey:
                         tool=normalized.tool, arguments=arguments,
                         ledger_root=self.ledger.merkle_root(), ledger_size=self.ledger.size(),
                         bytecode_hash=self.compiled.bytecode_hash, nl_hash=self.compiled.nl_hash,
+                        spec_hash=self.compiled.spec_hash,
+                        form=form, claimed_data_class=claimed_data_class if form is not None else None,
                         ttl_seconds=self.ttl_seconds)
                     token = issued.token
                     self.ledger.append("capability_issued", {"jti": issued.payload["jti"],

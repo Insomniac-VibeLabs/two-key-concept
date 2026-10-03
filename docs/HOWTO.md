@@ -27,10 +27,28 @@ python -m two_key sign-constitution \
   --out constitution.signed.json
 ```
 
-The signature covers the prose and the hard rules. A modified file will not
-load. Missing `data_class` defaults to `classified`, and missing
-`irreversible` defaults to true, so an incomplete action record fails closed
-against the example rules.
+The signature covers the prose, the hard rules, and `tool_specs` when that
+key is in the rules file. A modified file will not load. `examples/hard_rules.yaml`
+includes a spec for every allow-listed tool. Signing that file closes
+Problem F for those tools: amount, counterparty, and irreversible are read
+from the argument bytes, and a claim that disagrees is a deny. `data_class`
+is the stricter of the claim and the tool's `data_class_floor`. This package
+does not classify free text, so a public tool can mention "classified ads".
+A tool that carries medical text needs `data_class_floor: medical` (or
+`classified`). A missing amount path, a non-numeric amount, or a currency
+other than `usd` on `pay_bill` is a deny.
+
+A rules file that omits `tool_specs` still signs. That is the legacy path:
+the agent's form is trusted. A present `tool_specs` key must be a mapping.
+`null` is refused. An empty mapping is refused when the allow list has a
+tool with no spec.
+
+Missing `data_class` still defaults to `classified` before the floor, and
+a floor never lowers that. Missing `irreversible` follows the tool spec
+when a spec exists, so a reversible tool stays reversible. A present claim
+that disagrees with the spec is a deny. Pass `--data-class public` only
+when that class is allowed after the floor, and pass `--no-irreversible`
+only for a tool the spec marks reversible.
 
 ## Judges
 

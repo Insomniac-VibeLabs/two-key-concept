@@ -8,9 +8,10 @@ Missing-field defaults follow disclosure section 5.2 and the missing-field rule:
 ``irreversible`` means ``True`` and a missing ``data_class`` means
 ``"classified"``.
 
-Open design question, not decided here: *who* produces the action record
-(the proposing model, the gateway working from the literal tool-call
-arguments, or a separate classifier). Recorded in docs/THREAT_MODEL.md.
+Open design question that remains for a constitution with no ``tool_specs``:
+who produces the action record. When ``tool_specs`` is present, ``derive.py``
+fills the form from the argument bytes and a disagreeing claim is a deny.
+Free text is still not classified. Recorded in docs/THREAT_MODEL.md.
 The options memo is DESIGN_OPTIONS.md section 1 in
 Insomniac-VibeLabs/two-key, not in this repository.
 """

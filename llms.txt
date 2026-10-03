@@ -6,8 +6,9 @@ Not the full Insomniac-VibeLabs/two-key repository.
 
 Package: two-key-concept
 Import: two_key
-Current tag: v0.1.6
-Not on PyPI. Install from git.
+Branch working package version: 0.1.7 (not a release tag)
+Tagged release on main: v0.1.6
+Not on PyPI. Install from git ref `working` for this tree.
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
@@ -15,12 +16,15 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Tests: python -m unittest discover -s tests
-(18 tests, no network).
+(38 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths always run. There is no scanner, no PKI, and no anchor.
 The token TTL default is 120 seconds. It binds the tool, the argument hash,
-the ledger root and size, and the two constitution hashes. It does not bind
-amount, data class, or counterparty.
+the ledger root and size, the constitution hashes, and spec_hash.
+When tool_specs is signed, the form is derived from the argument bytes and a
+disagreeing claim is a deny. Omitting tool_specs leaves the agent's form trusted.
+Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize uses the same fail-closed defaults as normalize_action:
 --data-class classified, and --irreversible true. --no-irreversible turns that off.
+Those claims must match the tool spec when one is signed.

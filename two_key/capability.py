@@ -47,7 +47,9 @@ class CapabilityIssuer:
         self.clock = clock or time.time
 
     def issue(self, *, tool: str, arguments: dict, ledger_root: str, ledger_size: int,
-              bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120) -> IssuedCapability:
+              bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
+              spec_hash: str = "", form: dict | None = None,
+              claimed_data_class: str | None = None) -> IssuedCapability:
         if not isinstance(ttl_seconds, int) or ttl_seconds < 1:
             raise ValueError("ttl_seconds must be a positive integer")
         now = int(self.clock())
@@ -60,9 +62,13 @@ class CapabilityIssuer:
             "ledger_size": ledger_size,
             "bytecode_hash": bytecode_hash,
             "nl_hash": nl_hash,
+            "spec_hash": spec_hash,
             "iat": now,
             "exp": now + ttl_seconds,
         }
+        if form is not None:
+            payload["form"] = form
+            payload["claimed_data_class"] = claimed_data_class
         body = _b64u(canonical_bytes(payload))
         signature = sign(self.private_key, body.encode("ascii"))
         return IssuedCapability(f"tk1.{body}.{signature}", payload)

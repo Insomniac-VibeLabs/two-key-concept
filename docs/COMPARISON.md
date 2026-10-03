@@ -25,8 +25,11 @@ There are no scanner hooks in this package.
 - a hosted DLP or antivirus product
 - a FIPS 140-3 validated module
 
-Path A is only as good as the structured fields it is given. Who produces
-that record is still an open question. See [THREAT_MODEL.md](THREAT_MODEL.md).
-The package that adds scanning, PKI, and anchoring is
+Path A is only as good as the structured fields it is given. With
+`tool_specs` in the signed constitution, those fields are derived from the
+argument bytes and a disagreeing claim is a deny. Without `tool_specs`, who
+produces the record is still open. See [THREAT_MODEL.md](THREAT_MODEL.md).
+This package does not classify free text and does not track per-value
+information flow. The package that adds scanning, PKI, and anchoring is
 [two-key](https://github.com/Insomniac-VibeLabs/two-key).
 What this repository leaves out is [SCOPE.md](SCOPE.md).

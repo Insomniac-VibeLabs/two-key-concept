@@ -97,5 +97,27 @@ Pulled in by merge of pull request #4, previously unreleased:
 
 No behavior change in this version bump itself. Not published to PyPI.
 
+## 0.1.7 — 2026-10-03
+
+On branch `working`, cut from `main` at `e29b776` (`v0.1.6`). `main` was not
+updated. This version is not a release tag. `v0.1.6` stays on the previous tree.
+
+- A signed constitution may include `tool_specs`. Every allow-listed tool then
+  needs a spec. Amount and counterparties are read from the argument bytes by
+  JSON path. A present claim that disagrees is a deny. An omitted amount or
+  counterparty is filled from the bytes. An omitted `irreversible` follows
+  the spec. `data_class` can only get stricter than `data_class_floor`, and
+  a missing class still starts at `classified`. The token binds `spec_hash`
+  and the derived form. The gateway recomputes that form. A spec change
+  invalidates outstanding tokens.
+- `tool_specs: null` is refused. Omitting the key is the only legacy path.
+- A derived amount that is not finite, or above the action sanity cap, is a deny.
+- A constitution that omits `tool_specs` is unchanged: the agent's form is
+  still trusted. The offline demo uses that path.
+- No English scanner and no per-value information-flow tracking. Quorum
+  defaults and the minting key are unchanged. Both paths still run.
+- Not published to PyPI.
+
+
 
 

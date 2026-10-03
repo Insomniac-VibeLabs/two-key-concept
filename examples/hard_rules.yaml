@@ -1,4 +1,5 @@
-# Same rules as hard_rules.json, in YAML.
+# Hard rules and the per-tool specs that fill Path A's form from argument bytes.
+# A tool in the allow list must have a spec. The spec is signed with the rules.
 hard_rules:
   - id: tool-allowlist
     allow_only_tools: [search, calendar, email_draft, email_send, pay_bill, summarize]
@@ -12,3 +13,35 @@ hard_rules:
     deny_if_irreversible_over: 200
   - id: blocked-parties
     deny_counterparties: [offshore-mule.example, acme-scam.example]
+
+# JSON paths only. This file does not classify free text.
+# pay_bill.amount.currency_path must be the string usd or the call is denied.
+tool_specs:
+  search:
+    irreversible: false
+    data_class_floor: public
+  calendar:
+    irreversible: false
+    data_class_floor: personal
+  email_draft:
+    irreversible: false
+    data_class_floor: public
+    counterparties:
+      - json_path: to
+  email_send:
+    irreversible: true
+    data_class_floor: personal
+    counterparties:
+      - json_path: to
+  pay_bill:
+    irreversible: true
+    data_class_floor: financial
+    amount:
+      json_path: amount
+      unit: usd
+      currency_path: currency
+    counterparties:
+      - json_path: to
+  summarize:
+    irreversible: false
+    data_class_floor: public
