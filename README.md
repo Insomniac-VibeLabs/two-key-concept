@@ -157,7 +157,7 @@ that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.1.3"
+pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.1.4"
 ```
 
 ## Run the offline demo

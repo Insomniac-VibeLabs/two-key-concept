@@ -53,3 +53,9 @@ Added `llms.txt` and repository topics for discovery. No behavior change.
 - Redemption writes and checkpoints an intent before the tool runs. A retry of that intent does not run the tool.
 - A tool exception appends an abort and leaves the token usable.
 - A crash after the intent and before the tool runs also blocks a retry.
+
+## 0.1.4 — 2026-10-03
+
+Tag `v0.1.4`. No behavior change. The `v0.1.3` tag stays on the earlier tree.
+
+- README architecture diagram: a monitored agent only proposes, Path B judges vote with their own credentials, and the token is returned to the caller. Path B still runs when Path A denies.
