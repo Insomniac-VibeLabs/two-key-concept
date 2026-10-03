@@ -15,6 +15,9 @@ hard_rules:
     deny_counterparties: [offshore-mule.example, acme-scam.example]
 
 # JSON paths only. This file does not classify free text.
+# A key the spec does not name is unread payload. deny_unmapped defaults off.
+# Set it true to deny an unnamed key. payload names a value that may be
+# present and is not interpreted. That path covers the value and its children.
 # pay_bill.amount.currency_path must be the string usd or the call is denied.
 tool_specs:
   search:

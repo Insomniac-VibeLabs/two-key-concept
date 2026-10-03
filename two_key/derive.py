@@ -5,11 +5,17 @@ Those are claims. When the signed constitution has a spec for the tool, the
 values Path A sees come from the spec and the arguments. A claim that
 disagrees is a deny. This module does not read English and it does not
 classify free text.
+
+Keys the spec does not name are unread payload. ``deny_unmapped`` defaults
+off. When a spec sets it, a key that is not a declared path is a deny. A
+declared path covers that value and everything under it. Naming a payload
+path does not interpret the value.
 """
 
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -20,6 +26,9 @@ class DeriveError(ValueError):
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
+
+
+_SEGMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass(frozen=True)
@@ -49,6 +58,51 @@ def lookup(document: Mapping[str, Any], path: str) -> tuple[bool, Any]:
             return False, None
         current = current[part]
     return True, current
+
+
+def _declared_paths(spec: Mapping[str, Any]) -> tuple[str, ...]:
+    paths: list[str] = []
+    amount = spec.get("amount")
+    if isinstance(amount, Mapping):
+        for key in ("json_path", "currency_path"):
+            value = amount.get(key)
+            if isinstance(value, str):
+                paths.append(value)
+    for key in ("counterparties", "payload"):
+        for entry in spec.get(key) or []:
+            if isinstance(entry, Mapping) and isinstance(entry.get("json_path"), str):
+                paths.append(entry["json_path"])
+    return tuple(paths)
+
+
+def _unmapped(arguments: Mapping[str, Any], declared: tuple[str, ...]) -> bool:
+    """True when an argument key is outside every declared path.
+
+    A declared path covers itself and its children. Ancestors of a declared
+    path are walked. Lists and scalars are not walked, so a named value does
+    not require a key list for every nested level.
+    """
+    declared_set = set(declared)
+
+    def is_prefix(path: str) -> bool:
+        needle = path + "."
+        return any(item.startswith(needle) for item in declared_set)
+
+    def walk(node: Mapping[str, Any], prefix: str) -> bool:
+        for key, value in node.items():
+            if not isinstance(key, str) or not _SEGMENT.fullmatch(key):
+                return True
+            path = f"{prefix}.{key}" if prefix else key
+            if path in declared_set:
+                continue
+            if is_prefix(path):
+                if isinstance(value, Mapping) and walk(value, path):
+                    return True
+                continue
+            return True
+        return False
+
+    return walk(arguments, "")
 
 
 def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
@@ -95,6 +149,8 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
             if not party:
                 raise DeriveError("counterparty_missing")
             parties.append(party)
+    if spec.get("deny_unmapped") is True and _unmapped(arguments, _declared_paths(spec)):
+        raise DeriveError("unmapped_field")
     return Derived(
         amount_usd=amount,
         counterparties=tuple(sorted(set(parties))),

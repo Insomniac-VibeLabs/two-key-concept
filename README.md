@@ -23,7 +23,10 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    constitution must include `tool_specs`. Those fields are read from the
    argument bytes by [two_key/derive.py](two_key/derive.py). A claim that
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
-   and will not load.
+   and will not load. A key the spec does not name is unread payload.
+   `deny_unmapped` defaults off. Set it true to deny that key. A `payload`
+   path names a value that is not interpreted, and it covers that value's
+   children. The spec does not list every nested key.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. A missing or malformed ballot does not
    count as yes. The diversity floors are on by default: two vendors, one
@@ -53,7 +56,7 @@ Only the gateway runs a tool.
 
 ```mermaid
 flowchart TD
-  constitution["Signed constitution<br/>prose, hard rules, tool specs"] --> compile["compile_both"]
+  constitution["Signed constitution<br/>prose, hard rules, tool specs<br/>unnamed keys allowed unless deny_unmapped"] --> compile["compile_both"]
   compile --> bytecode["Path A bytecode"]
   compile --> judgeText["Path B judge text"]
   instruction["Untrusted instruction"] --> agent["MonitoredAgent.complete<br/>Grok, ChatGPT, Claude, Gemini, or local Ollama"]
@@ -173,7 +176,7 @@ directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 Install from git. It is not published to PyPI. This branch is package
-0.1.8 and is not a release tag. `v0.1.6` remains the tagged release on
+0.1.9 and is not a release tag. `v0.1.6` remains the tagged release on
 `main`.
 
 The middle column on the GitHub file list is the last commit that touched

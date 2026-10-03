@@ -59,13 +59,20 @@ def _allow_listed(rules: list) -> list[str]:
 def validate_tool_specs(specs: Any, rules: list) -> dict:
     """Canonical tool specs. Every allow-listed tool must have one.
 
-    A spec says how to read the argument bytes. It is not an English scanner.
-    ``amount.unit`` is ``usd`` or ``cents``. A currency path, when set, must
-    be the string ``usd`` at authorization time or the call is denied.
+    A spec says which argument paths Path A may read. It is not an English
+    scanner. ``amount.unit`` is ``usd`` or ``cents``. A currency path, when
+    set, must be the string ``usd`` at authorization time or the call is
+    denied. ``deny_unmapped`` defaults to false: a key the spec does not name
+    is unread payload. Set it true to deny that key. ``payload`` names paths
+    that may be present and are not interpreted. A named path covers that
+    value and its children.
     """
     if not isinstance(specs, Mapping):
         raise ConstitutionError("tool_specs must be a mapping")
-    allowed_keys = {"irreversible", "data_class_floor", "amount", "counterparties"}
+    allowed_keys = {
+        "irreversible", "data_class_floor", "amount", "counterparties",
+        "payload", "deny_unmapped",
+    }
     out: dict[str, dict] = {}
     for name, spec in specs.items():
         if not isinstance(name, str) or not name.strip():
@@ -85,6 +92,16 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
             raise ConstitutionError(
                 f"tool_specs.{tool}.data_class_floor: expected one of {list(DATA_CLASSES)}"
             )
+        if "deny_unmapped" in spec and not isinstance(spec["deny_unmapped"], bool):
+            raise ConstitutionError(f"tool_specs.{tool}.deny_unmapped: expected a boolean")
+        seen_paths: set[str] = set()
+
+        def take(path: str, where: str) -> str:
+            if path in seen_paths:
+                raise ConstitutionError(f"{where}: duplicate path")
+            seen_paths.add(path)
+            return path
+
         amount = spec.get("amount")
         amount_out = None
         if amount is not None:
@@ -98,32 +115,42 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
             if amount["unit"] not in ("usd", "cents"):
                 raise ConstitutionError(f"tool_specs.{tool}.amount.unit: expected usd or cents")
             amount_out = {
-                "json_path": _json_path(amount["json_path"], f"tool_specs.{tool}.amount"),
+                "json_path": take(
+                    _json_path(amount["json_path"], f"tool_specs.{tool}.amount"),
+                    f"tool_specs.{tool}.amount",
+                ),
                 "unit": amount["unit"],
             }
             if "currency_path" in amount:
-                amount_out["currency_path"] = _json_path(
-                    amount["currency_path"], f"tool_specs.{tool}.amount"
+                amount_out["currency_path"] = take(
+                    _json_path(amount["currency_path"], f"tool_specs.{tool}.amount"),
+                    f"tool_specs.{tool}.amount.currency_path",
                 )
         parties = spec.get("counterparties", [])
         if not isinstance(parties, list):
             raise ConstitutionError(f"tool_specs.{tool}.counterparties: expected a list")
         party_out = []
-        seen_paths: set[str] = set()
         for index, entry in enumerate(parties):
             where = f"tool_specs.{tool}.counterparties[{index}]"
             if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
                 raise ConstitutionError(f"{where}: expected json_path only")
-            path = _json_path(entry["json_path"], where)
-            if path in seen_paths:
-                raise ConstitutionError(f"{where}: duplicate path")
-            seen_paths.add(path)
-            party_out.append({"json_path": path})
+            party_out.append({"json_path": take(_json_path(entry["json_path"], where), where)})
+        payload = spec.get("payload", [])
+        if not isinstance(payload, list):
+            raise ConstitutionError(f"tool_specs.{tool}.payload: expected a list")
+        payload_out = []
+        for index, entry in enumerate(payload):
+            where = f"tool_specs.{tool}.payload[{index}]"
+            if not isinstance(entry, Mapping) or set(entry) != {"json_path"}:
+                raise ConstitutionError(f"{where}: expected json_path only")
+            payload_out.append({"json_path": take(_json_path(entry["json_path"], where), where)})
         out[tool] = {
             "irreversible": spec["irreversible"],
             "data_class_floor": floor.strip().casefold(),
             "amount": amount_out,
             "counterparties": party_out,
+            "payload": payload_out,
+            "deny_unmapped": spec.get("deny_unmapped", False) is True,
         }
     allow = _allow_listed(rules)
     missing = [tool for tool in allow if tool not in out]

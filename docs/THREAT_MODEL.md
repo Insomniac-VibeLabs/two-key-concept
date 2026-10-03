@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.1.8 on branch `working`.
+This is the design model for `two-key-concept` 0.1.9 on branch `working`.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -82,7 +82,8 @@ the code wins, then this file should be corrected.
   attacker's hands.
 - The action record describes the real call only for fields the tool spec
   names. Every loaded constitution has `tool_specs`. A tool with no spec
-  does not redeem.
+  does not redeem. `deny_unmapped` defaults off, so an unnamed key is unread
+  payload. A tool that sets it denies that key.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are on by default and can be turned off.
 
@@ -104,10 +105,15 @@ claims to close.
   form. The gateway recomputes the form from the same bytes and refuses a
   mismatch. Changing a spec changes `spec_hash`, so outstanding tokens fail
   at the gateway. This package does not classify free text and does not
-  track per-value information flow. A poisoned address that the spec copies
-  faithfully is still that address. A spec with no amount path treats the
-  amount as 0, so money left in an unmapped field is not seen, and a
-  non-zero amount claim is a mismatch. Missing `data_class` still becomes
+  track per-value information flow. A value the spec copies is still that
+  value, including a well-formed address that is the wrong party. A path the
+  spec does not declare does not change the form. With `deny_unmapped` left
+  off (the default), that value is unread payload, so a number in an unnamed
+  field is not the amount and an unnamed address is not the counterparty.
+  With `deny_unmapped` set, the unnamed key is `unmapped_field` instead.
+  That still does not interpret it. `payload` names a value that may be
+  present. The path covers that value and its children, and the value is
+  not classified. Missing `data_class` still becomes
   `classified` before the floor, and the floor cannot lower that default.
   Missing `irreversible` is taken from the spec, so a tool signed as
   reversible stays reversible. A present `irreversible` claim that differs
@@ -116,6 +122,10 @@ claims to close.
   `deny_counterparties`, so a blocked party is not hidden behind an allowed
   one. A derived amount that is not finite or above the action sanity cap
   is `amount_unreadable`.
+- A derive deny does not skip Path B. Judges still receive the action record,
+  and that record still carries `tool_args` when the arguments are non-empty.
+  The default withholds the English proposal. It does not withhold the
+  argument bytes. The tool still does not run.
 - The gateway's verifier has no private key. The minting key is the
   capability key outside the ledger directory. The principal key still sits
   on the ledger object, because the head signature needs it. A token signed
@@ -152,7 +162,7 @@ claims to close.
 ## What to re-check when the code changes
 
 - `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
-- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies.
+- `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off. A declared path covers its children.
 - `two_key/quorum.py`: an abstention is not a yes, diversity floors default on, and `require_path_a_first` is not a skip.
 - `two_key/gateway.py`: argument check, spec hash, recomputed form, then `redemption_started`, then the tool. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds.

@@ -33,12 +33,17 @@ key, `null`, and an empty mapping are refused. `examples/hard_rules.yaml`
 has a spec for every allow-listed tool. Amount, counterparty, and
 irreversible are read from the argument bytes, and a claim that disagrees
 is a deny. `data_class` is the stricter of the claim and the tool's
-`data_class_floor`. This package does not classify free text, so a public
-tool can mention "classified ads". A tool that carries medical text needs
-`data_class_floor: medical` (or `classified`). A missing amount path, a
-non-numeric amount, or a currency other than `usd` on `pay_bill` is a deny.
-A spec with no amount path treats the amount as 0, so money in an unmapped
-field is not seen.
+`data_class_floor`. This package does not classify free text. A tool that
+carries text the rules must treat as sensitive needs that class as its
+`data_class_floor`. A missing amount path, a non-numeric amount, or a
+currency other than `usd` on `pay_bill` is a deny.
+
+A key the spec does not name is unread payload. It does not change the form,
+and the spec does not have to list every nested key. `deny_unmapped` defaults
+off. Set it true on a tool to deny an unnamed key. `payload` names a value
+that may be present and is not interpreted. That path covers the value and
+its children. A value copied from a declared path is still that value. No
+check here decides that a well-formed value is the wrong one.
 
 Missing `data_class` still defaults to `classified` before the floor, and
 a floor never lowers that. Missing `irreversible` follows the tool spec,

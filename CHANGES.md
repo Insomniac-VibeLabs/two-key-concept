@@ -135,6 +135,21 @@ the tagged release.
   A token signed with the principal key does not redeem.
 - Not published to PyPI.
 
+## 0.1.9 — 2026-10-03
+
+On branch `working`. Not a release tag. `main` was not updated. `v0.1.6` stays
+the tagged release.
+
+- `deny_unmapped` is optional and defaults off. An argument key the spec does
+  not name stays unread payload and does not change the form. A tool that
+  sets the flag denies that key (`unmapped_field`). `payload` names a value
+  that may be present and is not interpreted. A declared path covers that
+  value and its children. The spec does not list every nested key.
+- A value copied from a declared path is unchanged. Free text is still not
+  classified. Both paths still run, including after a derive deny, so judges
+  still see `tool_args`.
+- Not published to PyPI.
+
 
 
 

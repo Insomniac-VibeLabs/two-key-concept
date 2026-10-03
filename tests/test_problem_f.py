@@ -211,6 +211,8 @@ class ProblemFTests(unittest.TestCase):
         constitution = verify_signed(envelope, key.public_key())
         self.assertTrue(constitution.specs_enforced)
         self.assertEqual(constitution.tool_specs["pay_bill"]["amount"]["unit"], "usd")
+        self.assertFalse(constitution.tool_specs["pay_bill"]["deny_unmapped"])
+        self.assertEqual(constitution.tool_specs["summarize"]["payload"], [])
 
     def test_join_never_lowers_the_floor(self):
         self.assertEqual(join_data_class("public", "medical"), "medical")
@@ -313,6 +315,88 @@ class ProblemFTests(unittest.TestCase):
                 {"text": "hello"}, "summarize")
             self.assertTrue(omitted.allowed, omitted.reason)
             self.assertEqual(claimed.reason, "irreversible_mismatch")
+
+    def test_unnamed_keys_stay_payload_unless_the_spec_opts_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp)
+            allowed = tk.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"text": "hello", "extra": {"n": 5}},
+                "summarize")
+            self.assertTrue(allowed.allowed, allowed.reason)
+        specs = {name: dict(spec) for name, spec in SPECS.items()}
+        specs["summarize"] = dict(SPECS["summarize"], deny_unmapped=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, strict = _engine(tmp, specs=specs)
+            denied = strict.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"text": "hello"},
+                "summarize")
+            self.assertEqual(denied.reason, "derive_failed:unmapped_field")
+        specs["summarize"] = dict(
+            SPECS["summarize"], deny_unmapped=True, payload=[{"json_path": "note"}],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            _, named = _engine(tmp, specs=specs)
+            decision = named.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"note": {"n": 5000, "text": "hello"}},
+                "summarize")
+            self.assertTrue(decision.allowed, decision.reason)
+            form = [entry for entry in named.ledger.entries if entry.kind == "action_normalized"][-1]
+            self.assertEqual(form.body["form"]["amount_usd"], 0.0)
+            sibling = named.authorize(
+                {"tool": "summarize", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"note": "hello", "other": 1},
+                "summarize")
+            self.assertEqual(sibling.reason, "derive_failed:unmapped_field")
+
+    def test_deny_unmapped_walks_only_to_declared_paths(self):
+        specs = {name: dict(spec) for name, spec in SPECS.items()}
+        specs["pay_bill"] = dict(
+            SPECS["pay_bill"],
+            deny_unmapped=True,
+            amount={"json_path": "invoice.total", "unit": "usd", "currency_path": "currency"},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp, specs=specs)
+            clean = {"invoice": {"total": 10}, "currency": "usd", "to": "power-co.example"}
+            decision = tk.authorize(
+                {"tool": "pay_bill", "amount_usd": 10, "data_class": "financial", "irreversible": True,
+                 "counterparty": "power-co.example"},
+                clean, "pay")
+            self.assertTrue(decision.allowed, decision.reason)
+            nested = tk.authorize(
+                {"tool": "pay_bill", "amount_usd": 10, "data_class": "financial", "irreversible": True,
+                 "counterparty": "power-co.example"},
+                {"invoice": {"total": 10, "note": "x"}, "currency": "usd", "to": "power-co.example"},
+                "pay")
+            self.assertEqual(nested.reason, "derive_failed:unmapped_field")
+        specs["pay_bill"] = dict(
+            specs["pay_bill"],
+            payload=[{"json_path": "invoice"}],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tk = _engine(tmp, specs=specs)
+            covered = tk.authorize(
+                {"tool": "pay_bill", "amount_usd": 10, "data_class": "financial", "irreversible": True,
+                 "counterparty": "power-co.example"},
+                {"invoice": {"total": 10, "note": "x"}, "currency": "usd", "to": "power-co.example"},
+                "pay")
+            self.assertTrue(covered.allowed, covered.reason)
+
+    def test_deny_unmapped_must_be_a_boolean_and_paths_must_be_unique(self):
+        key = generate_private_key()
+        bad_flag = {name: dict(spec) for name, spec in SPECS.items()}
+        bad_flag["summarize"] = dict(SPECS["summarize"], deny_unmapped="yes")
+        with self.assertRaises(ConstitutionError):
+            sign_constitution(PROSE, RULES, key, bad_flag)
+        duplicate = {name: dict(spec) for name, spec in SPECS.items()}
+        duplicate["email_draft"] = dict(
+            SPECS["email_draft"], payload=[{"json_path": "to"}],
+        )
+        with self.assertRaises(ConstitutionError):
+            sign_constitution(PROSE, RULES, key, duplicate)
 
 
 if __name__ == "__main__":

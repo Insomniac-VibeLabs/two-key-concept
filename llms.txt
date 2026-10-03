@@ -6,7 +6,7 @@ Not the full Insomniac-VibeLabs/two-key repository.
 
 Package: two-key-concept
 Import: two_key
-Branch working package version: 0.1.8 (not a release tag)
+Branch working package version: 0.1.9 (not a release tag)
 Tagged release on main: v0.1.6
 Not on PyPI. Install from git ref `working` for this tree.
 
@@ -16,7 +16,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Tests: python -m unittest discover -s tests
-(41 tests, no network).
+(44 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths always run. Diversity floors default on (2 vendors, 1 local judge,
@@ -26,7 +26,9 @@ The token TTL default is 120 seconds. It is signed by the capability key, not
 the principal key. The gateway verifies only. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.
-Free text is not classified. There is no per-value information-flow tracking.
+deny_unmapped defaults off. An unnamed argument key is unread payload unless
+that tool sets the flag. A payload path is not interpreted and covers its
+children. Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize uses the same fail-closed defaults as normalize_action:
 --data-class classified, and --irreversible true. --no-irreversible turns that off.
 Those claims must match the tool spec.
