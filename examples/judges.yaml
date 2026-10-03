@@ -1,0 +1,71 @@
+# Cloud OpenAI and xAI use a strict ballot schema by default (response_format: auto).
+# A local OpenAI-compatible server stays on json_object. Set response_format: json_schema
+# or json_object to force one. xAI defaults to reasoning_effort: low; set reasoning_effort to override.
+# Anthropic caches the constitution, not the action record. No secrets in this file.
+# Path B judges: pick whichever AIs you want, local or vendor.
+# No secrets go in this file. API keys are read from environment variables
+# (or the OS keyring) at call time.
+# Replace every REPLACE_WITH_MODEL with a model name your account can use.
+# The local judge is already set to the recommended model, qwen2.5:7b
+# (Qwen2.5-7B-Instruct). The weights are not in this repository.
+# A ballot key, if used, is ballot_key_env: the name of an environment variable. Do not write the secret here.
+# The loader refuses both placeholders.
+# receives_proposal: true sends that judge the proposal. Recommended: a different model than the monitored agent.
+# A cloud judge requires agent_session_env on TwoKey: the environment variable holding the monitored agent's credential. Two-Key reads it at startup.
+
+quorum:
+  required_yes: 2            # k-of-n: how many judges must say "consistent"
+  min_responding: 2          # refuse to decide if fewer valid ballots arrive
+  min_distinct_providers: 1  # 1 = not enforced (see DESIGN_OPTIONS.md section 2)
+  timeout_seconds: 45        # judges run in parallel; any judge not done by then abstains
+  # PRIOR_ART.md §4 (iii) options (defaults shown; QuorumPolicy.section4() in code
+  # uses min_vendors: 2, min_local_judges: 1, require_path_a_first: true):
+  # min_vendors: 1
+  # min_local_judges: 0
+  # heterogeneity_scope: selection   # selection | responding
+  # judge_inputs: record_only        # record_only | record_and_proposal
+  # ballot_binding: stamp            # stamp | echo (echo needs echo_binding: true on every judge)
+  # require_path_a_first: false
+
+judges:
+  - id: grok
+    type: openai_compatible          # OpenAI-compatible API (OpenAI, xAI, vLLM, llama.cpp, ...)
+    provider: xai
+    base_url: https://api.x.ai/v1
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: XAI_API_KEY}
+
+  - id: claude
+    type: anthropic
+    provider: anthropic
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: ANTHROPIC_API_KEY}
+
+  - id: gemini
+    type: gemini
+    provider: google
+    model: REPLACE_WITH_MODEL
+    auth: {type: env, var: GEMINI_API_KEY}
+
+  # Recommended local judge. Weights are not in this repo.
+  # Qwen2.5-7B-Instruct, Apache-2.0, Copyright 2024 Alibaba Cloud.
+  # https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
+  # Setup: docs/HOWTO.md#recommended-local-judge-qwen25-7b-instruct
+  - id: local-qwen
+    type: ollama                     # local weights via Ollama, no key needed
+    provider: local
+    vendor: alibaba
+    base_url: http://localhost:11434
+    model: qwen2.5:7b
+    # local_weights: true            # the default for ollama; counts toward min_local_judges
+    # weights_sha256: <hash of the GGUF>   # optional, recorded in ballots, not verified
+
+# Optional per-judge keys: vendor (defaults to provider), local_weights, weights_sha256, echo_binding.
+
+# Other auth modes (interfaces; see two_key/judges/credentials.py):
+#   auth: {type: keyring, service: two-key, username: openai}
+#   auth: {type: username_password, username: me, password_env: MY_GATEWAY_PASSWORD,
+#          login: "my_hooks:login"}                  # you supply the login hook
+#   auth: {type: oauth_device_code, client_id: ..., device_authorization_endpoint: ...,
+#          token_endpoint: ..., fetch_token: "my_hooks:device_flow"}   # stub unless hook given
+#   auth: {type: callback, callback: "my_hooks:get_sso_token"}         # any SSO/OAuth token source
