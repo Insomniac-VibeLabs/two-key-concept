@@ -143,7 +143,7 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     judges = [build_judge(j, transport) for j in data["judges"]]
     ids = [j.judge_id for j in judges]
     if len(set(ids)) != len(ids):
-        raise JudgeConfigError("judge ids must be unique")
+        raise JudgeConfigError("duplicate_judge_id: judge ids must be unique")
     q = data.get("quorum") or {}
     if not isinstance(q, dict):
         raise JudgeConfigError("quorum must be a mapping")

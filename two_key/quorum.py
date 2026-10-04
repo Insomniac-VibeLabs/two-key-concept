@@ -353,8 +353,12 @@ def convene(
         raw["tool_args"] = dict(tool_args)
         judge_action = replace(action, raw=raw)
     ballots: list[Ballot] = []
-    selection = heterogeneity_shortfall(judges, policy) if judges else None
-    if judges and selection is None:
+    # Ballots are matched to judges by id (local yes, responding heterogeneity). Two judges with
+    # one id would let one judge's ballot stand in for the other's, so the judges are not called.
+    ids = [getattr(j, "judge_id", None) for j in judges]
+    duplicate = len(set(ids)) != len(ids) or any(not isinstance(i, str) or not i for i in ids)
+    selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
+    if judges and not duplicate and selection is None:
         ballots = [_bind(b, binding, policy)
                    for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
     responding = [b for b in ballots if b.responded]
@@ -369,6 +373,8 @@ def convene(
 
     if not judges:
         return result(False, "no_judges", counted=False)
+    if duplicate:
+        return result(False, "duplicate_judge_id", counted=False)
     if selection is not None:
         return result(False, f"judge_set_not_heterogeneous:{selection}", counted=False)
     if len(judges) < policy.required_yes:

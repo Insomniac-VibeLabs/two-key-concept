@@ -66,6 +66,10 @@ class TwoKey:
         if not self.judges:
             # Fail closed: with no judge, Path B can never turn its key.
             raise TwoKeyConfigError("no_judges: configure at least one Path B judge")
+        judge_ids = [getattr(j, "judge_id", None) for j in self.judges]
+        if any(not isinstance(i, str) or not i for i in judge_ids) or len(set(judge_ids)) != len(judge_ids):
+            # Ballots are matched to judges by id; a shared id lets one judge's ballot stand in for another's.
+            raise TwoKeyConfigError("duplicate_judge_id: judge ids must be unique, non-empty strings")
         self.quorum = quorum or QuorumPolicy(required_yes=min(2, len(self.judges)))
         if self.quorum.timeout_seconds is None:
             # Fail closed on a hung judge: every round ends by the deadline, and a late judge abstains.
