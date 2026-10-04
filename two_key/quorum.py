@@ -28,7 +28,9 @@ Fixes from the original prototype (see CHANGES.md):
   ``timeout_seconds`` (default 45 s). A judge that has not answered by the
   deadline is recorded as an abstention (``error="timeout..."``), so a slow or
   hung provider can never produce a "yes" and cannot stall Two-Key beyond
-  the deadline. Per-request HTTP timeouts are still set on each LLM judge.
+  the deadline. ``TwoKey`` and the judges.yaml loader refuse
+  ``timeout_seconds=None``, so a deployment always has a hard deadline. Per-request
+  HTTP timeouts are still set on each LLM judge.
 
 Quorum protocol specifics. The prior-art memo is not stored in this
 repository or in two-key. The decision record is CONCEPTION_NOTES.md
@@ -81,7 +83,7 @@ class QuorumPolicy:
     required_yes: int = 2            # k in k-of-n
     min_responding: int | None = None  # K in spec 5.4; defaults to required_yes
     min_distinct_providers: int = 1  # responding providers; 1 means this check is not a floor
-    timeout_seconds: float | None = 45.0  # overall deadline for all judges; None = no deadline
+    timeout_seconds: float | None = 45.0  # overall deadline; None (no deadline) is refused by TwoKey
     parallel: bool = True
     # One judge is enough by default. QuorumPolicy.high_assurance() opts in to the diversity floors.
     min_vendors: int = 1

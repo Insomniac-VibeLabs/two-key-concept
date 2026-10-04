@@ -21,6 +21,10 @@ from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene
 
 
+class TwoKeyConfigError(ValueError):
+    """Two-Key refuses to start with this configuration."""
+
+
 _DERIVE_DENIALS = {"amount_mismatch", "counterparty_mismatch", "irreversible_mismatch"}
 
 
@@ -59,9 +63,15 @@ class TwoKey:
             specs_enforced=True)
         self.vm = PolicyVM(self.compiled.bytecode)
         self.judges = list(judges)
-        self.quorum = quorum or QuorumPolicy(required_yes=min(2, max(1, len(judges))))
-        if self.judges:
-            check_judge_set(self.judges, self.quorum)
+        if not self.judges:
+            # Fail closed: with no judge, Path B can never turn its key.
+            raise TwoKeyConfigError("no_judges: configure at least one Path B judge")
+        self.quorum = quorum or QuorumPolicy(required_yes=min(2, len(self.judges)))
+        if self.quorum.timeout_seconds is None:
+            # Fail closed on a hung judge: every round ends by the deadline, and a late judge abstains.
+            raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
+                                    "number, not None")
+        check_judge_set(self.judges, self.quorum)
         self.ttl_seconds = ttl_seconds
         # The minting key is not the principal key, and it is not given to the gateway.
         self.issuer = CapabilityIssuer(open_capability_key(ledger), clock=clock) if private_key else None

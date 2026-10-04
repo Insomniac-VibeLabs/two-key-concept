@@ -162,6 +162,8 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
         raise JudgeConfigError(str(e)) from e
     if policy.required_yes > len(judges):
         raise JudgeConfigError(f"required_yes={policy.required_yes} exceeds number of judges {len(judges)}")
+    if policy.timeout_seconds is None:
+        raise JudgeConfigError("quorum timeout_seconds must be a positive number (a hard deadline), not null")
     try:
         check_judge_set(judges, policy)
     except QuorumConfigError as e:
