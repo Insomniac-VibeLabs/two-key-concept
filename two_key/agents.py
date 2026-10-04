@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from .derive import MAX_ARGS_BYTES
 from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential
 from .judges.llm import LOOPBACK
@@ -29,6 +30,9 @@ from .strict import StrictParseError, load_file_strict, loads_json
 Transport = Callable[[str, dict, dict, float], dict]
 AGENT_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
 AGENT_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "hosting", "max_tokens"}
+# A proposal carries arguments (at most MAX_ARGS_BYTES) plus prose; four times that is generous.
+# Longer text is refused before it is parsed.
+MAX_PROPOSAL_TEXT_CHARS = 4 * MAX_ARGS_BYTES
 _ALLOWED = {"tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible"}
 _REQUIRED = {"tool", "arguments", "proposal"}
 
@@ -123,6 +127,10 @@ def _loads_strict(text: str, what: str):
 
 def parse_proposal(text: str) -> tuple[dict, dict, str]:
     """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins."""
+    if not isinstance(text, str):
+        raise AgentConfigError("agent proposal must be a string")
+    if len(text) > MAX_PROPOSAL_TEXT_CHARS:
+        raise AgentConfigError(f"agent proposal is longer than {MAX_PROPOSAL_TEXT_CHARS} characters")
     obj = _loads_strict(text.strip(), "agent proposal")
     if not isinstance(obj, dict) or set(obj) - _ALLOWED or not _REQUIRED <= set(obj):
         raise AgentConfigError("agent proposal must contain tool, arguments, and proposal, and no other keys")

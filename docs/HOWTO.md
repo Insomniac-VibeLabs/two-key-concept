@@ -348,7 +348,11 @@ model. Hosting is recorded. It is not trust.
 
 `authorize_from_agent` parses the proposal (`tool`, `arguments`, `proposal`,
 and optional structured fields) and runs both paths. It does not call the
-tool. Extra keys in the proposal are rejected.
+tool. Extra keys in the proposal are rejected. Text longer than 1,048,576
+characters (four times the arguments cap) is denied `proposal_too_large`
+before it is parsed. Text that is not a string, is not JSON, has a repeated
+or extra key, or misses a field is denied `malformed_proposal`. Both denies
+are ledgered with the text's size and digest only; the reason names no key.
 
 Use a different API key for agents than for judges. Pass the agent object
 you run as `TwoKey(monitored_agent=agent)`; it is checked against every

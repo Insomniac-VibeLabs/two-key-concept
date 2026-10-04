@@ -17,7 +17,7 @@ from typing import Any, Mapping
 
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import EncodingError, canonical_bytes, canonical_hash
-from .agents import parse_proposal
+from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
 from .compiler import CompiledConstitution, compile_both
@@ -331,10 +331,32 @@ class TwoKey:
         return Decision(allowed, reason, token if allowed else None, path_a_rec, path_b_rec, self.ledger.size(), agent)
 
     def authorize_from_agent(self, agent, proposal_text: str, *, agent_session: str | None = None) -> Decision:
-        """Parse an untrusted agent proposal, run both paths, and do not execute the tool."""
-        action, arguments, proposal = parse_proposal(proposal_text)
-        return self.authorize(action, arguments, proposal, agent_id=getattr(agent, "agent_id", None),
-                              hosting=getattr(agent, "hosting", None), agent_session=agent_session)
+        """Parse an untrusted agent proposal, run both paths, and do not execute the tool.
+
+        The text is measured before it is parsed. Text over ``MAX_PROPOSAL_TEXT_CHARS`` is a
+        ``proposal_too_large`` deny, and text that is not a string or does not parse is a
+        ``malformed_proposal`` deny. Either way the ledger keeps only its size and digest, and
+        the reason carries no value or key name.
+        """
+        agent_id, hosting = getattr(agent, "agent_id", None), getattr(agent, "hosting", None)
+        self._origin = "library"
+        record = None
+        if agent_id or hosting:
+            record = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
+        try:
+            if isinstance(proposal_text, str) and len(proposal_text) > MAX_PROPOSAL_TEXT_CHARS:
+                return self._deny("proposal_too_large", record, None, None,
+                                  size_record(proposal_text, "proposal_text"))
+            try:
+                action, arguments, proposal = parse_proposal(proposal_text)
+            except AgentConfigError:          # the message may quote a key name: not in the reason
+                return self._deny("malformed_proposal", record, None, None,
+                                  {**size_record(proposal_text, "proposal_text"),
+                                   "proposal_text_type": type(proposal_text).__name__})
+        except Exception as e:  # fail closed, as in authorize()
+            return self._deny(f"internal_error:{type(e).__name__}", record, None, None)
+        return self.authorize(action, arguments, proposal, agent_id=agent_id,
+                              hosting=hosting, agent_session=agent_session)
 
     def revoke(self, reason: str) -> None:
         self.ledger.append("revocation", {"reason": reason})

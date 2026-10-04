@@ -247,6 +247,11 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   by group or others is refused; `--ttl-seconds` is 1-300; decisions record
   `origin: cli`.
 - The judge prompt describes any tool call with derived fields.
+- `authorize_from_agent` measures the proposal text before parsing it:
+  over 1,048,576 characters is `proposal_too_large`, and text that is not
+  a string (including `None`) or does not parse is `malformed_proposal`.
+  Both are ledgered denies with size and digest only, instead of an
+  exception.
 - The ledger key is created with O_EXCL and O_NOFOLLOW at mode 0600 in a
   0700 directory, and is refused on open if it is group- or
   world-readable, a symlink, or not 32 bytes (`ledger_key_insecure:`,
@@ -322,7 +327,8 @@ on stderr, not a refusal.
 | `action_too_large` | The action claim is over 64 KiB of UTF-8 JSON | Send a normal claim; only size and digest are ledgered |
 | `malformed_action:tool: longer than 128 characters` / `tool: not an identifier ...` | The tool name is too long or has characters outside `a-z 0-9 _ . : / -` | Rename the tool |
 | `malformed_action:unknown action fields (<n>)` / `<field>: ...` | An unknown or invalid action field (the reason names the field, not the value) | Fix the claim |
-| `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON | Send less; only size and digest are ledgered |
+| `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON, or agent proposal text over 1,048,576 characters | Send less; only size and digest are ledgered |
+| `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
 | `invalid_call:<why>` (authorize and gateway) | Arguments nested too deeply, NaN, or a non-string key | Flatten or fix the arguments |
 | `derive_failed:value_unreadable:<Type>` | A derived value cannot be read (for example `10**400`) | Send a readable value |
 | `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |
