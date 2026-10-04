@@ -75,6 +75,7 @@ QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "time
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
                "allow_same_provider_judge"}
+TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 vendors, 1 local, local yes).
 QUORUM_PROFILES = {"default", "high_assurance"}
 
@@ -167,6 +168,10 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     """Judges and quorum policy. The ``monitored_agent`` block is read by identity.load_monitored_agent."""
     if not isinstance(data, dict) or not isinstance(data.get("judges"), list) or not data["judges"]:
         raise JudgeConfigError("config must contain a non-empty 'judges' list")
+    unknown = set(data) - TOP_LEVEL_KEYS
+    if unknown:  # a typo such as "quorm:" must not silently drop the quorum block
+        raise JudgeConfigError(f"unknown top-level key(s) {sorted(map(str, unknown))}; "
+                               f"expected {sorted(TOP_LEVEL_KEYS)}")
     judges = [build_judge(j, transport) for j in data["judges"]]
     ids = [j.judge_id for j in judges]
     if len(set(ids)) != len(ids):
