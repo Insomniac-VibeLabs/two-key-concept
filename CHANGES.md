@@ -219,7 +219,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 - Start-up refuses: no judge, `timeout_seconds: null`, duplicate or empty
   judge ids, `require_local_yes` with no local judge, an unreadable judge
   credential, unknown top-level config keys, overlapping payload and field
-  paths, a TTL outside 1-300 seconds, and the in-process test agent unless
+  paths (compared case-insensitively), a TTL outside 1-300 seconds, and the in-process test agent unless
   every judge is a test double.
 - Every JSON and YAML input refuses a repeated key and JSON NaN/Infinity.
 - Ballots pair with judges by position; a ballot naming another judge
@@ -311,7 +311,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `unknown top-level key(s)` | A typo such as `quorm`, or a key other than `judges`, `quorum`, `monitored_agent` (agents.yaml: `agents`) | Fix the key |
 | `duplicate key '<k>'` | A key repeated in one JSON/YAML mapping (config, rules, constitution, `--args`) | Keep one |
 | `non-standard JSON constant` | `NaN` or `Infinity` in JSON | Use a finite number |
-| `payload path ... overlaps the field path` | A payload path equals, contains, or sits under an amount, currency, or counterparty path | Split the paths |
+| `payload path ... overlaps the field path` | A payload path equals, contains, or sits under an amount, currency, or counterparty path, ignoring case (`TO.name` vs `to.name`) | Split the paths |
 | `ttl_out_of_range:` | `ttl_seconds` not an integer from 1 to 300 | Use 1-300 |
 | `capability_key_missing:` / `capability_key_changed:` | The token key was removed or replaced after tokens were issued | Restore `<ledger>.capability/capability.pem`, or start a new ledger |
 | `capability_key_unpinned:` | The ledger has issued tokens but its last `constitution_loaded` entry pins no token key (a 0.1.12 ledger, or an edited one) | Keep the old ledger for audit and start a new one |

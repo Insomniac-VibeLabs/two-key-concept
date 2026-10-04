@@ -35,6 +35,23 @@ class Overlap(unittest.TestCase):
                                                          {"json_path": "to_name"}]))
         self.assertTrue(verify_signed(env, key.public_key()).tool_specs["pay"]["payload"])
 
+    def test_overlap_check_ignores_case(self):
+        key = generate_private_key()
+        for path in ("TO.name", "To", "to.NAME.first", "META", "Meta.Amt", "CUR", "Cur.code"):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ConstitutionError, "overlaps the field path"):
+                    sign_constitution("p", RULES, key, spec([{"json_path": path}]))
+
+    def test_a_signed_case_variant_overlap_does_not_load(self):
+        from two_key.canonical import canonical_bytes
+        from two_key.keys import sign
+        key = generate_private_key()
+        env = sign_constitution("p", RULES, key, spec([{"json_path": "memo"}]))
+        env["signed"]["tool_specs"]["pay"]["payload"] = [{"json_path": "TO.name", "shape": None, "max_length": None}]
+        env["signature"] = sign(key, canonical_bytes(env["signed"]))
+        with self.assertRaisesRegex(ConstitutionError, "overlaps the field path"):
+            verify_signed(env, key.public_key())
+
     def test_a_signed_overlap_does_not_load(self):
         from two_key.canonical import canonical_bytes
         from two_key.keys import sign

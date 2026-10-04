@@ -51,7 +51,8 @@ key. The ledger records the names of dropped keys (`dropped_keys`), never
 their values. Set it true to deny that key (`unmapped_field`). `payload`
 names a value that may be present and is not interpreted. A payload path
 may not equal, contain, or sit under an amount, currency, or counterparty
-path; such a spec does not load. With no `shape`, that
+path, compared without regard to case (`TO.name` overlaps `to.name`);
+such a spec does not load. With no `shape`, that
 path covers the value and its children. `shape` is optional: `string`,
 `number`, or `list` (a list of strings). `max_length` bounds a string or
 a list. A nested value, a boolean, or a too-long value is

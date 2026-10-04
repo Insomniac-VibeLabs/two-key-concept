@@ -148,7 +148,8 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
                 raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
             canonical = sorted({item.strip().casefold() for item in allow})
             party_out.append({"json_path": path, "allow": canonical})
-        # A payload path is copied unread. It must not cover, or sit under, a path Path A reads.
+        # A payload path is copied unread. It must not cover, or sit under, a path Path A reads,
+        # compared without regard to case.
         control_paths = [p for p in ((amount_out or {}).get("json_path"), (amount_out or {}).get("currency_path"))
                          if p] + [entry["json_path"] for entry in party_out]
         payload = spec.get("payload", [])
@@ -163,8 +164,11 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
             if extra:
                 raise ConstitutionError(f"{where}: unknown key(s) {sorted(extra)}")
             path = take(_json_path(entry["json_path"], where), where)
+            # Casefolded: a tool that reads keys case-insensitively must not see `TO.name` as payload.
+            folded = path.casefold()
             for control in control_paths:
-                if path == control or control.startswith(path + ".") or path.startswith(control + "."):
+                c = control.casefold()
+                if folded == c or c.startswith(folded + ".") or folded.startswith(c + "."):
                     raise ConstitutionError(f"{where}: payload path {path!r} overlaps the field path {control!r}")
             shape = entry.get("shape")
             if shape is not None and shape not in ("string", "number", "list"):
