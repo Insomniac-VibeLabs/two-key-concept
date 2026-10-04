@@ -9,24 +9,47 @@ flag is a declaration, not an attestation, and ``weights_sha256`` is
 recorded, not verified. See DESIGN_OPTIONS.md section 7 in
 Insomniac-VibeLabs/two-key, not in this repository.
 
+A model whose name ends in ``:cloud`` or ``-cloud`` (for example
+``gpt-oss:120b-cloud``) is an Ollama cloud model: the local daemon forwards
+the prompt to ollama.com. Such a judge is cloud and never local, even on
+127.0.0.1.
+
 ``keep_alive`` asks Ollama not to unload the weights between ballots. It does
 not change the ballot.
 """
 
 from __future__ import annotations
 
+import re
+
 from ..netloc import host_is_local, url_host
 from .llm import LLMJudge
+
+_CLOUD_MODEL = re.compile(r"[:-]cloud$")
+
+
+def is_ollama_cloud_model(model) -> bool:
+    return isinstance(model, str) and bool(_CLOUD_MODEL.search(model.strip().lower()))
 
 
 class OllamaJudge(LLMJudge):
     default_auth_header = "none"
 
     def __init__(self, *a, **kw):
-        kw.setdefault("base_url", "http://localhost:11434")
+        if len(a) < 4:
+            kw.setdefault("base_url", "http://localhost:11434")
+        base_url = a[3] if len(a) > 3 else kw["base_url"]
+        model = kw.get("model", a[2] if len(a) > 2 else None)
         if kw.get("local_weights") is None:
-            kw["local_weights"] = host_is_local(url_host(kw["base_url"]))
+            kw["local_weights"] = host_is_local(url_host(base_url)) and not is_ollama_cloud_model(model)
         super().__init__(*a, **kw)
+
+    def is_cloud(self) -> bool:
+        """An Ollama cloud model runs at ollama.com, whatever the daemon's host."""
+        return is_ollama_cloud_model(self.model) or super().is_cloud()
+
+    def is_local(self) -> bool:
+        return not is_ollama_cloud_model(self.model) and super().is_local()
 
     def _request(self, system: str, user: str):
         body = {

@@ -93,5 +93,27 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
         self.assertEqual((q.passed, q.reason), (False, "local_judge_required"))
 
 
+class OllamaCloudModels(unittest.TestCase):
+    """Re-review: an Ollama model named *:cloud or *-cloud runs at ollama.com, so it is never local."""
+
+    def test_cloud_model_on_loopback_is_cloud_and_not_local(self):
+        for model in ("gpt-oss:120b-cloud", "deepseek-v3.1:671b-cloud", "qwen3-coder:cloud", "GPT-OSS:20B-CLOUD"):
+            for kw in ({}, {"local_weights": True}):
+                j = OllamaJudge("o", "ollama", model, base_url="http://127.0.0.1:11434", **kw)
+                self.assertTrue(j.is_cloud(), model)
+                self.assertFalse(j.is_local(), (model, kw))
+        positional = OllamaJudge("o", "ollama", "gpt-oss:120b-cloud", "http://localhost:11434")
+        self.assertFalse(positional.is_local())
+        plain = OllamaJudge("p", "ollama", "llama3", base_url="http://127.0.0.1:11434")
+        self.assertTrue(plain.is_local())
+        self.assertFalse(plain.is_cloud())
+
+    def test_cloud_model_does_not_meet_high_assurance(self):
+        o = OllamaJudge("o", "ollama", "gpt-oss:120b-cloud", base_url="http://127.0.0.1:11434")
+        with self.assertRaisesRegex(QuorumConfigError, "insufficient_local_judges|require_local_yes_without_local_judge"):
+            check_judge_set([o, FixedJudge("b", "yes", provider="openai", vendor="openai")],
+                            QuorumPolicy.high_assurance())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
