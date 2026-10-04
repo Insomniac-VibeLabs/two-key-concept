@@ -38,6 +38,7 @@ from ..action import Action
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge
 from .credentials import CredentialError, CredentialProvider, NoCredential
+from ..netloc import host_is_local, host_is_loopback, url_host
 
 Transport = Callable[[str, dict, dict, float], dict]
 
@@ -188,8 +189,12 @@ class LLMJudge(Judge):
         return self.score_bound(constitution_text, action, proposal, None)
 
     def is_cloud(self) -> bool:
-        host = urlparse(self.base_url).hostname
-        return not bool(self.local_weights) and host not in LOOPBACK
+        """True unless the endpoint host is loopback. ``local_weights`` does not change this."""
+        return not host_is_loopback(url_host(self.base_url))
+
+    def is_local(self) -> bool:
+        """Counts as a local judge only if declared ``local_weights`` AND the host is loopback or private."""
+        return bool(self.local_weights) and host_is_local(url_host(self.base_url))
 
     def score_bound(self, constitution_text: str, action: Action, proposal: str, binding,
                     agent_session: str | None = None) -> Ballot:

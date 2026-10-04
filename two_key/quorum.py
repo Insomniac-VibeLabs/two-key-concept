@@ -215,7 +215,9 @@ def _ballot_record(b: Ballot, binding: Mapping[str, str] | None = None) -> dict:
 
 
 def _local(j) -> bool:
-    return bool(getattr(j, "local_weights", False))
+    """Effective locality (Judge.is_local), not the declared ``local_weights`` flag."""
+    is_local = getattr(j, "is_local", None)
+    return bool(is_local()) if callable(is_local) else False
 
 
 def _vendor(j) -> str:

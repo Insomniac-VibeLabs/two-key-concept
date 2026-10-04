@@ -10,7 +10,9 @@ Quorum protocol specifics (the section-4 profile). The prior-art memo is
 not in this repository. The decision record is CONCEPTION_NOTES.md Entry 2
 in Insomniac-VibeLabs/two-key:
 * ``vendor`` and ``local_weights`` describe the judge so that the judge set
-  can be checked for vendor heterogeneity (quorum.check_judge_set);
+  can be checked for vendor heterogeneity (quorum.check_judge_set). Whether
+  a judge is local is ``is_local()``: the declared flag AND a loopback or
+  private endpoint host. The flag alone never makes a judge local;
 * ballots are bound to H(action record) and H(constitution). The convenor
   passes a ``binding`` mapping to ``score_bound``. A judge that reports hashes
   (echo) is checked against it; the convenor stamps the hashes on every ballot.
@@ -79,9 +81,19 @@ class Judge(abc.ABC):
         """Score with the ballot binding available. The default ignores it (the convenor stamps it)."""
         return self.score(constitution_text, action, proposal)
 
+    def is_local(self) -> bool:
+        """Whether this judge counts toward ``min_local_judges`` and ``require_local_yes``.
+
+        A self-declared flag never relaxes a check: a network judge must also have a
+        loopback or private host (LLMJudge.is_local). Only in-process test doubles
+        are taken at their ``local_weights`` word; any other judge without an
+        endpoint is not local.
+        """
+        return bool(getattr(self, "is_test_double", False)) and bool(self.local_weights)
+
     def describe(self) -> dict:
         d = {"id": self.judge_id, "provider": self.provider, "vendor": self.vendor,
-             "local_weights": bool(self.local_weights)}
+             "local_weights": bool(self.local_weights), "local": bool(self.is_local())}
         if self.weights_sha256:
             d["weights_sha256"] = self.weights_sha256
         return d
