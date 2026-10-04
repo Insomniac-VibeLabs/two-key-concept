@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass, fields, replace
 from typing import Mapping, Sequence
 
@@ -237,7 +238,10 @@ def _local(j) -> bool:
 
 
 def _vendor(j) -> str:
-    return str(getattr(j, "vendor", None) or getattr(j, "provider", "?"))
+    """The vendor key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
+    "openai " are one vendor, not two."""
+    raw = str(getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
+    return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
 
 
 def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | None:
