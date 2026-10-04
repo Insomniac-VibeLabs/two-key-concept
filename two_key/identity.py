@@ -20,17 +20,28 @@ Each judge and agent is resolved to:
 - ``model``: the model id, normalized (case, router prefixes such as
   ``openai/`` or Bedrock's ``anthropic.``, dated snapshot suffixes such as
   ``-2024-08-06`` or ``-20241022``, ``-latest``, Vertex ``@`` versions,
-  Bedrock ``-v2:0``, Ollama ``:latest``, and a few known aliases).
+  Bedrock ``-v2:0``, Ollama ``:latest``, and a few known aliases). The id is
+  NFKC-normalized first, Unicode dashes are folded to ``-``, and zero-width
+  characters are removed, so ``gpt‐4o`` and ``ｇｐｔ-4o`` equal ``gpt-4o``.
 - ``upstream``: the normalized endpoint that really serves the model, as
   ``host:port``. A direct provider host or an inference host is its own
   ``host:port``. A recognized router (OpenRouter, Azure OpenAI and Azure AI,
   Bedrock, Vertex, Cloudflare AI Gateway, Portkey) or a ``provider/model`` id
   on any other host (LiteLLM style) resolves to the model maker's API host
   (``api.openai.com:443``), or ``maker:<name>`` for a maker without one. A
-  loopback or private host is itself; a ``-cloud`` Ollama model adds
-  ``ollama.com:443``. An unrecognized host or router that cannot be resolved
-  from the model id stays **unresolved**, and unresolved is treated as a
-  match.
+  loopback or private host is itself when the model id names a known maker;
+  if that maker only serves its models from its own API (GPT, Claude,
+  Gemini, Grok), the host is a proxy and the maker's API host is added. A
+  ``-cloud`` Ollama model adds ``ollama.com:443``. A loopback or private
+  host whose model names no known maker, and an unrecognized host or router
+  that cannot be resolved from the model id, stay **unresolved**, and
+  unresolved is treated as a match, unless the operator declares
+  ``upstream:`` (a host, URL, or maker name) for that judge or agent.
+- ``resolved_by``: ``endpoint`` (the host, or a router plus the model's
+  family), ``declared_upstream`` (the operator's ``upstream:``, recorded in
+  the ledger), or ``model_prefix`` (a ``maker/model`` id on a host Two-Key
+  does not know). Both of the last two are operator-attested and not
+  verified: Two-Key cannot see where a proxy really forwards.
 - ``tenant``: account, org, project, or deployment ids. Declared with the
   optional ``tenant`` key (a string or a list) on the agent or a judge, or
   derived from the URL: ``azure:<resource>`` for Azure OpenAI and Azure AI,
@@ -69,6 +80,7 @@ import hashlib
 import os
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -78,7 +90,15 @@ from .netloc import host_is_local
 FINGERPRINT_DOMAIN = b"two-key/credential-fingerprint/1\x00"
 NO_CREDENTIAL = "none"
 IN_PROCESS = "in-process"
-AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "tenant"}
+AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "tenant", "upstream"}
+RESOLVED_BY = ("endpoint", "declared_upstream", "model_prefix")
+_DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2043\ufe58\ufe63\uff0d"), "-")
+_DASHES.update(dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None))
+
+
+def fold_model_text(model: str) -> str:
+    """NFKC, Unicode dashes to '-', zero-width characters removed, lower case."""
+    return unicodedata.normalize("NFKC", model or "").translate(_DASHES).strip().lower()
 
 
 class IdentityError(ValueError):
@@ -135,7 +155,7 @@ _SUFFIXES = [
 
 def _bare(model: str) -> tuple[str, str | None]:
     """(model id without router/maker prefixes, maker named by a prefix if any)."""
-    m = (model or "").strip().lower()
+    m = fold_model_text(model)
     maker = None
     m = re.sub(r"^projects/[^/]+/locations/[^/]+/", "", m)
     pub = re.match(r"^publishers/([^/]+)/models/(.+)$", m)
@@ -235,32 +255,71 @@ def _hostport(host: str) -> str:
     return host if host.startswith("maker:") else f"{host}:443"
 
 
-def resolve_upstreams(base_url: str, model: str) -> tuple[frozenset[str], str | None]:
-    """(normalized serving endpoints as host:port, router name). An empty set means unresolved."""
+# Makers whose models are served only from the maker's own API (or a cloud reseller): a loopback or
+# private host serving one of these is a proxy, so the maker's API host is added.
+_CLOSED = re.compile(r"^(gpt-(?!oss)|gpt\d|chatgpt|o[1-9]|text-davinci|claude|gemini|palm|text-bison|chat-bison|grok)")
+
+
+def declared_upstream(value: Any, who: str) -> str | None:
+    """Normalize an operator's ``upstream:`` to host:port, or maker:<name>."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip() or value.startswith("REPLACE_"):
+        raise IdentityError(f"{who}: upstream must be a host, a URL, or a maker name")
+    v = value.strip().lower()
+    if "://" in v:
+        return endpoint_key(v)
+    if v.startswith("maker:"):
+        return v
+    if v in _PREFIX_MAKERS:
+        return _hostport(_maker_upstream(_PREFIX_MAKERS[v]))
+    host, _, port = v.partition(":")
+    if not host or (port and not port.isdigit()):
+        raise IdentityError(f"{who}: upstream {value!r} is not a host, a URL, or a maker name")
+    return f"{host}:{port or 443}"
+
+
+def resolve_upstreams(base_url: str, model: str, declared: str | None = None) -> tuple[frozenset[str], str | None, str | None]:
+    """(normalized serving endpoints as host:port, router name, resolved_by). An empty set means unresolved."""
     u = urlparse(base_url or "")
     host = (u.hostname or "").lower().rstrip(".")
     maker = model_maker(model)
     up: set[str] = set()
+    by = "endpoint"
     if u.scheme == IN_PROCESS:
-        return frozenset({f"{IN_PROCESS}:{host}"}), None
+        return frozenset({f"{IN_PROCESS}:{host}"}), None, by
     router = _router(host)
-    _, prefixed = _bare(model)
+    bare, prefixed = _bare(model)
     if host in _DIRECT_HOSTS:
         up.add(endpoint_key(base_url))
     elif router == "azure-openai":
         up.add(_hostport(_maker_upstream("openai")))  # deployment names are free text; the maker is OpenAI
     elif router is not None:
-        if maker:
+        if maker:                                # the router itself routes by this id
             up.add(_hostport(_maker_upstream(maker)))
-    elif host in _INFERENCE_HOSTS or host_is_local(host):
+    elif host in _INFERENCE_HOSTS:
         up.add(endpoint_key(base_url))
-        if re.search(r"[:-]cloud$", (model or "").strip().lower()):
+    elif host_is_local(host):
+        if maker:                                # a local host with no known maker stays unresolved
+            up.add(endpoint_key(base_url))
+            by = "model_prefix" if prefixed else "endpoint"
+            if _CLOSED.match(bare):
+                up.add(_hostport(_maker_upstream(maker)))   # these weights are not local: a proxy
+        if re.search(r"[:-]cloud$", fold_model_text(model)):
+            up.add(endpoint_key(base_url))
             up.add("ollama.com:443")             # an Ollama cloud model, proxied by the local daemon
     else:
         if prefixed:                             # LiteLLM-style provider/model id on an unrecognized host
             up.add(_hostport(_maker_upstream(prefixed)))
+            by = "model_prefix"
         # otherwise unresolved: an unrecognized host may be a router to anything
-    return frozenset(up), router
+    if declared:
+        if not up:
+            by = "declared_upstream"             # resolved only because the operator said so
+        up.add(declared)                         # the operator's statement; added, never a replacement
+    if not up:
+        by = None
+    return frozenset(up), router, by
 
 
 def derive_tenants(base_url: str, model: str = "") -> frozenset[str]:
@@ -306,6 +365,8 @@ class ResolvedIdentity:
     credentials: frozenset[str] = field(default_factory=frozenset)   # fingerprints; may include "none"
     provider_label: str | None = None
     tenants: frozenset[str] = field(default_factory=frozenset)
+    resolved_by: str | None = "endpoint"
+    upstream_declared: str | None = None
 
     @property
     def unresolved(self) -> bool:
@@ -316,15 +377,19 @@ class ResolvedIdentity:
                 "upstream": sorted(self.upstreams) or None, "router": self.router, "endpoint": self.endpoint,
                 "credential_fingerprint": sorted(self.credentials) or None,
                 "tenant": sorted(self.tenants) or None,
+                "resolved_by": self.resolved_by if not self.unresolved else None,
+                "upstream_declared": self.upstream_declared,
                 "provider_label": self.provider_label, "resolved": not self.unresolved}
 
 
 def _identity(role: str, ident: str, model: str, base_url: str, credentials: Iterable[str],
-              provider_label: str | None, tenant: Any = None) -> ResolvedIdentity:
-    upstreams, router = resolve_upstreams(base_url, model)
-    tenants = derive_tenants(base_url, model) | declared_tenants(tenant, f"{role} {ident!r}")
+              provider_label: str | None, tenant: Any = None, upstream: Any = None) -> ResolvedIdentity:
+    who = f"{role} {ident!r}"
+    declared = declared_upstream(upstream, who)
+    upstreams, router, by = resolve_upstreams(base_url, model, declared)
+    tenants = derive_tenants(base_url, model) | declared_tenants(tenant, who)
     return ResolvedIdentity(role, ident, model, normalize_model(model), endpoint_key(base_url), upstreams,
-                            router, frozenset(credentials), provider_label, tenants)
+                            router, frozenset(credentials), provider_label, tenants, by, declared)
 
 
 def _secret_from(credential: Any) -> str:
@@ -357,7 +422,7 @@ def judge_identity(judge: Any) -> ResolvedIdentity:
     except IdentityError as e:
         raise IdentityError(f"judge {jid!r}: {e}") from None
     return _identity("judge", jid, model, base_url, {fp}, getattr(judge, "provider", None),
-                     getattr(judge, "tenant", None))
+                     getattr(judge, "tenant", None), getattr(judge, "upstream", None))
 
 
 @dataclass(frozen=True)
@@ -371,6 +436,7 @@ class AgentDeclaration:
     credential: str | None = None        # only "none", for a keyless loopback agent
     id: str = "monitored-agent"
     tenant: Any = None                   # optional account/org/project/deployment id, or a list
+    upstream: str | None = None          # optional: where a proxy really forwards (operator-attested)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "AgentDeclaration":
@@ -381,7 +447,8 @@ class AgentDeclaration:
             raise IdentityError(f"monitored_agent: unknown key(s) {sorted(extra)}")
         return cls(model=data.get("model"), provider=data.get("provider"), base_url=data.get("base_url"),
                    credential_env=data.get("credential_env"), credential=data.get("credential"),
-                   id=data.get("id") or "monitored-agent", tenant=data.get("tenant"))
+                   id=data.get("id") or "monitored-agent", tenant=data.get("tenant"),
+                   upstream=data.get("upstream"))
 
     def validate(self, *, allow_in_process: bool = False) -> None:
         for name in ("model", "provider", "base_url"):
@@ -413,11 +480,13 @@ class AgentDeclaration:
             fps.add(credential_fingerprint(value))
         else:
             fps.add(NO_CREDENTIAL)
-        return _identity("agent", self.id, self.model, self.base_url, fps, self.provider, self.tenant)
+        return _identity("agent", self.id, self.model, self.base_url, fps, self.provider, self.tenant,
+                         self.upstream)
 
     def to_record(self) -> dict:
         return {"id": self.id, "model": self.model, "provider": self.provider, "base_url": self.base_url,
-                "credential_env": self.credential_env, "credential": self.credential, "tenant": self.tenant}
+                "credential_env": self.credential_env, "credential": self.credential, "tenant": self.tenant,
+                "upstream": self.upstream}
 
 
 def configured_agent_identity(agent: Any) -> ResolvedIdentity:
@@ -429,7 +498,8 @@ def configured_agent_identity(agent: Any) -> ResolvedIdentity:
         if agent.is_cloud():
             raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
     return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {credential_fingerprint(secret)},
-                     getattr(agent, "provider", None), getattr(agent, "tenant", None))
+                     getattr(agent, "provider", None), getattr(agent, "tenant", None),
+                     getattr(agent, "upstream", None))
 
 
 @dataclass(frozen=True)
@@ -466,7 +536,8 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> tuple[str | Non
         return f"{who}: same tenant {sorted(tenants)[0]!r}", None
     if agent.unresolved or judge.unresolved:
         side = "agent" if agent.unresolved else "judge"
-        return f"{who}: {side} upstream unresolved (unrecognized router or host); treated as a match", None
+        return (f"{who}: {side} upstream unresolved (unrecognized router or host, or a local endpoint whose "
+                f"model names no known maker); treated as a match (declare upstream: to name it)"), None
     common = agent.upstreams & judge.upstreams
     if agent.model == judge.model and common:
         return f"{who}: same model {judge.model!r} on the same endpoint {sorted(common)[0]}", None

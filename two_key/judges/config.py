@@ -24,6 +24,7 @@ Format (see examples/judges.yaml):
       base_url: https://api.openai.com/v1
       credential_env: OPENAI_AGENT_API_KEY   # or credential: none for a keyless loopback agent
       # tenant: org-123          # optional account/org/project/deployment id (string or list)
+      # upstream: api.openai.com # required for a loopback/private proxy whose model names no known maker
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
@@ -69,7 +70,7 @@ DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anth
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
               "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
               "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort",
-              "tenant"}
+              "tenant", "upstream"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
@@ -152,6 +153,13 @@ def build_judge(spec: dict, transport=None) -> Judge:
         except IdentityError as e:
             raise JudgeConfigError(str(e)) from None
         judge.tenant = spec["tenant"]  # account/org/project/deployment id; compared with the agent's
+    if "upstream" in spec:
+        from ..identity import IdentityError, declared_upstream
+        try:
+            declared_upstream(spec["upstream"], f"judge {spec.get('id')!r}")
+        except IdentityError as e:
+            raise JudgeConfigError(str(e)) from None
+        judge.upstream = spec["upstream"]  # where a proxy forwards; operator-attested, recorded
     return judge
 
 

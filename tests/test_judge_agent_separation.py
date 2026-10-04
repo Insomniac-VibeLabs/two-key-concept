@@ -88,7 +88,7 @@ class Normalization(unittest.TestCase):
                      {"api.anthropic.com:443"},
                  ("https://us-central1-aiplatform.googleapis.com/v1", "gemini-1.5-pro"):
                      {"generativelanguage.googleapis.com:443"},
-                 ("http://localhost:4000", "openai/gpt-4o"): {"localhost:4000"},
+                 ("http://localhost:4000", "openai/gpt-4o"): {"localhost:4000", "api.openai.com:443"},
                  ("https://llm.corp.example/v1", "anthropic/claude-3-5-sonnet"): {"api.anthropic.com:443"}}
         for (url, model), want in cases.items():
             self.assertEqual(set(resolve_upstreams(url, model)[0]), want, (url, model))
@@ -240,6 +240,59 @@ class SameProvider(Env):
         # It never relaxes a refusal.
         self.refused([oai("same", "gpt-4o", "https://api.openai.com/v1", "k2")], "same model", agent=agent,
                      quorum=QuorumPolicy(required_yes=1, allow_same_provider_judge=True))
+
+
+class ResolutionRereview(Env):
+    """Re-review: a local proxy is not trusted to be local; unknown is unresolved; ids are NFKC-folded."""
+
+    def test_local_endpoint_without_a_known_maker_is_unresolved(self):
+        for url in ("http://127.0.0.1:4000", "http://[::1]:4000", "http://10.0.0.5:4000"):
+            j = OpenAICompatibleJudge("p", "x", "judge-alias", url, None, allow_insecure_http=True)
+            self.refused([j], "judge upstream unresolved .*declare upstream")
+        agent = {"id": "proxy-agent", "model": "agent-alias", "provider": "x", "base_url": "http://127.0.0.1:4000",
+                 "credential": "none"}
+        self.refused([claude()], "agent upstream unresolved", agent=agent)
+
+    def test_declared_upstream_resolves_and_is_ledgered(self):
+        j = OpenAICompatibleJudge("p", "x", "judge-alias", "http://127.0.0.1:4000", None, allow_insecure_http=True)
+        j.upstream = "api.anthropic.com"
+        tk = self.started([j])
+        rec = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body["judge_agent_separation"]
+        judge = rec["judges"][0]
+        self.assertEqual((judge["resolved_by"], judge["upstream_declared"], judge["upstream"]),
+                         ("declared_upstream", "api.anthropic.com:443", ["api.anthropic.com:443"]))
+        agent = {"id": "proxy-agent", "model": "agent-alias", "provider": "x", "base_url": "http://127.0.0.1:4000",
+                 "credential": "none", "upstream": "https://api.x.ai/v1"}
+        tk = self.started([claude()], agent=agent)
+        self.assertEqual(tk.separation.agents[0].resolved_by, "declared_upstream")
+
+    def test_local_proxy_for_a_closed_model_resolves_to_the_maker(self):
+        agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1")
+        j = OpenAICompatibleJudge("p", "x", "gpt-4o", "http://127.0.0.1:4000", None, allow_insecure_http=True)
+        self.refused([j], "same model 'gpt4o' on the same endpoint api.openai.com:443", agent=agent)
+
+    def test_resolved_by(self):
+        self.assertEqual(resolve_upstreams("https://api.openai.com/v1", "gpt-4o")[2], "endpoint")
+        self.assertEqual(resolve_upstreams("https://openrouter.ai/api/v1", "openai/gpt-4o")[2], "endpoint")
+        self.assertEqual(resolve_upstreams("https://llm.corp.example/v1", "openai/gpt-4o")[2], "model_prefix")
+        self.assertEqual(resolve_upstreams("http://localhost:4000", "openai/gpt-4o")[2], "model_prefix")
+        self.assertIsNone(resolve_upstreams("http://localhost:4000", "alias")[2])
+        self.assertEqual(resolve_upstreams("http://localhost:4000", "alias", "maker:meta")[2], "declared_upstream")
+
+    def test_unicode_model_ids_fold(self):
+        for m in ("gpt\u20104o", "\uff47\uff50\uff54-4o", "gpt\u200b-4o", "GPT\u22124o"):
+            self.assertEqual(normalize_model(m), normalize_model("gpt-4o"), repr(m))
+        agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1")
+        self.refused([oai("u", "gpt\u20104o", "https://api.openai.com/v1", "jk")], "same model", agent=agent)
+
+    def test_upstream_yaml_key(self):
+        from two_key.judges.config import JudgeConfigError, load_config
+        judges, _ = load_config({"judges": [{"id": "l", "type": "openai_compatible", "model": "alias",
+                                             "base_url": "http://localhost:4000", "upstream": "api.openai.com"}],
+                                 "quorum": {"required_yes": 1}})
+        self.assertEqual(judges[0].upstream, "api.openai.com")
+        with self.assertRaisesRegex(JudgeConfigError, "upstream must be"):
+            load_config({"judges": [{"id": "l", "type": "ollama", "model": "m", "upstream": ""}]})
 
 
 class Accepted(Env):
