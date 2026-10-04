@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          args_hash, capability_key_fingerprint)
-from .derive import DeriveError, blocked_from_rules, derive, dropped_keys, form_for, forms_match, project_arguments
+from .derive import DeriveError, args_too_large, blocked_from_rules, derive, dropped_keys, form_for, forms_match, project_arguments
 from .ledger import LedgerError
 
 
@@ -70,6 +70,8 @@ class ToolGateway:
             return GatewayResult(False, str(e))
         if any(name not in payload for name in _BOUND_FIELDS):
             return GatewayResult(False, "malformed_token")  # a signed token without a binding field
+        if args_too_large(arguments):
+            return GatewayResult(False, "args_too_large")  # before hashing, deriving, or ledgering
         if payload["tool"] != tool:
             return GatewayResult(False, "tool_mismatch")
         if payload["args_hash"] != args_hash(arguments):

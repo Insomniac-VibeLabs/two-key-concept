@@ -19,12 +19,48 @@ value, including its children, is copied unread.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .action import DATA_CLASSES, MAX_AMOUNT_USD
+
+
+# Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their JSON.
+# Checked before anything is derived, judged, hashed for a token, or ledgered.
+MAX_ARGS_BYTES = 256 * 1024
+
+
+def _json_bytes(value: Any) -> bytes | None:
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str).encode("utf-8", "surrogatepass")
+    except (RecursionError, ValueError, TypeError):
+        try:
+            return repr(value).encode("utf-8", "surrogatepass")
+        except (RecursionError, ValueError):
+            return None  # cannot even be measured: treated as too large
+
+
+def args_size(value: Any) -> int:
+    """UTF-8 bytes of ``value`` as JSON (``repr`` if that fails). -1 if it cannot be measured."""
+    data = _json_bytes(value)
+    return -1 if data is None else len(data)
+
+
+def args_too_large(value: Any) -> bool:
+    size = args_size(value)
+    return size < 0 or size > MAX_ARGS_BYTES
+
+
+def size_record(value: Any, name: str) -> dict:
+    """What the ledger keeps for an oversized value: its size and digest, never the bytes."""
+    data = _json_bytes(value)
+    return {f"{name}_size": -1 if data is None else len(data),
+            f"{name}_digest": None if data is None else "sha256:" + hashlib.sha256(data).hexdigest(),
+            f"{name}_omitted": True}
 
 
 class DeriveError(ValueError):

@@ -23,7 +23,8 @@ from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation,
                        configured_agent_identity, judge_identity)
-from .derive import DeriveError, blocked_from_rules, derive, disagreement, disallowed_party, dropped_keys, form_for
+from .derive import (DeriveError, args_too_large, blocked_from_rules, derive, disagreement, disallowed_party,
+                     dropped_keys, form_for, size_record)
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene
@@ -194,6 +195,11 @@ class TwoKey:
             normalized = normalize_action(action)
         except ActionValidationError as e:
             return self._deny(f"malformed_action:{e}", agent, None, None)
+        # Before anything is derived, judged, or ledgered: only the size and digest are kept.
+        if args_too_large(arguments):
+            return self._deny("args_too_large", agent, None, None, size_record(arguments, "tool_args"))
+        if args_too_large(proposal):
+            return self._deny("proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
@@ -307,11 +313,11 @@ class TwoKey:
         self.ledger.append("revocation", {"reason": reason})
         self.ledger.checkpoint()
 
-    def _deny(self, reason: str, agent, path_a, path_b) -> Decision:
+    def _deny(self, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
         try:
             self.ledger.append("decision", {"allowed": False, "reason": reason, "agent": agent,
                                             "origin": getattr(self, "_origin", "library"),
-                                            **self._decision_context})
+                                            **(extra or {}), **self._decision_context})
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
             print(f"two-key: could not record deny decision {reason!r}: {type(e).__name__}: {e}"[:500],
