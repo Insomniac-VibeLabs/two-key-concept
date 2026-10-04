@@ -16,13 +16,14 @@ Format (see examples/judges.yaml):
       ballot_binding: stamp            # stamp | echo
       require_path_a_first: false      # stored, not a skip
       tool_args_on_derive_deny: false # true sends argument bytes after a derive deny
-      allow_same_provider_judge: false # true accepts a judge on the agent's host with another model (logged)
+      # allow_same_provider_judge: deprecated, no effect (the same provider is allowed)
     monitored_agent:             # required; read by identity.load_monitored_agent_file
       id: my-agent
       model: REPLACE_WITH_MODEL
       provider: openai          # a label; recorded, never compared
       base_url: https://api.openai.com/v1
       credential_env: OPENAI_AGENT_API_KEY   # or credential: none for a keyless loopback agent
+      # tenant: org-123          # optional account/org/project/deployment id (string or list)
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
@@ -67,7 +68,8 @@ DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anth
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
               "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
-              "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort"}
+              "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort",
+              "tenant"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
@@ -140,9 +142,17 @@ def build_judge(spec: dict, transport=None) -> Judge:
     if t == "openai_compatible" and "base_url" not in kw:
         raise JudgeConfigError(f"judge {spec.get('id')!r}: openai_compatible requires base_url")
     try:
-        return ADAPTERS[t](**kw)
+        judge = ADAPTERS[t](**kw)
     except (TypeError, ValueError) as e:
         raise JudgeConfigError(f"judge {spec.get('id')!r}: {e}") from e
+    if "tenant" in spec:
+        from ..identity import IdentityError, declared_tenants
+        try:
+            declared_tenants(spec["tenant"], f"judge {spec.get('id')!r}")
+        except IdentityError as e:
+            raise JudgeConfigError(str(e)) from None
+        judge.tenant = spec["tenant"]  # account/org/project/deployment id; compared with the agent's
+    return judge
 
 
 def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:

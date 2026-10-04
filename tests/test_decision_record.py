@@ -34,7 +34,7 @@ class DecisionRecord(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             env = sign_constitution("Searching is fine.", RULES, key, SPECS)
-            policy = QuorumPolicy(required_yes=1, allow_same_provider_judge=True)
+            policy = QuorumPolicy(required_yes=1, tool_args_on_derive_deny=True)
             tk = TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), [judge],
                         private_key=key, quorum=policy, monitored_agent=AGENT)
             allowed = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, {}, "s",
@@ -46,7 +46,7 @@ class DecisionRecord(unittest.TestCase):
             self.assertTrue(malformed.reason.startswith("malformed_action"))
             loaded = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body
             self.assertEqual(loaded["quorum_policy"], policy.to_record())
-            self.assertTrue(loaded["quorum_policy"]["allow_same_provider_judge"])
+            self.assertTrue(loaded["quorum_policy"]["tool_args_on_derive_deny"])
             decisions = [e.body for e in tk.ledger.entries if e.kind == "decision"]
             self.assertEqual(len(decisions), 3)
             for d in decisions:
@@ -55,9 +55,9 @@ class DecisionRecord(unittest.TestCase):
                 self.assertEqual(j["id"], "claude")
                 self.assertEqual(j["model"], normalize_model("claude-3-haiku"))
                 self.assertEqual(j["model_declared"], "claude-3-haiku-20240307")
-                self.assertEqual(j["upstream"], ["api.anthropic.com"])
+                self.assertEqual(j["upstream"], ["api.anthropic.com:443"])
                 self.assertEqual(j["credential_fingerprint"], [credential_fingerprint("judge-key")])
-                self.assertEqual(d["agents"][0]["upstream"], ["api.x.ai"])
+                self.assertEqual(d["agents"][0]["upstream"], ["api.x.ai:443"])
             text = json.dumps([e.body for e in tk.ledger.entries])
             self.assertNotIn('"judge-key"', text)
             self.assertNotIn("agent-secret", text)

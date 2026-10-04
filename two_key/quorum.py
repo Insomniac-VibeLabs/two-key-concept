@@ -96,8 +96,8 @@ class QuorumPolicy:
     require_path_a_first: bool = False          # stored, not a skip
     require_local_yes: bool = False             # a local judge in the set must itself vote yes
                                                 # (a config error if no judge is local)
-    # Judge != monitored agent (identity.py): a judge on the agent's upstream host or endpoint with a
-    # different model is refused unless this is set. Using it is written to the ledger.
+    # Deprecated, no effect: the same provider with a different model is allowed (identity.py).
+    # Still accepted and recorded so older configurations load.
     allow_same_provider_judge: bool = False
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
