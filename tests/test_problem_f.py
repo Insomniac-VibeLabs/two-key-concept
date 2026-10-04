@@ -18,6 +18,13 @@ from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
 
+try:
+    import yaml  # noqa: F401  (PyYAML is the optional [yaml] extra)
+    HAVE_YAML = True
+except ImportError:
+    HAVE_YAML = False
+NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key[yaml])")
+
 
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
 RULES = [
@@ -201,6 +208,7 @@ class ProblemFTests(unittest.TestCase):
         with self.assertRaises(ConstitutionError):
             sign_constitution(PROSE, RULES, key, {})
 
+    @NEEDS_YAML
     def test_example_rules_file_enforces_specs(self):
         root = Path(__file__).resolve().parents[1]
         _prose, rules, specs = load_unsigned(root / "examples" / "constitution.md",
