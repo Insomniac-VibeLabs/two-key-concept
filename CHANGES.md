@@ -247,6 +247,12 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   by group or others is refused; `--ttl-seconds` is 1-300; decisions record
   `origin: cli`.
 - The judge prompt describes any tool call with derived fields.
+- The ledger key is created with O_EXCL and O_NOFOLLOW at mode 0600 in a
+  0700 directory, and is refused on open if it is group- or
+  world-readable, a symlink, or not 32 bytes (`ledger_key_insecure:`,
+  `ledger_key_unreadable:`). The wrapped data key (`keywrap.json`) is
+  written to an O_EXCL temporary file under the ledger lock and moved into
+  place with `os.replace`.
 
 ### Upgrading from 0.1.12
 
@@ -300,6 +306,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `capability_key_missing:` / `capability_key_changed:` | The token key was removed or replaced after tokens were issued | Restore `<ledger>.capability/capability.pem`, or start a new ledger |
 | `capability_key_is_principal_key` | The token key equals the principal key | Remove the copied key; Two-Key creates its own |
 | `fingerprint_key_insecure:` / `fingerprint_key_unreadable:` / `fingerprint_key_unavailable:` | `<ledger>.ledger-key/fingerprint.key` is group/world-readable, a symlink, the wrong size, or cannot be created | `chmod 600` it, restore it, or make the directory writable |
+| `ledger_key_insecure:` / `ledger_key_unreadable:` / `ledger_key_unavailable:` | `<ledger>.ledger-key/ledger.key` is group/world-readable, a symlink, the wrong size, or cannot be created | `chmod 600` it, restore it, or make the directory writable |
 | `key_file_insecure:` / `key_file_unreadable:` | `--key` readable by group or others, a symlink, or missing | `chmod 600` the key |
 | `--agent-session took the secret on the command line` | Old CLI flag | `--agent-session-env NAME` |
 | `refusing to overwrite` | `init-key` or `--emit-token` target exists | Pick a new path |

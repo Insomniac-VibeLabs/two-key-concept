@@ -303,6 +303,9 @@ are ciphertext. The append lock is `<ledger>.lock` next to the ledger
 directory. Redemption locks are `<ledger>.redeem-locks/` there too, not
 inside the ledger directory. First open writes `<ledger>.ledger-key/ledger.key` and
 `<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
+Both are created with O_EXCL at mode 0600; a ledger key that is group- or
+world-readable, a symlink, or not 32 bytes is refused (`ledger_key_insecure:`
+or `ledger_key_unreadable:`).
 The authorize command does not accept test-double judges.
 
 ## Authorize from Python
