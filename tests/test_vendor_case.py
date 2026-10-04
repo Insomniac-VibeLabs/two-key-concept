@@ -33,5 +33,14 @@ class VendorCase(unittest.TestCase):
         self.assertEqual(r.reason, "judge_set_not_heterogeneous:insufficient_vendors:1<2")
 
 
+class ProviderCase(unittest.TestCase):
+    def test_distinct_provider_count_folds_case(self):
+        from two_key.action import normalize_action
+        judges = [FixedJudge("a", "yes", "OpenAI"), FixedJudge("b", "yes", "openai ")]
+        act = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
+        r = convene(judges, "Be careful.", act, "look it up", QuorumPolicy(required_yes=2, min_distinct_providers=2))
+        self.assertEqual(r.reason, "insufficient_distinct_providers:1<2")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

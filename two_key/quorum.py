@@ -416,7 +416,7 @@ def convene(
         short = heterogeneity_shortfall([j for j, b in pairs if b.responded], policy)
         if short:
             return result(False, f"responding_not_heterogeneous:{short}", counted=False)
-    providers = {b.provider for b in responding}
+    providers = {unicodedata.normalize("NFKC", str(b.provider)).strip().casefold() for b in responding}
     if len(providers) < policy.min_distinct_providers:
         return result(False, f"insufficient_distinct_providers:{len(providers)}<{policy.min_distinct_providers}")
     yes = sum(1 for b in responding if b.vote == "yes")

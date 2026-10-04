@@ -221,7 +221,9 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   every judge is a test double.
 - Every JSON and YAML input refuses a repeated key and JSON NaN/Infinity.
 - Ballots pair with judges by position; a ballot naming another judge
-  abstains (`judge_id_mismatch`). Vendor names compare case-insensitively.
+  abstains (`judge_id_mismatch`). Vendor and provider names compare
+  case-insensitively (NFKC, trimmed) in the diversity and distinct-provider
+  counts.
 - Denies instead of errors: arguments or a proposal over 256 KiB
   (`args_too_large`, `proposal_too_large`; only size and digest are
   ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`), an
