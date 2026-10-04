@@ -18,7 +18,8 @@ from typing import Any, Mapping
 
 from .action import Action, ActionValidationError, normalize_action
 from .audit import identities_digest, policy_digest
-from .canonical import MAX_INPUT_DEPTH, EncodingError, canonical_bytes, canonical_hash, digest_hex
+from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, canonical_hash, digest_hex,
+                        to_plain)
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
@@ -26,7 +27,7 @@ from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation, fingerprint_key_id,
                        configured_agent_identity, judge_identity)
-from .derive import (MAX_ACTION_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
+from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
@@ -38,6 +39,11 @@ class TwoKeyConfigError(ValueError):
 
 
 _DERIVE_DENIALS = {"amount_mismatch", "counterparty_mismatch", "irreversible_mismatch"}
+
+
+def _unmeasured(name: str) -> dict:
+    """The ledger record for an input that stopped copying past its cap: no size or digest was computed."""
+    return {f"{name}_size": -1, f"{name}_digest": None, f"{name}_omitted": True}
 
 
 def _derive_deny(reason: str | None) -> bool:
@@ -211,11 +217,16 @@ class TwoKey:
             # Hosting is a deployment fact, not a trust decision.
             agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
         # The raw claim is measured before anything reads it: an oversized one keeps only size and digest.
-        claim = action.to_record() if isinstance(action, Action) else action
-        # Depth and type first, so a claim nested too deeply is malformed_action on every Python version.
+        # Each input is copied once into built-in types (any Mapping becomes a dict), and everything below
+        # reads only the copy: a custom Mapping cannot be sized by its str() and then read as 5 MB.
+        # Depth first, so a claim nested too deeply is malformed_action on every Python version.
         # MAX_INPUT_DEPTH leaves room for the levels the claim gains inside a judge's record or the ledger.
+        claim = action.to_record() if isinstance(action, Action) else action
         try:
-            canonical_bytes(claim, max_depth=MAX_INPUT_DEPTH, what="action claim is")
+            claim = to_plain(claim, max_depth=MAX_INPUT_DEPTH, what="action claim is",
+                             max_items=MAX_ACTION_BYTES // 2)
+        except OversizeError:
+            return self._deny(origin, "action_too_large", agent, None, None, _unmeasured("action"))
         except EncodingError as e:
             return self._deny(origin, f"malformed_action:{e}", agent, None, None,
                               {"action_omitted": True, "action_error": str(e)})
@@ -223,9 +234,17 @@ class TwoKey:
         if claim_size < 0 or claim_size > MAX_ACTION_BYTES:
             return self._deny(origin, "action_too_large", agent, None, None, size_record(claim, "action"))
         try:
-            normalized = normalize_action(action)
+            normalized = normalize_action(claim)
         except ActionValidationError as e:   # the message names the field, never its value
             return self._deny(origin, f"malformed_action:{e}", agent, None, None)
+        try:
+            arguments = to_plain(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are",
+                                 max_items=MAX_ARGS_BYTES // 2)
+        except OversizeError:
+            return self._deny(origin, "args_too_large", agent, None, None, _unmeasured("tool_args"))
+        except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
+            return self._deny(origin, f"invalid_call:{e}", agent, None, None,
+                              {"tool_args_omitted": True, "tool_args_error": str(e)})
         if isinstance(arguments, Mapping):
             # Freeze the arguments to the canonical bytes a token would bind, before the size check:
             # a value that cannot be encoded (nested too deeply, NaN, a non-string key) is
@@ -243,12 +262,14 @@ class TwoKey:
         # Before anything is derived, judged, or ledgered: only the size and digest are kept.
         if oversized:
             return self._deny(origin, "args_too_large", agent, None, None, size_record(arguments, "tool_args"))
-        if not isinstance(proposal, str):   # a structured proposal is held to the same depth and types
-            try:
-                canonical_bytes(proposal, max_depth=MAX_INPUT_DEPTH, what="proposal is")
-            except EncodingError as e:
-                return self._deny(origin, "malformed_proposal", agent, None, None,
-                                  {"proposal_omitted": True, "proposal_error": str(e)})
+        try:   # a structured proposal is held to the same depth and types, and copied like the args
+            proposal = to_plain(proposal, max_depth=MAX_INPUT_DEPTH, what="proposal is",
+                                max_items=MAX_ARGS_BYTES // 2)
+        except OversizeError:
+            return self._deny(origin, "proposal_too_large", agent, None, None, _unmeasured("proposal"))
+        except EncodingError as e:
+            return self._deny(origin, "malformed_proposal", agent, None, None,
+                              {"proposal_omitted": True, "proposal_error": str(e)})
         if args_too_large(proposal):
             return self._deny(origin, "proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         spec = None
@@ -258,13 +279,7 @@ class TwoKey:
         claimed_data_class = normalized.data_class
         deny_reason = None
         if spec is not None:
-            proposed: Mapping[str, Any]
-            if isinstance(action, Action):
-                proposed = action.to_record()
-            elif isinstance(action, Mapping):
-                proposed = action
-            else:
-                proposed = {}
+            proposed: Mapping[str, Any] = claim if isinstance(claim, dict) else {}
             blocked = blocked_from_rules(self.compiled.rules)
             try:
                 if not isinstance(arguments, Mapping):

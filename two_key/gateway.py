@@ -27,8 +27,8 @@ except ImportError:  # pragma: no cover - POSIX only
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
-from .canonical import MAX_INPUT_DEPTH, EncodingError, canonical_bytes, digest_hex
-from .derive import (DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
+from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
+from .derive import (MAX_ARGS_BYTES, DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
                      project_arguments, size_record)
 from .ledger import LedgerError
 
@@ -91,22 +91,25 @@ class ToolGateway:
             payload = self.issuer.verify(token)
         except TokenError as e:
             return GatewayResult(False, str(e))
-        result, frozen = self._invoke_verified(payload, tool, arguments)
+        result, encoded = self._invoke_verified(payload, tool, arguments)
         if result.allowed or result.reason.startswith(("ledger_failed:", "tool_error:")):
             return result      # a tool error is already ledgered (redemption_aborted); a ledger failure cannot be
-        return self._record_deny(result, payload, tool, arguments, frozen)
+        return self._record_deny(result, payload, tool, encoded)
 
-    def _record_deny(self, result: GatewayResult, payload: dict, tool, arguments, frozen: bytes | None) -> GatewayResult:
+    def _record_deny(self, result: GatewayResult, payload: dict, tool, encoded: dict) -> GatewayResult:
         body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": _short(payload.get("jti"))}
         if isinstance(tool, str) and len(tool) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool):
             body["tool"] = tool
         else:
             body.update({"tool": None, **size_record(tool, "tool")})
+        frozen = encoded.get("frozen")
         if frozen is not None:
             body.update({"tool_args_size": len(frozen), "tool_args_digest": "sha256:" + digest_hex(frozen),
                          "tool_args_omitted": True})
-        else:
-            body.update(size_record(arguments, "tool_args"))
+        elif "plain" in encoded:     # copied, but not encodable (NaN, for example): measured from the copy
+            body.update(size_record(encoded["plain"], "tool_args"))
+        else:                        # not copied (too deep, too many items, an unsupported type): not measured
+            body.update({"tool_args_size": -1, "tool_args_digest": None, "tool_args_omitted": True})
         try:
             self.ledger.append_bounded("gateway_denied", body)
             self.ledger.checkpoint()
@@ -117,17 +120,26 @@ class ToolGateway:
             return GatewayResult(False, reason, result.output)
         return result
 
-    def _invoke_verified(self, payload: dict, tool: str, arguments: dict) -> tuple[GatewayResult, bytes | None]:
-        """Run the checks and the tool; also return the encoded arguments, if they could be encoded."""
+    def _invoke_verified(self, payload: dict, tool: str, arguments: dict) -> tuple[GatewayResult, dict]:
+        """Run the checks and the tool; also return the plain copy and encoded bytes, as far as they got."""
         encoded: dict = {}
         result = self._redeem(payload, tool, arguments, encoded)
-        return result, encoded.get("frozen")
+        return result, encoded
 
     def _redeem(self, payload: dict, tool: str, arguments: dict, encoded: dict) -> GatewayResult:
         if any(name not in payload for name in _BOUND_FIELDS):
             return GatewayResult(False, "malformed_token")  # a signed token without a binding field
-        # Encoded before the size check, so nesting too deep is invalid_call on every Python version.
-        # Encoded once: the same bytes give the hash and settle the size cap.
+        # Copied once into built-in types (any Mapping becomes a dict); every check, the hash, and the
+        # tool read the copy. Encoded before the size check, so nesting too deep is invalid_call on every
+        # Python version. Encoded once: the same bytes give the hash and settle the size cap.
+        try:
+            arguments = to_plain(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are",
+                                 max_items=MAX_ARGS_BYTES // 2)
+        except OversizeError:
+            return GatewayResult(False, "args_too_large")
+        except EncodingError as e:
+            return GatewayResult(False, f"invalid_call:{e}")
+        encoded["plain"] = arguments
         try:
             frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize

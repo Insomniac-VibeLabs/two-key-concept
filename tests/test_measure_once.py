@@ -52,19 +52,19 @@ class EncodedOnce(unittest.TestCase):
         seen = []
 
         def spy(value, **kw):
-            if value is args:
+            if value == args:   # the plain copy of args, not the caller's object
                 seen.append(1)
             return real(value, **kw)
         real_size = derive_mod._json_bytes
         sized, hashed = [], []
 
         def size_spy(value):
-            if value is args:
+            if value == args:   # the plain copy of args, not the caller's object
                 sized.append(1)
             return real_size(value)
 
         def hash_spy(value):
-            if value is args:
+            if value == args:   # the plain copy of args, not the caller's object
                 hashed.append(1)
             return canonical_hash(value)
         with mock.patch("two_key.core.canonical_bytes", spy), mock.patch("two_key.gateway.canonical_bytes", spy), \

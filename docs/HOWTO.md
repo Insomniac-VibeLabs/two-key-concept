@@ -279,6 +279,11 @@ with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
 size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
 
+Each input (tool args, the action claim, the proposal) is first copied once
+into built-in types (`canonical.to_plain`). Any Mapping becomes a dict and a
+tuple becomes a list. The size cap, the token's hash, the judges, the ledger
+and the tool all read that copy, never a custom type's `str()` or `repr()`.
+
 "Too deeply" means more than 62 levels of objects and arrays
 (`canonical.MAX_INPUT_DEPTH`). The encoder itself allows 64
 (`canonical.MAX_DEPTH`) and counts without recursion. The two spare levels

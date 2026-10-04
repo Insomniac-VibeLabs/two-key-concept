@@ -12,6 +12,13 @@ leaves room for the two levels an input gains when it is wrapped. A ledger
 entry's hash covers ``{"body": {field: value}}``, and a judge's action record
 carries the args as ``{"raw": {"tool_args": args}}``. So an input that is
 accepted can always be encoded again inside its wrapper.
+
+``to_plain`` copies an input once, without recursion, into built-in ``dict``,
+``list``, ``str``, ``int``, ``float``, ``bool`` and ``None``. Any
+``collections.abc.Mapping`` becomes a dict and a tuple becomes a list.
+Everything after that is measured, hashed, judged, ledgered and handed to
+the tool from the copy. A custom mapping's ``__str__``, ``__repr__`` or
+``__iter__`` is read once, during the copy, and never again.
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -36,6 +44,71 @@ MAX_INPUT_DEPTH = MAX_DEPTH - WRAP_DEPTH
 
 def nested_too_deeply(what: str = "value is") -> str:
     return f"{what} nested too deeply"
+
+
+class OversizeError(EncodingError):
+    """``to_plain`` met more elements than fit under the caller's byte cap and stopped copying."""
+
+
+def _scalar(value: Any) -> Any:
+    if value is None or value is True or value is False:
+        return value
+    if isinstance(value, str):     # a subclass is copied to its str value; its __str__ is not called
+        return value if type(value) is str else str.__str__(value)
+    if isinstance(value, int):
+        return value if type(value) is int else int.__int__(value)
+    if isinstance(value, float):
+        return value if type(value) is float else float.__float__(value)
+    raise EncodingError(f"unsupported type {type(value).__name__}")
+
+
+def to_plain(value: Any, *, max_depth: int = MAX_INPUT_DEPTH, what: str = "value is",
+             max_items: int | None = None) -> Any:
+    """Copy ``value`` once into built-in types, without recursion.
+
+    Any ``Mapping`` (string keys only) becomes a ``dict``, and a ``list`` or ``tuple`` becomes a ``list``.
+    A ``str``, ``int`` or ``float`` subclass becomes its base value. Anything else is an ``EncodingError``.
+    A container more than ``max_depth`` levels down is ``EncodingError("<what> nested too deeply")``.
+    With ``max_items``, copying stops with ``OversizeError`` after that many values, so a mapping
+    that never stops iterating cannot hang the caller. Every value takes at least two bytes of JSON,
+    so ``cap // 2`` items is a safe bound for a ``cap``-byte limit."""
+    root: list = [None]
+    stack = [(value, root, 0, 1)]
+    count = 1
+
+    def push(child, parent, slot, level):
+        nonlocal count
+        count += 1
+        if max_items is not None and count > max_items:
+            raise OversizeError(f"{what} too large")
+        stack.append((child, parent, slot, level))
+
+    while stack:
+        item, parent, slot, level = stack.pop()
+        if isinstance(item, Mapping):
+            if level > max_depth:
+                raise EncodingError(nested_too_deeply(what))
+            out: dict = {}
+            parent[slot] = out
+            for key, child in item.items():
+                if not isinstance(key, str):
+                    raise EncodingError("canonical object keys must be strings")
+                key = _scalar(key)
+                if key in out:
+                    raise EncodingError("duplicate object key")
+                out[key] = None
+                push(child, out, key, level + 1)
+        elif isinstance(item, (list, tuple)):
+            if level > max_depth:
+                raise EncodingError(nested_too_deeply(what))
+            seq: list = []
+            parent[slot] = seq
+            for child in item:
+                seq.append(None)
+                push(child, seq, len(seq) - 1, level + 1)
+        else:
+            parent[slot] = _scalar(item)
+    return root[0]
 
 
 def _check(value: Any, max_depth: int, what: str) -> None:

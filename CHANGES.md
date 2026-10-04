@@ -249,6 +249,17 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   any other exception in `authorize` (`internal_error:<Type>`), and a deny
   that cannot be ledgered (`ledger_failed:<LedgerError message>`, or
   `ledger_failed:<Type>` for any other exception; also on stderr).
+- One copy: tool args, the action claim, and the proposal are each copied
+  once into built-in types (`canonical.to_plain`), in `authorize` and at the
+  gateway. Any `collections.abc.Mapping` becomes a dict, a tuple becomes a
+  list, and a `str`, `int` or `float` subclass becomes its base value. The
+  size cap, the token's `args_hash`, the judges, the ledger and the tool all
+  read that copy. A custom Mapping is no longer measured by its `str()`.
+  Before this, a 5 MB Mapping in `raw` could get a token. The sizer no longer
+  falls back to `str()` or `repr()`: a value it cannot encode as JSON counts
+  as too large. Copying stops after `cap // 2` values, so a Mapping that
+  never stops iterating is `args_too_large` / `action_too_large`
+  (`*_size: -1`) rather than a hang.
 - Depth: the canonical encoder refuses containers nested more than 64
   levels (`canonical.MAX_DEPTH`), counted without recursion. Tool args, the
   action claim, and a structured (non-text) proposal are held to 62

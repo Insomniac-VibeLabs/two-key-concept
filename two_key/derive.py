@@ -37,14 +37,12 @@ MAX_ACTION_BYTES = 64 * 1024
 
 
 def _json_bytes(value: Any) -> bytes | None:
+    """Compact UTF-8 JSON of a plain value (``canonical.to_plain``). Anything JSON has no form for is not
+    measured through ``str()`` or ``repr()``, which a custom type controls: it is ``None``, too large."""
     try:
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"),
-                          default=str).encode("utf-8", "surrogatepass")
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8", "surrogatepass")
     except (RecursionError, ValueError, TypeError):
-        try:
-            return repr(value).encode("utf-8", "surrogatepass")
-        except (RecursionError, ValueError):
-            return None  # cannot even be measured: treated as too large
+        return None  # cannot be measured: treated as too large
 
 
 def args_size(value: Any) -> int:
