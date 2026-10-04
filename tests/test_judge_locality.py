@@ -56,5 +56,42 @@ class Locality(unittest.TestCase):
                          "cloud_judge_reused_agent_session")
 
 
+class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
+    def test_config_error_everywhere(self):
+        import tempfile
+        from pathlib import Path
+        from two_key.constitution import sign_constitution, verify_signed
+        from two_key.core import TwoKey
+        from two_key.judges.config import JudgeConfigError, load_config
+        from two_key.keys import generate_private_key
+        from two_key.ledger import Ledger
+        from two_key.quorum import convene
+        js = [FixedJudge("a", "yes", provider="p1", vendor="v1"), FixedJudge("b", "yes", provider="p2", vendor="v2")]
+        p = QuorumPolicy(required_yes=2, require_local_yes=True)
+        with self.assertRaises(QuorumConfigError):
+            check_judge_set(js, p)
+        q = convene(js, "c", A, "", p)
+        self.assertFalse(q.passed)
+        self.assertEqual(q.reason, "judge_set_not_heterogeneous:require_local_yes_without_local_judge")
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            env = sign_constitution("c", [{"id": "t", "allow_only_tools": ["search"]}], key,
+                                    {"search": {"irreversible": False, "data_class_floor": "public"}})
+            with self.assertRaises(QuorumConfigError):
+                TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), js,
+                       private_key=key, quorum=p, allow_test_doubles=True)
+        with self.assertRaises(JudgeConfigError):
+            load_config({"judges": [{"id": "x", "type": "openai_compatible", "base_url": "https://api.x.ai/v1",
+                                     "model": "m", "auth": {"type": "env", "var": "X"}}],
+                         "quorum": {"required_yes": 1, "require_local_yes": True}})
+
+    def test_local_judge_must_say_yes(self):
+        from two_key.quorum import convene
+        js = [FixedJudge("l", "no", provider="pl", vendor="vl", local_weights=True),
+              FixedJudge("b", "yes", provider="p2", vendor="v2"), FixedJudge("c", "yes", provider="p3", vendor="v3")]
+        q = convene(js, "c", A, "", QuorumPolicy(required_yes=2, require_local_yes=True))
+        self.assertEqual((q.passed, q.reason), (False, "local_judge_required"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

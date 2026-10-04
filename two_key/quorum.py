@@ -21,6 +21,8 @@ Fixes from the original prototype (see CHANGES.md):
   in judges.yaml) sets at least two vendors, at least one local judge, and a
   yes from a local judge (``require_local_yes``). It is recommended for
   destructive, irreversible, financial, or external-send tools.
+  ``require_local_yes`` with no local judge in the set is a configuration
+  error at start-up and a deny in ``convene``.
   ``QuorumPolicy.without_diversity_floors`` still works and now builds the
   default. ``require_path_a_first`` is not part of the floor and is not a
   skip.
@@ -93,6 +95,7 @@ class QuorumPolicy:
     ballot_binding: str = "stamp"               # stamp | echo
     require_path_a_first: bool = False          # stored, not a skip
     require_local_yes: bool = False             # a local judge in the set must itself vote yes
+                                                # (a config error if no judge is local)
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
     tool_args_on_derive_deny: bool = False
@@ -231,6 +234,8 @@ def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | Non
         return f"insufficient_vendors:{len(vendors)}<{policy.min_vendors}"
     if local < policy.min_local_judges:
         return f"insufficient_local_judges:{local}<{policy.min_local_judges}"
+    if policy.require_local_yes and local == 0:
+        return "require_local_yes_without_local_judge"
     return None
 
 
@@ -389,6 +394,6 @@ def convene(
         return result(False, f"insufficient_yes:{yes}<{policy.required_yes}")
     if policy.require_local_yes:
         local_ids = {getattr(j, "judge_id", None) for j in judges if _local(j)}
-        if local_ids and not any(b.vote == "yes" and b.judge_id in local_ids for b in responding):
+        if not any(b.vote == "yes" and b.judge_id in local_ids for b in responding):
             return result(False, "local_judge_required")
     return result(True, "quorum_pass")
