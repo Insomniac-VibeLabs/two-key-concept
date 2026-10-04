@@ -32,6 +32,8 @@ from .action import DATA_CLASSES, MAX_AMOUNT_USD
 # Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their JSON.
 # Checked before anything is derived, judged, hashed for a token, or ledgered.
 MAX_ARGS_BYTES = 256 * 1024
+# The structured action claim is small; its cap is lower. Measured before normalize_action.
+MAX_ACTION_BYTES = 64 * 1024
 
 
 def _json_bytes(value: Any) -> bytes | None:

@@ -224,6 +224,15 @@ judges.yaml accepts only the top-level keys `judges`, `quorum`, and
 `monitored_agent`; agents.yaml only `agents`. Anything else (a typo such as
 `quorm`) is refused.
 
+The action claim (the `tool`, `amount_usd`, `data_class`, ... mapping) is
+measured before it is read: over 64 KiB of UTF-8 JSON it is denied
+(`action_too_large`) and the ledger keeps only `action_size`,
+`action_digest`, and `action_omitted: true`. A tool name is an identifier
+of at most 128 characters (`a-z`, `0-9`, and `_ . : / -` after case
+folding). A `malformed_action:` reason names the field, never its value or
+an unknown key's name (`malformed_action:unknown action fields (2)`,
+`malformed_action:data_class: not a known class`).
+
 Tool arguments or a proposal over 256 KiB of UTF-8 JSON are denied before
 anything reads or ledgers them (`args_too_large`, `proposal_too_large`).
 The ledger keeps only `tool_args_size`, `tool_args_digest`, and

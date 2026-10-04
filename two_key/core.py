@@ -24,7 +24,7 @@ from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation, fingerprint_key_id,
                        configured_agent_identity, judge_identity)
-from .derive import (DeriveError, args_too_large, blocked_from_rules, derive, disagreement, disallowed_party,
+from .derive import (MAX_ACTION_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, derive, disagreement, disallowed_party,
                      dropped_keys, form_for, size_record)
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
@@ -205,9 +205,14 @@ class TwoKey:
         if agent_id or hosting:
             # Hosting is a deployment fact, not a trust decision.
             agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
+        # The raw claim is measured before anything reads it: an oversized one keeps only size and digest.
+        claim = action.to_record() if isinstance(action, Action) else action
+        claim_size = args_size(claim)
+        if claim_size < 0 or claim_size > MAX_ACTION_BYTES:
+            return self._deny("action_too_large", agent, None, None, size_record(claim, "action"))
         try:
             normalized = normalize_action(action)
-        except ActionValidationError as e:
+        except ActionValidationError as e:   # the message names the field, never its value
             return self._deny(f"malformed_action:{e}", agent, None, None)
         # Before anything is derived, judged, or ledgered: only the size and digest are kept.
         if args_too_large(arguments):

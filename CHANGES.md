@@ -224,6 +224,10 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   abstains (`judge_id_mismatch`). Vendor and provider names compare
   case-insensitively (NFKC, trimmed) in the diversity and distinct-provider
   counts.
+- The raw action claim is capped at 64 KiB before it is read
+  (`action_too_large`, size and digest only). A tool name is an identifier
+  of at most 128 characters. `malformed_action:` reasons name the field,
+  never a value or an unknown key name.
 - Denies instead of errors: arguments or a proposal over 256 KiB
   (`args_too_large`, `proposal_too_large`; only size and digest are
   ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`), an
@@ -306,6 +310,9 @@ on stderr, not a refusal.
 
 | Deny or abstain reason | Cause | Fix |
 |---|---|---|
+| `action_too_large` | The action claim is over 64 KiB of UTF-8 JSON | Send a normal claim; only size and digest are ledgered |
+| `malformed_action:tool: longer than 128 characters` / `tool: not an identifier ...` | The tool name is too long or has characters outside `a-z 0-9 _ . : / -` | Rename the tool |
+| `malformed_action:unknown action fields (<n>)` / `<field>: ...` | An unknown or invalid action field (the reason names the field, not the value) | Fix the claim |
 | `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON | Send less; only size and digest are ledgered |
 | `invalid_call:<why>` (authorize and gateway) | Arguments nested too deeply, NaN, or a non-string key | Flatten or fix the arguments |
 | `derive_failed:value_unreadable:<Type>` | A derived value cannot be read (for example `10**400`) | Send a readable value |
