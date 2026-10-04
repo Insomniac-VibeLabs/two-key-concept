@@ -75,7 +75,8 @@ the code wins, then this file should be corrected.
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
   still not a skip. `min_distinct_providers` still defaults to 1.
 - A judge that is the monitored agent: the same credential, a shared tenant
-  id, the same model on the same endpoint or declared upstream, the same
+  id, the same model on the same endpoint or upstream (different declared
+  tenants do not lift this), the same
   model through a loopback or private proxy or daemon with no declared
   `upstream:` (a keyless local proxy can forward to the agent's own
   account), or an identity that cannot be resolved refuses to start. The agent is declared by the operator, never

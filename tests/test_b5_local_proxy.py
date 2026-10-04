@@ -3,8 +3,9 @@
 The agent's identity is the operator's declaration. A loopback or private endpoint can forward the same
 model to the agent's provider and account without a key of its own, so with the same normalized model
 its upstream and tenant are unknown until it declares ``upstream:``. A declared upstream counts as an
-endpoint, tenants are scoped by the family a proxy reaches (not its address), upstream labels are
-normalized, and local aliases of this machine are one endpoint.
+endpoint (a shared one is refused even with different declared tenants), tenants are scoped by the
+family a proxy reaches (not its address), upstream labels are normalized, and local aliases of this
+machine are one endpoint.
 """
 
 import os
@@ -73,6 +74,9 @@ class B5(unittest.TestCase):
         agent = dict(OPENAI_AGENT, tenant={"project": "p1"})
         self.denied(agent, judge("gpt-4o", "http://localhost:4000", tenant={"project": "p1"}), UNKNOWN)
         self.denied(agent, judge("gpt-4o", "http://localhost:4000", tenant={"project": "P1"},
+                                 upstream="api.openai.com"), SAME_UPSTREAM)
+        # Tenant ids are scoped by provider family, so a proxy's p1 is OpenAI's p1 even on another model.
+        self.denied(agent, judge("gpt-4o-mini", "http://localhost:4000", tenant={"project": "P1"},
                                  upstream="api.openai.com"), "same tenant openai:project:p1")
 
     def test_declared_upstream_on_a_remote_router_counts_as_an_endpoint(self):
@@ -86,6 +90,8 @@ class B5(unittest.TestCase):
                     SAME_UPSTREAM)
         same_account = dict(OLLAMA_AGENT, tenant={"account": "acct-a"})
         self.denied(same_account, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com",
+                                        tenant={"account": "acct-a"}), SAME_UPSTREAM)
+        self.denied(same_account, judge("qwen3-coder:480b-cloud", "http://localhost:11434", upstream="ollama.com",
                                         tenant={"account": "acct-a"}), "same tenant ollama:account:acct-a")
         # The agent's model without the -cloud suffix is the same model.
         self.denied(dict(OLLAMA_AGENT, model="gpt-oss:120b"), j, UNKNOWN)
@@ -142,10 +148,14 @@ class B5(unittest.TestCase):
         remote = dict(OPENAI_AGENT, model="llama3.1:8b", base_url="https://api.together.xyz/v1")
         self.allowed(remote, judge("llama3.1:8b", "http://localhost:11434", upstream="localhost:11434"))
 
-    def test_a_different_ollama_account_is_allowed(self):
+    def test_different_declared_tenants_on_a_shared_upstream_are_refused(self):
+        # As in two-key: one model from one upstream is the same model, whichever account pays for it.
         agent = dict(OLLAMA_AGENT, tenant={"account": "acct-a"})
-        self.allowed(agent, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com",
-                                  tenant={"account": "acct-b"}))
+        self.denied(agent, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com",
+                                 tenant={"account": "acct-b"}), SAME_UPSTREAM + " ollama.com")
+        agent = dict(OPENAI_AGENT, tenant={"project": "p1"})
+        self.denied(agent, judge("gpt-4o", "http://localhost:4000", upstream="api.openai.com",
+                                 tenant={"project": "p2"}), SAME_UPSTREAM + " api.openai.com")
 
     def test_same_provider_on_a_different_model_or_endpoint_is_allowed(self):
         self.allowed(OPENAI_AGENT, judge("gpt-4o-mini", "https://api.openai.com/v1", key="judge-key"))

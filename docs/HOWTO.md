@@ -151,10 +151,11 @@ agent:
   (`upstream: localhost:11434`);
 - the same normalized model reaching the same upstream: declared upstreams
   count as endpoints, and an Ollama cloud model (`:cloud`, `-cloud`) reaches
-  `ollama.com` even through a local daemon. Different accounts on that
-  upstream are allowed only when both sides declare `tenant:` and no tenant
-  id is shared. Upstreams are compared as lower-case `host` or `host:port`
-  with the default port removed;
+  `ollama.com` even through a local daemon. This is
+  `same_model_same_upstream`, and declared tenants do not lift it. Two
+  accounts on one upstream serving one model are still that model from that
+  provider, as in two-key. Upstreams are compared as lower-case `host` or
+  `host:port` with the default port removed;
 - or either side is unresolved: an unrecognized host or router whose model
   names no maker, or a loopback or private endpoint (a local proxy such as
   LiteLLM) whose model is an alias with no recognizable maker. Declare
@@ -164,8 +165,9 @@ agent:
 The same provider or upstream with a different model, the same endpoint
 with a different model, the same model through another endpoint (for
 example a router) with another key and tenant, a local proxy that declares
-a different provider (`upstream: api.groq.com`), a different daemon, and
-a different declared account are allowed and recorded
+a non-overlapping upstream (a different provider, `upstream: api.groq.com`),
+a different daemon, and the same provider on another model or endpoint are
+allowed and recorded
 (`same_provider: allowed`). `allow_same_provider_judge` is accepted, prints
 a deprecation note, and has no effect.
 

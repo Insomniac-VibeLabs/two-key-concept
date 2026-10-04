@@ -208,8 +208,9 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   `127.1`, `localhost.localdomain`, and this machine's own addresses are one
   endpoint), the same model through a loopback or private proxy or daemon
   with no declared `upstream:`, the same model reaching the same upstream
-  (declared upstreams and `ollama.com` for a cloud model count as endpoints;
-  allowed for different declared accounts), or an unresolved identity (an
+  (`same_model_same_upstream`: declared upstreams and `ollama.com` for a
+  cloud model count as endpoints, and different declared tenants do not
+  lift it, as in two-key), or an unresolved identity (an
   unknown router, or a local proxy serving an alias model without a declared
   `upstream:`). Declared tenants are scoped by provider family, not by a
   proxy's address, and upstreams are normalized (`host[:port]`, default port
@@ -361,7 +362,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `judge_matches_agent: ... same model '<m>' on the same endpoint <host:port>` | The judge is the agent's model at the agent's endpoint | Use another model, or the same model through another endpoint and key |
 | `judge_matches_agent: ... same tenant <id>` | Same Azure resource or deployment, Vertex project, Bedrock account and region, or declared org/project | Use a judge in another tenant |
 | `judge_matches_agent: ... through a local proxy or daemon (...) with no declared upstream` | The same model as the agent through a loopback or private endpoint that declares no `upstream:` | Use another model, or declare `upstream:` on the proxy or daemon (a different provider, or its own address for local weights) |
-| `judge_matches_agent: ... through the same upstream <host>` | The same model reaching the agent's endpoint or declared upstream (or `ollama.com` for a cloud model) | Use another model or provider; for a different account declare `tenant:` on both sides |
+| `judge_matches_agent: ... through the same upstream <host>` | The same model reaching the agent's endpoint or declared upstream (or `ollama.com` for a cloud model) | Use another model or a non-overlapping upstream (another provider); different tenants on one upstream are still refused |
 | `judge_matches_agent: ... upstream unresolved` | Unknown router or host, or a local proxy serving an alias | Use a `maker/model` id, or declare `upstream:` (attested, not verified) |
 | `... tenant must be a mapping` / `unknown tenant key(s)` | Old string or list `tenant` | `tenant: {organization: ..., project: ..., account: ..., deployment: ...}` |
 | `... upstream entries must be non-empty strings` | Empty or non-string `upstream` | A host string or a list of them |

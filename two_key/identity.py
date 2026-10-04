@@ -70,8 +70,11 @@ Refusals, judge against agent (all hard, no opt-out), message prefix
   (a proxy or daemon, keyed or not) with no declared ``upstream:``: it could
   forward to the other side's provider and account, so upstream and tenant
   are unknown
-- same normalized model with a shared route (declared upstreams count as
-  endpoints), unless both sides declare tenants (a shared one is refused next)
+- same normalized model with a shared route: a declared upstream, the
+  endpoint itself, or ollama.com for a ``-cloud`` model
+  (``same_model_same_upstream``). Declared tenants do not lift this: two
+  accounts on one upstream serving one model are still the same model
+  from the same provider, as in two-key
 - a shared tenant id (same Azure resource or deployment, OpenAI organization
   or project, Bedrock account in the same region, Vertex project, or a
   declared id on the same host)
@@ -79,8 +82,9 @@ Refusals, judge against agent (all hard, no opt-out), message prefix
 Allowed: the same provider or upstream with a different model, the same
 endpoint with a different model, the same model on a different endpoint
 in a different (or undeclared) tenant with a different key, a local proxy
-declaring a different provider upstream, a different daemon (each declaring
-its own address), and a different declared account on a shared upstream.
+declaring a non-overlapping upstream (a different provider), and a different
+daemon (each declaring its own address). The same provider on another model
+or endpoint is allowed.
 ``allow_same_provider_judge`` is a deprecated no-op.
 
 The runtime check stays as a second layer: a judge whose credential equals
@@ -784,11 +788,10 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
                         f"{side.endpoint}) with no declared upstream; upstream and tenant unknown "
                         "(declare upstream: on it)")
         # Declared upstreams count as endpoints: the same model reaching the same upstream is the same
-        # agent, unless both sides declare tenants (different accounts; a shared one is refused below).
+        # agent. Declared tenants do not lift it; a different account on one upstream is still that model.
         via = agent.routes & judge.routes
-        if via and not (agent.tenants and judge.tenants):
-            return (f"{who}: same model {judge.model!r} through the same upstream {sorted(via)[0]} "
-                    "(declare tenant: on both sides if they are different accounts)")
+        if via:
+            return f"{who}: same model {judge.model!r} through the same upstream {sorted(via)[0]}"
     shared = agent.tenants & judge.tenants
     if shared:
         return f"{who}: same tenant {sorted(shared)[0]}"

@@ -139,7 +139,9 @@ shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
 whitespace stripped). It refuses to start (`judge_matches_agent:`) only
 when a judge is the same agent: the same credential, a shared tenant id,
 the same model on the same endpoint (every alias of this machine is one
-endpoint), the same model reaching the same declared upstream, or the same
+endpoint), the same model reaching the same upstream (a declared upstream,
+the endpoint itself, or `ollama.com` for a `-cloud` model, even when the
+two sides declare different tenants), or the same
 model through a loopback or private proxy or daemon that declares no
 `upstream:` (it could forward to the agent's own account without a key).
 An identity it cannot resolve also refuses, including a local proxy serving
