@@ -147,13 +147,16 @@ class TwoKey:
                                     "with model, provider, base_url, and credential_env or credential: none) "
                                     "whenever judges are configured")
         decls = monitored_agent if isinstance(monitored_agent, (list, tuple)) else [monitored_agent]
+        # A placeholder in-process agent proves nothing about a real judge, so it is accepted only
+        # when every judge is a test double too (an offline test). With a real judge, declare the real agent.
+        allow_in_process = allow_test_doubles and all(getattr(j, "is_test_double", False) for j in self.judges)
         try:
             agents = []
             for d in decls:
                 if isinstance(d, AgentDeclaration) or isinstance(d, Mapping):
                     if not isinstance(d, AgentDeclaration):
                         d = AgentDeclaration.from_mapping(d)
-                    agents.append(d.resolve(allow_in_process=allow_test_doubles))
+                    agents.append(d.resolve(allow_in_process=allow_in_process))
                 elif all(hasattr(d, k) for k in ("agent_id", "model", "base_url", "credential")):
                     agents.append(configured_agent_identity(d))  # a MonitoredAgent from agents.yaml
                 else:

@@ -50,11 +50,18 @@ def ollama(text=None, exc=None):
     return OllamaJudge("local", "ollama", "qwen2.5:7b", transport=transport)
 
 
+# The in-process TEST_AGENT is accepted only when every judge is a test double; with a real
+# (Ollama) judge, declare a real agent: another model on the same local daemon.
+LOCAL_AGENT = {"id": "local-agent", "model": "llama3.1:8b", "provider": "ollama",
+               "base_url": "http://localhost:11434", "credential": "none"}
+
+
 def engine(tmp, judges, quorum=None, **kw):
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
+    agent = TEST_AGENT if all(getattr(j, "is_test_double", False) for j in judges) else LOCAL_AGENT
     return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
-                  private_key=key, quorum=quorum, allow_test_doubles=True, monitored_agent=TEST_AGENT, **kw)
+                  private_key=key, quorum=quorum, allow_test_doubles=True, monitored_agent=agent, **kw)
 
 
 class OneJudgeFailureIsADeny(unittest.TestCase):

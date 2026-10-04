@@ -553,7 +553,8 @@ class AgentDeclaration:
         u = urlparse(self.base_url)
         if u.scheme == IN_PROCESS:
             if not allow_in_process:
-                raise IdentityError("an in-process monitored agent is for tests only (allow_test_doubles=True)")
+                raise IdentityError("in_process_agent_refused: an in-process monitored agent is for offline tests "
+                                    "only: pass allow_test_doubles=True and use test-double judges only")
         elif u.scheme not in ("https", "http") or not u.hostname:
             raise IdentityError(f"monitored_agent {self.id!r}: base_url must be an http(s) URL")
         if self.credential not in (None, NO_CREDENTIAL):
