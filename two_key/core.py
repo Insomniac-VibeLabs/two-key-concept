@@ -146,6 +146,19 @@ class TwoKey:
     def authorize(self, action: dict, arguments: dict, proposal: str, *,
                   agent_id: str | None = None, hosting: str | None = None,
                   agent_session: str | None = None) -> Decision:
+        """Run both paths. Any exception is a deny that is written to the ledger (``internal_error:``)."""
+        try:
+            return self._authorize(action, arguments, proposal, agent_id=agent_id, hosting=hosting,
+                                   agent_session=agent_session)
+        except Exception as e:  # fail closed: no exception reaches the caller as anything but a deny
+            agent = None
+            if agent_id or hosting:
+                agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
+            return self._deny(f"internal_error:{type(e).__name__}", agent, None, None)
+
+    def _authorize(self, action: dict, arguments: dict, proposal: str, *,
+                   agent_id: str | None = None, hosting: str | None = None,
+                   agent_session: str | None = None) -> Decision:
         agent = None
         if agent_id or hosting:
             # Hosting is a deployment fact, not a trust decision.

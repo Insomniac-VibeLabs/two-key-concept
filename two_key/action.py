@@ -53,7 +53,10 @@ def _number(value: Any, name: str, *, lo: float = 0.0, hi: float = MAX_AMOUNT_US
     # bool is a subclass of int; reject it explicitly. Numeric strings are rejected.
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ActionValidationError(f"{name}: expected a number, got {type(value).__name__}")
-    f = float(value)
+    try:
+        f = float(value)
+    except OverflowError:  # an int such as 10**400
+        raise ActionValidationError(f"{name}: exceeds maximum {hi}") from None
     if math.isnan(f) or math.isinf(f):
         raise ActionValidationError(f"{name}: must be finite")
     if f < lo:

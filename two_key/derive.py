@@ -46,8 +46,11 @@ class Derived:
 def _cents(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise DeriveError("amount_unreadable")
-    number = float(value)
-    if math.isnan(number) or math.isinf(number) or number < 0:
+    try:
+        number = float(value)  # an int such as 10**400 raises OverflowError here
+    except (OverflowError, ValueError):
+        raise DeriveError("amount_unreadable") from None
+    if math.isnan(number) or math.isinf(number) or number < 0 or math.isinf(number * 100):
         raise DeriveError("amount_unreadable")
     cents = round(number * 100)
     if abs(number * 100 - cents) > 1e-6:
@@ -234,7 +237,22 @@ def _unmapped(arguments: Mapping[str, Any], declared: tuple[str, ...]) -> bool:
 
 
 def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
-    """Read amount and counterparties from ``arguments`` using ``spec`` paths."""
+    """Read the derived fields from ``arguments`` using ``spec`` paths.
+
+    Any value this cannot read is a ``DeriveError``, never another exception:
+    an ``OverflowError``, ``TypeError``, or ``ValueError`` (for example an
+    integer such as 10**400) becomes ``DeriveError("value_unreadable:<type>")``,
+    which ``TwoKey`` turns into a ``derive_failed:`` deny.
+    """
+    try:
+        return _derive(spec, arguments)
+    except DeriveError:
+        raise
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise DeriveError(f"value_unreadable:{type(exc).__name__}") from None
+
+
+def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
     if not isinstance(arguments, Mapping):
         raise DeriveError("arguments_not_object")
     amount_spec = spec.get("amount")
@@ -246,7 +264,7 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         if amount_spec["unit"] == "cents":
             if isinstance(raw, bool) or not isinstance(raw, (int, float)):
                 raise DeriveError("amount_unreadable")
-            if isinstance(raw, float) and not raw.is_integer():
+            if isinstance(raw, float) and (math.isnan(raw) or math.isinf(raw) or not raw.is_integer()):
                 raise DeriveError("amount_unreadable")
             cents = int(raw)
             if cents < 0 or cents > int(MAX_AMOUNT_USD * 100):
