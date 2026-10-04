@@ -153,7 +153,13 @@ field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
 `identities_digest`. The entry also holds the full quorum policy
 (`quorum_policy`) and its `policy_digest`. Each `decision` entry carries
-`identities_digest` and `policy_digest`, not the full policy.
+`identities_digest` and `policy_digest`, not the full policy. To check
+them, `two_key.audit.check_decision_digests(ledger)` recomputes both from
+the latest `constitution_loaded` before each decision and returns a list of
+mismatches (empty when all match). By hand: `identities_digest` is
+`canonical_hash({"agents": sep["agents"], "judges": sep["judges"]})` and
+`policy_digest` is `canonical_hash(quorum_policy)`, with `canonical_hash`
+from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).

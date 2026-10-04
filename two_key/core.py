@@ -17,6 +17,7 @@ from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 
 from .action import Action, ActionValidationError, normalize_action
+from .audit import identities_digest, policy_digest
 from .canonical import EncodingError, canonical_bytes, canonical_hash, digest_hex
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
@@ -114,12 +115,12 @@ class TwoKey:
         # The resolved identities are written once, in constitution_loaded; every decision entry
         # carries the digest of the policy in effect (policy_digest) and of those identities (identities_digest).
         sep = self.separation.to_record()
-        self._identities_digest = canonical_hash({"agents": sep["agents"], "judges": sep["judges"]})
+        self._identities_digest = identities_digest(sep)      # recomputable: two_key.audit
         sep = {**sep, "identities_digest": self._identities_digest,
                "credential_fingerprint": {"alg": "hmac-sha256", "key_id": fingerprint_key_id(self._fp_key),
                                           "input": "secret with surrounding whitespace stripped"}}
         # The full policy is in constitution_loaded (quorum_policy); each decision carries its digest.
-        self._policy_digest = canonical_hash(self.quorum.to_record())
+        self._policy_digest = policy_digest(self.quorum.to_record())
         self._decision_context = {"policy_digest": self._policy_digest,
                                   "identities_digest": self._identities_digest}
         try:

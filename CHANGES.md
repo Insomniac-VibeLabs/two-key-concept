@@ -210,6 +210,8 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   is a no-op. The result, with `resolved_by` for each identity, is in
   `constitution_loaded`; each decision carries `identities_digest` and
   `policy_digest` (the full quorum policy is in `constitution_loaded` only).
+  `two_key.audit.check_decision_digests(ledger)` recomputes both and lists
+  any decision that does not match.
 - Credential fingerprints are HMAC-SHA256 of the stripped secret under a
   per-install key, `<ledger>.ledger-key/fingerprint.key` (O_EXCL, 0600).
 - Locality comes from the endpoint host and an explicit allowlist

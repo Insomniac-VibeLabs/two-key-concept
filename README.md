@@ -288,6 +288,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | Path | What |
 | --- | --- |
 | `two_key/core.py` | `TwoKey.authorize` and `authorize_from_agent` |
+| `two_key/audit.py` | `check_decision_digests`: recompute each decision's `identities_digest` and `policy_digest` |
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
