@@ -3,18 +3,26 @@
   two-key init-key DIR
   two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE
   two-key authorize --key KEY --ledger DIR --constitution FILE --judges FILE --tool NAME
+                    [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
   two-key demo
+
+``authorize`` never prints the bearer token. It prints the decision with the token's
+jti and digest (the ledger's ``capability_issued.token_hash``). ``--emit-token PATH``
+writes the token itself to a new file with mode 0600. The agent session secret is
+read from the environment variable named by ``--agent-session-env``; it is never
+taken on argv, where other local users and shell history can see it.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from .constitution import load_unsigned, save_envelope, sign_constitution
-from .keys import generate_private_key, load_private_key, save_private_key, save_public_key
+from .keys import generate_private_key, load_private_key_file, save_private_key, save_public_key
 
 
 def _init_key(args) -> int:
@@ -31,7 +39,7 @@ def _init_key(args) -> int:
 
 
 def _sign(args) -> int:
-    key = load_private_key(args.key)
+    key = load_private_key_file(args.key)
     prose, rules, specs = load_unsigned(args.prose, args.rules)
     save_envelope(args.out, sign_constitution(prose, rules, key, specs))
     print(f"wrote {args.out}")
@@ -83,20 +91,42 @@ def _demo(_args) -> int:
 
 
 
+def _write_token(path: Path, token: str) -> None:
+    """Write the bearer token to a new file, mode 0600 from creation. Never overwrite."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "w", encoding="ascii") as fh:
+        fh.write(token + "\n")
+
+
 def _authorize(args) -> int:
     from .constitution import load_envelope
     from .core import TwoKey
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
-    from .keys import load_private_key
     from .ledger import Ledger
-    key = load_private_key(args.key)
+    if args.agent_session is not None:
+        print("--agent-session took the secret on the command line and is no longer accepted; "
+              "put it in an environment variable and pass --agent-session-env NAME", file=sys.stderr)
+        return 1
+    agent_session = None
+    if args.agent_session_env:
+        agent_session = os.environ.get(args.agent_session_env)
+        if not agent_session:
+            print(f"environment variable {args.agent_session_env} is not set", file=sys.stderr)
+            return 1
+    token_path = Path(args.emit_token) if args.emit_token else None
+    if token_path is not None and (token_path.exists() or token_path.is_symlink()):
+        print(f"refusing to overwrite {token_path}", file=sys.stderr)
+        return 1
+    key = load_private_key_file(args.key)
     judges, policy = load_config_file(Path(args.judges))
     # The monitored agent is declared by the operator in the judges file, never by the agent.
     agent = load_monitored_agent_file(Path(args.judges))
     ledger = Ledger(args.ledger, key)
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
-                     private_key=key, quorum=policy, monitored_agent=agent)
+                     private_key=key, quorum=policy, monitored_agent=agent,
+                     ttl_seconds=args.ttl_seconds)
     arguments = json.loads(args.args)
     if not isinstance(arguments, dict):
         raise SystemExit("args must be a JSON object")
@@ -104,8 +134,17 @@ def _authorize(args) -> int:
               "irreversible": args.irreversible}
     if args.counterparty:
         action["counterparty"] = args.counterparty
-    decision = tk.authorize(action, arguments, args.proposal, agent_session=args.agent_session)
-    print(json.dumps(decision.to_record(), indent=2))
+    decision = tk.authorize(action, arguments, args.proposal, agent_session=agent_session, origin="cli")
+    record = decision.to_record()
+    if decision.allowed and token_path is not None:
+        try:
+            _write_token(token_path, decision.token)
+        except OSError as e:
+            print(f"could not write {token_path}: {e.strerror}", file=sys.stderr)
+            print(json.dumps(record, indent=2))
+            return 1
+        record["token_file"] = str(token_path)
+    print(json.dumps(record, indent=2))
     return 0 if decision.allowed else 2
 
 
@@ -135,7 +174,13 @@ def main(argv: list[str] | None = None) -> int:
     auth.add_argument("--irreversible", action=argparse.BooleanOptionalAction, default=True,
                       help="defaults to true; pass --no-irreversible for a reversible call")
     auth.add_argument("--counterparty", default="")
-    auth.add_argument("--agent-session", default=None)
+    auth.add_argument("--agent-session-env", default=None, metavar="NAME",
+                      help="name of the environment variable holding the agent session secret")
+    auth.add_argument("--agent-session", default=None, help=argparse.SUPPRESS)
+    auth.add_argument("--ttl-seconds", type=int, default=120,
+                      help="token lifetime; the gateway refuses longer tokens (default 120)")
+    auth.add_argument("--emit-token", default=None, metavar="PATH",
+                      help="write the token to a new 0600 file; it is never printed")
     auth.set_defaults(func=_authorize)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)

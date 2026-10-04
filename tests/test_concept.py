@@ -288,7 +288,7 @@ class ConceptTests(unittest.TestCase):
         captured = {}
 
         class _Stopped:
-            def authorize(self, action, arguments, proposal, agent_session=None):
+            def authorize(self, action, arguments, proposal, agent_session=None, origin=None):
                 captured["action"] = action
                 return Decision(False, "stopped", None, {}, {}, 0, None)
 

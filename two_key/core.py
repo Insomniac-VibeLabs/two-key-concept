@@ -49,8 +49,30 @@ class Decision:
     ledger_size: int
     agent: dict | None = None
 
+    @property
+    def token_jti(self) -> str | None:
+        """The token id, read from the token body (not verified here; the gateway verifies)."""
+        if not self.token:
+            return None
+        try:
+            import base64
+            import json
+            body = self.token.split(".")[1]
+            return json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))["jti"]
+        except Exception:
+            return None
+
+    @property
+    def token_digest(self) -> str | None:
+        """``capability_issued.token_hash`` in the ledger. Safe to print; it cannot be redeemed."""
+        return canonical_hash(self.token) if self.token else None
+
     def to_record(self) -> dict:
-        return asdict(self)
+        """A printable record. The bearer token is replaced by its jti and digest; use ``.token``."""
+        rec = asdict(self)
+        rec.pop("token")
+        rec["token_jti"], rec["token_digest"] = self.token_jti, self.token_digest
+        return rec
 
 
 class TwoKey:
@@ -145,8 +167,12 @@ class TwoKey:
 
     def authorize(self, action: dict, arguments: dict, proposal: str, *,
                   agent_id: str | None = None, hosting: str | None = None,
-                  agent_session: str | None = None) -> Decision:
-        """Run both paths. Any exception is a deny that is written to the ledger (``internal_error:``)."""
+                  agent_session: str | None = None, origin: str = "library") -> Decision:
+        """Run both paths. Any exception is a deny that is written to the ledger (``internal_error:``).
+
+        ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
+        """
+        self._origin = origin if isinstance(origin, str) and origin else "library"
         try:
             return self._authorize(action, arguments, proposal, agent_id=agent_id, hosting=hosting,
                                    agent_session=agent_session)
@@ -263,6 +289,7 @@ class TwoKey:
                                                             "token_hash": issued.token_hash,
                                                             "ledger_root": issued.payload["ledger_root"]})
             self.ledger.append("decision", {"allowed": allowed, "reason": reason, "agent": agent,
+                                            "origin": getattr(self, "_origin", "library"),
                                             **self._decision_context})
             self.ledger.checkpoint()
         except LedgerError as e:
@@ -282,6 +309,7 @@ class TwoKey:
     def _deny(self, reason: str, agent, path_a, path_b) -> Decision:
         try:
             self.ledger.append("decision", {"allowed": False, "reason": reason, "agent": agent,
+                                            "origin": getattr(self, "_origin", "library"),
                                             **self._decision_context})
             self.ledger.checkpoint()
         except LedgerError as e:
