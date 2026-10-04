@@ -85,6 +85,11 @@ class TwoKey:
         check_judge_set(self.judges, self.quorum)
         # Judge != monitored agent, from operator configuration only (identity.py).
         self.separation = self._check_separation(monitored_agent, allow_test_doubles)
+        sep = self.separation.to_record()
+        # Every decision entry carries the policy in effect (opt-outs included) and the resolved
+        # identities it was decided under, so one entry can be audited on its own. Fingerprints only.
+        self._decision_context = {"policy": self.quorum.to_record(),
+                                  "judges": sep["judges"], "agents": sep["agents"]}
         self.ttl_seconds = ttl_seconds
         # The minting key is not the principal key, and it is not given to the gateway.
         self.issuer = CapabilityIssuer(open_capability_key(ledger), clock=clock) if private_key else None
@@ -94,7 +99,8 @@ class TwoKey:
             "bytecode_hash": self.compiled.bytecode_hash,
             "nl_hash": self.compiled.nl_hash,
             "spec_hash": self.compiled.spec_hash,
-            "judge_agent_separation": self.separation.to_record(),
+            "quorum_policy": self.quorum.to_record(),
+            "judge_agent_separation": sep,
         })
         self.ledger.checkpoint()
 
@@ -229,7 +235,8 @@ class TwoKey:
                     self.ledger.append("capability_issued", {"jti": issued.payload["jti"],
                                                             "token_hash": issued.token_hash,
                                                             "ledger_root": issued.payload["ledger_root"]})
-            self.ledger.append("decision", {"allowed": allowed, "reason": reason, "agent": agent})
+            self.ledger.append("decision", {"allowed": allowed, "reason": reason, "agent": agent,
+                                            **self._decision_context})
             self.ledger.checkpoint()
         except LedgerError as e:
             return Decision(False, f"ledger_failed:{e}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
@@ -247,7 +254,8 @@ class TwoKey:
 
     def _deny(self, reason: str, agent, path_a, path_b) -> Decision:
         try:
-            self.ledger.append("decision", {"allowed": False, "reason": reason, "agent": agent})
+            self.ledger.append("decision", {"allowed": False, "reason": reason, "agent": agent,
+                                            **self._decision_context})
             self.ledger.checkpoint()
         except LedgerError as e:
             reason = f"ledger_failed:{e}"
