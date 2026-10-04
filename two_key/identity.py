@@ -589,9 +589,9 @@ def load_monitored_agent(data: Mapping[str, Any] | None) -> AgentDeclaration | N
 
 
 def load_monitored_agent_file(path) -> AgentDeclaration | None:
-    from pathlib import Path
-    import json
-    path = Path(path)
-    text = path.read_text(encoding="utf-8")
-    data = json.loads(text) if path.suffix.lower() == ".json" else __import__("yaml").safe_load(text)
+    from .strict import StrictParseError, load_file_strict
+    try:
+        data = load_file_strict(path)
+    except StrictParseError as e:
+        raise IdentityError(f"{path}: {e}") from None
     return load_monitored_agent(data)

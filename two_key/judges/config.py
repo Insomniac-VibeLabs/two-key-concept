@@ -52,6 +52,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..quorum import QuorumConfigError, QuorumPolicy, check_judge_set
+from ..strict import StrictParseError, load_file_strict
 from .anthropic import AnthropicJudge
 from .base import Judge
 from .credentials import (CallbackTokenProvider, CredentialProvider, EnvApiKey, KeyringApiKey, NoCredential)
@@ -199,11 +200,8 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
 
 
 def load_config_file(path: Path, transport=None) -> tuple[list[Judge], QuorumPolicy]:
-    path = Path(path)
-    text = path.read_text(encoding="utf-8")
-    if path.suffix.lower() == ".json":
-        data = json.loads(text)
-    else:
-        import yaml
-        data = yaml.safe_load(text)
+    try:
+        data = load_file_strict(path)
+    except StrictParseError as e:
+        raise JudgeConfigError(f"{path}: {e}") from None
     return load_config(data, transport)

@@ -58,9 +58,9 @@ class Decision:
             return None
         try:
             import base64
-            import json
+            from .strict import loads_json_strict
             body = self.token.split(".")[1]
-            return json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))["jti"]
+            return loads_json_strict(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))["jti"]
         except Exception:
             return None
 

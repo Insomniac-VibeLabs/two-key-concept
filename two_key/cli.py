@@ -115,6 +115,14 @@ def _authorize(args) -> int:
         if not agent_session:
             print(f"environment variable {args.agent_session_env} is not set", file=sys.stderr)
             return 1
+    # Parsed first, strictly: a repeated key in --args is refused before anything is loaded.
+    from .strict import StrictParseError, loads_json_strict
+    try:
+        arguments = loads_json_strict(args.args)
+    except StrictParseError as e:
+        raise SystemExit(f"--args: {e}") from None
+    if not isinstance(arguments, dict):
+        raise SystemExit("args must be a JSON object")
     token_path = Path(args.emit_token) if args.emit_token else None
     if token_path is not None and (token_path.exists() or token_path.is_symlink()):
         print(f"refusing to overwrite {token_path}", file=sys.stderr)
@@ -127,9 +135,6 @@ def _authorize(args) -> int:
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
                      private_key=key, quorum=policy, monitored_agent=agent,
                      ttl_seconds=args.ttl_seconds)
-    arguments = json.loads(args.args)
-    if not isinstance(arguments, dict):
-        raise SystemExit("args must be a JSON object")
     action = {"tool": args.tool, "amount_usd": args.amount_usd, "data_class": args.data_class,
               "irreversible": args.irreversible}
     if args.counterparty:

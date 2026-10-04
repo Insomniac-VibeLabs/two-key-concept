@@ -22,6 +22,8 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+from ..strict import StrictParseError, loads_json_strict
+
 _MAX_ATTEMPTS = 3
 _MAX_BODY = 1_000_000
 _TRANSIENT_STATUS = {429, 502, 503, 504}
@@ -41,7 +43,7 @@ def urllib_transport(url: str, headers: dict, body: dict, timeout: float) -> dic
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", **headers})
     with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310
-        return json.loads(r.read(_MAX_BODY + 1).decode("utf-8"))
+        return loads_json_strict(r.read(_MAX_BODY + 1).decode("utf-8"))
 
 
 def _pool() -> dict:
@@ -113,8 +115,8 @@ def _once(url: str, headers: dict, payload: bytes, timeout: float) -> dict:
         _drop(key)
         raise urllib.error.HTTPError(url, resp.status, resp.reason, resp.headers, None)
     try:
-        return json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        return loads_json_strict(raw.decode("utf-8"))
+    except (UnicodeDecodeError, StrictParseError) as e:
         _drop(key)
         raise urllib.error.HTTPError(url, resp.status, f"not json: {e}", resp.headers, None) from e
 

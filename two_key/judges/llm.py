@@ -41,6 +41,7 @@ from ..canonical import canonical_bytes
 from .base import Ballot, Judge
 from .credentials import CredentialError, CredentialProvider, NoCredential
 from ..netloc import host_is_local, host_is_loopback, url_host
+from ..strict import StrictParseError, loads_json_strict
 
 Transport = Callable[[str, dict, dict, float], dict]
 
@@ -99,9 +100,9 @@ def parse_ballot_strict(text: Any, *, echo: bool = False) -> tuple[bool, float, 
     if not isinstance(text, str):
         raise MalformedBallot("response is not text")
     try:
-        obj = json.loads(text.strip())
-    except json.JSONDecodeError as e:
-        raise MalformedBallot(f"not valid JSON: {e.msg}") from None
+        obj = loads_json_strict(text.strip())
+    except StrictParseError as e:
+        raise MalformedBallot(str(e)) from None  # a duplicate "consistent" key is not a ballot
     keys = BALLOT_KEYS | set(BINDING_KEYS) if echo else BALLOT_KEYS
     if not isinstance(obj, dict) or set(obj) - {"ballot_mac"} != keys:
         raise MalformedBallot(f"expected exactly keys {sorted(keys)}")

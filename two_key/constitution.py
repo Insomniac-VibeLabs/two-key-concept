@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+
+from .strict import StrictParseError, load_file_strict, loads_json_strict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -205,15 +207,15 @@ def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, 
 
 
 def _load_rules_document(path: Path) -> tuple[list, dict]:
-    text = path.read_text(encoding="utf-8")
-    if path.suffix == ".json":
-        data = json.loads(text)
-    else:
+    if path.suffix.lower() != ".json":
         try:
-            import yaml
+            import yaml  # noqa: F401
         except ImportError as e:
             raise ConstitutionError("reading YAML rules needs the yaml extra (pip install pyyaml)") from e
-        data = yaml.safe_load(text)
+    try:
+        data = load_file_strict(path)
+    except StrictParseError as e:
+        raise ConstitutionError(f"rules file {path}: {e}") from None
     if isinstance(data, list):
         raise ConstitutionError("tool_specs required: a bare rule list cannot be signed")
     if isinstance(data, dict) and "hard_rules" in data:
@@ -257,7 +259,11 @@ def save_envelope(path: Path | str, envelope: dict) -> None:
 
 
 def load_envelope(path: Path | str) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    """Read a signed constitution. A duplicate key is refused: the signature covers one reading only."""
+    try:
+        return loads_json_strict(Path(path).read_text(encoding="utf-8"))
+    except StrictParseError as e:
+        raise ConstitutionError(f"constitution {path}: {e}") from None
 
 
 def verify_signed(envelope: dict, public_key) -> Constitution:

@@ -23,6 +23,7 @@ from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential
 from .judges.llm import LOOPBACK
 from .judges.transport import pooled_transport
+from .strict import StrictParseError, load_file_strict, loads_json_strict
 
 Transport = Callable[[str, dict, dict, float], dict]
 AGENT_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
@@ -107,27 +108,15 @@ def hosting_of(base_url: str, declared: str | None, *, local_default: bool = Fal
     return "local" if host in LOOPBACK else "cloud"
 
 
-class _DuplicateKey(ValueError):
-    pass
-
-
-def _no_duplicate_keys(pairs: list) -> dict:
-    """object_pairs_hook: a repeated key could make the checked value differ from the one a tool reads."""
-    obj = {}
-    for k, v in pairs:
-        if k in obj:
-            raise _DuplicateKey(k)
-        obj[k] = v
-    return obj
-
-
 def _loads_strict(text: str, what: str):
+    """A repeated key could make the checked value differ from the one a tool reads, so it is refused."""
     try:
-        return json.loads(text, object_pairs_hook=_no_duplicate_keys)
-    except _DuplicateKey as e:
-        raise AgentConfigError(f"{what} has a duplicate key {str(e)[:80]!r}") from None
-    except json.JSONDecodeError as e:
-        raise AgentConfigError(f"{what} is not JSON: {e.msg}") from None
+        return loads_json_strict(text)
+    except StrictParseError as e:
+        msg = str(e)
+        if msg.startswith("not valid JSON: "):
+            raise AgentConfigError(f"{what} is not JSON: {msg[16:]}") from None
+        raise AgentConfigError(f"{what} has a {msg}") from None
 
 
 def parse_proposal(text: str) -> tuple[dict, dict, str]:
@@ -319,7 +308,8 @@ def load_agents(data: dict, transport=None) -> list[MonitoredAgent]:
 
 
 def load_agents_file(path: Path, transport=None) -> list[MonitoredAgent]:
-    path = Path(path)
-    text = path.read_text(encoding="utf-8")
-    data = json.loads(text) if path.suffix.lower() == ".json" else __import__("yaml").safe_load(text)
+    try:
+        data = load_file_strict(path)
+    except StrictParseError as e:
+        raise AgentConfigError(f"{path}: {e}") from None
     return load_agents(data, transport)

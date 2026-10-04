@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .canonical import canonical_bytes, canonical_hash
+from .strict import loads_json_strict
 from cryptography.hazmat.primitives import serialization
 
 from .keys import generate_private_key, load_private_key, public_key, save_private_key, save_public_key, sign, verify
@@ -131,8 +132,8 @@ class CapabilityVerifier:
         if not verify(self.public_key, body.encode("ascii"), signature):
             raise TokenError("bad_signature")
         try:
-            payload = json.loads(_b64u_dec(body))
-        except ValueError:
+            payload = loads_json_strict(_b64u_dec(body))
+        except ValueError:  # StrictParseError is a ValueError
             raise TokenError("malformed_token") from None
         if not isinstance(payload, dict) or payload.get("v") != 1:
             raise TokenError("malformed_token")
