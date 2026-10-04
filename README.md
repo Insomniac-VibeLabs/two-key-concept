@@ -25,19 +25,31 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    disagrees with the bytes is a deny. Omitting `tool_specs` will not sign
    and will not load. A key the spec does not name does not reach the tool.
    `deny_unmapped` defaults off, so the call can still be allowed and that
-   key is dropped at the gateway. Set it true to deny the key instead. A
-   `payload` path names a value that is not interpreted. With no `shape`, it
+   key is dropped at the gateway. The ledger records the dropped key names
+   (`dropped_keys`), never their values. Set it true to deny the key
+   instead. A `payload` path names a value that is not interpreted. It may
+   not equal, contain, or sit under an amount, currency, or counterparty
+   path; such a spec does not load. With no `shape`, it
    covers that value's children. `shape` may lock it to a string, a number,
    or a list of strings. `max_length` bounds a string or a list. Shape does
    not read the contents. The spec does not list every nested key. A counterparty
    path must list `allow`. A party that is not on that list is
    `counterparty_not_allowed`. The tool receives the canonical party, not
-   the raw spelling.
+   the raw spelling. A value that cannot be read (for example `10**400`) is
+   a `derive_failed` deny, and any other exception in `authorize` is an
+   `internal_error:` deny, written to the ledger.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
-   Anthropic, Gemini, and Ollama. A missing or malformed ballot does not
-   count as yes. The diversity floors are on by default: two vendors, one
-   local judge, and a yes from that local judge. Opt out with
-   `QuorumPolicy.without_diversity_floors()` or the matching quorum fields.
+   Anthropic, Gemini, and Ollama. The minimum is one judge, and that judge
+   must not be the monitored agent. A missing, malformed, errored, or
+   timed-out ballot does not count as yes. The default policy has no
+   diversity floors. `QuorumPolicy.high_assurance()` (or
+   `profile: high_assurance` in judges.yaml) turns on two vendors, one local
+   judge, and a yes from that local judge; use it for destructive,
+   irreversible, financial, or external-send tools. `require_local_yes`
+   with no local judge does not start. A judge is local only when it says
+   so and its `base_url` host is on an allowlist: loopback, RFC 1918, or
+   IPv6 unique-local. An Ollama `-cloud` model is never local. With
+   `required_yes` unset, the quorum needs `min(2, judges)` yes votes.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless
    `tool_args_on_derive_deny` is set. Path B still runs. Other denies still
@@ -46,8 +58,9 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    token is signed by a capability key that lives outside the ledger
    directory, not by handing that private key to the gateway. It is bound
    to the tool, the argument hash, the ledger Merkle root at issuance, the
-   constitution hashes, `spec_hash`, and the derived form. Redemption writes
-   an intent before the tool runs, so a crash cannot run that token twice.
+   constitution hashes, `spec_hash`, and the derived form. It lives
+   `ttl_seconds` (default 120, at most 300). Redemption writes an intent before the tool
+   runs, so a crash cannot run that token twice.
 4. The gateway redeems that token with the public half of the capability
    key. It does not hold the minting key, and it does not inspect file
    contents, mail, or tool output for DLP or malware.
@@ -73,8 +86,9 @@ flowchart TD
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
-  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B convene<br/>default: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
+  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B convene<br/>default: one judge, T-of-N<br/>high_assurance: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
   judgeText --> pathB
+  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: judge is not the agent"| judges
   session["agent_session<br/>must not be a judge API key"] --> pathB
   pathB -->|"parallel score, separate credentials"| judges["Judges<br/>xAI, OpenAI, Anthropic, Gemini, Ollama"]
   judges -->|"yes, no, or abstain"| pathB
@@ -109,13 +123,49 @@ judge has `receives_proposal: true`, or the quorum policy is
 `examples/judges.yaml`, is `record_only`.
 
 Judges are loaded into `TwoKey` from their own config and their own API
-keys. Use a different key than the agent. They vote in parallel under one
-deadline. A missing, malformed, or timed-out ballot is an abstention, and
-an abstention is not a yes. A cloud judge makes the round deny when
-`agent_session` is missing. If that string equals the judge credential, the
-ballot abstains with `cloud_judge_reused_agent_session` and the round
+keys. The operator declares the monitored agent (`monitored_agent:` in
+judges.yaml, or `TwoKey(monitored_agent=...)`): its model, `base_url`, and
+credential. The agent's own report is never used. At start-up `TwoKey`
+resolves every judge and the agent to a normalized model (Unicode forms
+and dashes folded), the endpoint `host:port`, the upstream that serves it
+and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
+`declared_upstream`), scoped tenant ids (a `tenant:` mapping of
+`organization`, `project`, `account`, or `deployment`, plus what the URL
+shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
+whitespace stripped). It refuses to start (`judge_matches_agent:`) only
+when a judge is the same agent: the same credential, a shared tenant id,
+or the same model on the same endpoint. An identity it cannot resolve also
+refuses, including a local proxy serving an alias model unless you declare
+its `upstream:`. The same provider with a different model is allowed and
+recorded. `allow_same_provider_judge` is accepted and has no effect.
+Without a declaration it refuses with `monitored_agent_required:`. The
+result is in the `constitution_loaded` ledger entry. Provider labels are
+never compared. HOWTO has the details.
+
+Judges vote in parallel under one hard deadline. A missing, malformed, or
+timed-out ballot is an abstention, and an abstention is not a yes. No
+judge, no deadline, or two judges with the same id does not start. Each
+ballot is paired with its judge by position and takes its judge id from
+the judge; a ballot that names another judge abstains
+(`judge_id_mismatch`). A judge
+that is not on a loopback host makes the round deny when `agent_session`
+is missing. If that string equals any judge's credential, local or cloud,
+the ballot abstains with `cloud_judge_reused_agent_session` and the round
 denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
 session at the model host.
+
+Without a local judge, the constitution prose, the action record, and any
+attached tool arguments go to the cloud judges' vendors.
+
+Every `decision` in the ledger records the quorum policy in effect
+(opt-outs included) and `identities_digest`, the digest of the resolved
+judge and agent identities written once in `constitution_loaded`: model,
+upstream, endpoint, tenant ids, and credential fingerprint, never a key.
+
+Every JSON and YAML input is parsed strictly: a repeated key at any depth
+is refused, never last-one-wins. Unknown top-level keys in judges.yaml or
+agents.yaml are refused. Tool arguments or a proposal over 256 KiB, or
+nested too deeply to encode, are denied before they are ledgered.
 
 One call, in code order:
 
@@ -161,12 +211,17 @@ outside the ledger directory). It is bound to the tool, the argument hash,
 the ledger Merkle root and size at issuance, the constitution hashes,
 `spec_hash`, and the derived form. The gateway is constructed with
 `issuer.verifier()` or with the issuer; either way it keeps only the public
-key. It recomputes the form from the same bytes. It checks expiry,
-signature, and that nothing revoked or reloaded the constitution after
-issuance. It writes `redemption_started` before the tool runs. It does not
+key. It recomputes the form from the same bytes. It checks the
+signature, expiry, a lifetime no longer than the TTL (`ttl_too_long`), an
+issue time at most 5 s ahead (`issued_in_future`), and that nothing revoked
+or reloaded the constitution after issuance. It writes `redemption_started` before the tool runs. It does not
 scan the bytes for sensitive text. The principal key still signs the
 constitution and the ledger head. A token signed with that principal key
-does not redeem.
+does not redeem, and a capability key equal to the principal key is
+refused. The capability key is created once, mode 0600 in a 0700
+directory. Once a token has been issued it is never regenerated: a missing
+or changed key refuses to start. Its fingerprint is recorded in
+`constitution_loaded` and the gateway checks it.
 
 ## What this repo leaves out
 
@@ -189,7 +244,9 @@ directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 Install from git. It is not published to PyPI. Package version 0.1.12.
-Tag `v0.1.12` is this tree. `v0.1.6` stays on the previous tree.
+Tag `v0.1.12` is on `main`. The `working` branch adds the changes listed
+under `working` in [CHANGES.md](CHANGES.md); they change configuration (see
+there before upgrading).
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
@@ -221,9 +278,12 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/policy_vm.py`, `compiler.py` | Path A |
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
+| `two_key/identity.py`, `netloc.py` | Judge ≠ monitored agent check; local vs. cloud host |
+| `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys refused) |
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
+| `two_key/keys.py`, `cli.py` | Key files; `two-key` command line |
 | `examples/` | Constitution, hard rules, judges, agents |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |

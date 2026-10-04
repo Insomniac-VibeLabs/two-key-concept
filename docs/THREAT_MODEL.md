@@ -67,14 +67,22 @@ the code wins, then this file should be corrected.
 
 - A tool execution inside `authorize_from_agent`.
 - An allow when either path denies or does not answer. A missing, malformed,
-  or timed-out ballot is an abstention, not a yes. The diversity floors are
-  on unless you opt out: two vendors, one local judge, and a yes from a
-  local judge. `QuorumPolicy.section4()` is that floor plus
-  `require_path_a_first`. The flag is still not a skip.
-  `min_distinct_providers` still defaults to 1.
+  or timed-out ballot is an abstention, not a yes. A ballot that names
+  another judge abstains (`judge_id_mismatch`). The default needs one judge
+  and has no diversity floors. `QuorumPolicy.high_assurance()` sets two
+  vendors, one local judge, and a yes from a local judge;
+  `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
+  still not a skip. `min_distinct_providers` still defaults to 1.
+- A judge that is the monitored agent: the same credential, a shared tenant
+  id, the same model on the same endpoint, or an identity that cannot be
+  resolved refuses to start. The agent is declared by the operator, never
+  by the agent. The same provider is allowed.
+- A value read twice: every JSON and YAML input refuses a repeated key.
+  Oversized or too-deeply nested arguments are a deny before the ledger.
 - A token replay, a token used for different argument bytes, a token used
-  after expiry (120 seconds unless you change it), and a token used after
-  revocation or a constitution reload.
+  after expiry (120 seconds unless you change it, at most 300), a token
+  whose lifetime exceeds the TTL or whose issue time is in the future, and
+  a token used after revocation or a constitution reload.
 - A second run of a token after `redemption_started` has been checkpointed.
   A tool exception writes `redemption_aborted` and leaves the token usable.
 - A silent edit of a ledger record that still verifies, and opening the log
@@ -94,7 +102,12 @@ the code wins, then this file should be corrected.
   `deny_unmapped` defaults off. An unnamed key does not reach the tool.
   Setting the flag denies the call instead (`unmapped_field`).
 - Judges are one key of two. The quorum does not prove the models are
-  independent. The diversity floors are on by default and can be turned off.
+  independent. The diversity floors are off by default; `high_assurance`
+  turns them on. A judge that is not the same agent may still share a
+  provider and its blind spots with the agent. A declared `upstream:` and a
+  `model_prefix` resolution are operator-attested and not verified.
+- Without a local judge, the constitution prose, the action record, and any
+  attached tool arguments go to the cloud judges' vendors.
 
 ## Residual risks
 
@@ -180,7 +193,9 @@ claims to close.
 
 - `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
-- `two_key/quorum.py`: an abstention is not a yes, diversity floors default on, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
+- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), vendor names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
-- `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds.
+- `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
+- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; HMAC credential fingerprints; local means the loopback, RFC 1918, or fc00::/7 allowlist.
+- `two_key/strict.py`: every JSON and YAML input refuses duplicate keys.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append.

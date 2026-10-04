@@ -4,6 +4,12 @@
 # A cloud agent (Grok, ChatGPT, Claude, Gemini, or any other vendor) is not
 # trusted: its proposal still has to pass the constitution. No secrets here.
 # Replace every REPLACE_WITH_MODEL. Use a different API key than the judges.
+# Declare the agent you run to TwoKey: TwoKey(monitored_agent=agent), or a
+# list of agents, or the monitored_agent block in judges.yaml for the CLI.
+# Each declared agent is checked against every judge at startup. A judge
+# with the same key, a shared tenant id, or the same model on the same
+# endpoint host:port as an agent refuses to start. Only the top-level key
+# agents is accepted, and a repeated key is refused.
 
 agents:
   - id: grok
