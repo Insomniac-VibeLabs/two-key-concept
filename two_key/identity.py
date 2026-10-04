@@ -43,9 +43,13 @@ Each judge and agent is resolved to:
   Bedrock ``account`` (declared) with the region from the host, OpenAI
   ``organization`` / ``project`` (declared). Elsewhere a declared id is scoped
   by the endpoint host.
-- ``credential``: a fingerprint, SHA-256 over a domain-separated encoding of
-  the key (``sha256:...``). Raw keys are never stored or logged. ``none``
-  means the endpoint takes no key; two keyless endpoints do not match on it.
+- ``credential``: a fingerprint, HMAC-SHA256 of the key with leading and
+  trailing whitespace stripped (``hmac-sha256:...``). The HMAC key is a
+  random per-install secret in ``fingerprint.key`` (created once with O_EXCL,
+  mode 0600; ``$TWO_KEY_FINGERPRINT_KEY`` names another path), so a ledger
+  reader cannot test guessed keys against a fingerprint. Raw keys are never
+  stored or logged. ``none`` means the endpoint takes no key; two keyless
+  endpoints do not match on it.
 
 Refusals, judge against agent (all hard, no opt-out), message prefix
 ``judge_matches_agent:``:
@@ -69,7 +73,10 @@ the frozen agent session abstains with ``cloud_judge_reused_agent_session``.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
+import secrets
+import stat
 import re
 import sys
 import unicodedata
@@ -100,10 +107,75 @@ class IdentityError(ValueError):
     """The agent or a judge cannot be identified, or a judge could be the agent."""
 
 
-def credential_fingerprint(secret: str | None) -> str:
+FINGERPRINT_KEY_ENV = "TWO_KEY_FINGERPRINT_KEY"
+FINGERPRINT_KEY_BYTES = 32
+_FINGERPRINT_KEYS: dict[str, bytes] = {}
+
+
+def fingerprint_key_path() -> str:
+    """``$TWO_KEY_FINGERPRINT_KEY``, else ``$XDG_CONFIG_HOME/two-key/fingerprint.key`` (``~/.config``)."""
+    explicit = os.environ.get(FINGERPRINT_KEY_ENV)
+    if explicit:
+        return os.path.abspath(explicit)
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(os.path.abspath(base), "two-key", "fingerprint.key")
+
+
+def _read_fingerprint_key(path: str) -> bytes:
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as e:
+        raise IdentityError(f"fingerprint_key_unreadable: {path}: {e.strerror}") from None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise IdentityError(f"fingerprint_key_unreadable: {path} is not a regular file")
+        if st.st_mode & 0o077:
+            raise IdentityError(f"fingerprint_key_insecure: {path} is readable by group or others; chmod 600 it")
+        data = os.read(fd, FINGERPRINT_KEY_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(data) != FINGERPRINT_KEY_BYTES:
+        raise IdentityError(f"fingerprint_key_unreadable: {path} is not a {FINGERPRINT_KEY_BYTES}-byte key")
+    return data
+
+
+def fingerprint_key(path: str | None = None) -> bytes:
+    """Load the per-install HMAC key, creating it (O_EXCL, 0600, directory 0700) the first time."""
+    path = path or fingerprint_key_path()
+    if path in _FINGERPRINT_KEYS:
+        return _FINGERPRINT_KEYS[path]
+    if not os.path.lexists(path):
+        try:
+            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        except FileExistsError:
+            fd = None                      # another process created it first: read theirs
+        except OSError as e:
+            raise IdentityError(f"fingerprint_key_unavailable: cannot create {path}: {e.strerror}; set "
+                                f"{FINGERPRINT_KEY_ENV} to a writable path") from None
+        if fd is not None:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(secrets.token_bytes(FINGERPRINT_KEY_BYTES))
+    key = _read_fingerprint_key(path)
+    _FINGERPRINT_KEYS[path] = key
+    return key
+
+
+def fingerprint_key_id(key: bytes | None = None) -> str:
+    """A public id for the HMAC key, so a ledger reader knows which install's fingerprints these are."""
+    key = fingerprint_key() if key is None else key
+    return hashlib.sha256(b"two-key/fingerprint-key-id/1\x00" + key).hexdigest()[:16]
+
+
+def credential_fingerprint(secret: str | None, *, key: bytes | None = None) -> str:
+    """HMAC-SHA256 of the stripped secret under the per-install key; ``none`` for no secret."""
+    secret = (secret or "").strip()
     if not secret:
         return NO_CREDENTIAL
-    return "sha256:" + hashlib.sha256(FINGERPRINT_DOMAIN + secret.encode("utf-8", "surrogatepass")).hexdigest()
+    key = fingerprint_key() if key is None else key
+    mac = hmac.new(key, FINGERPRINT_DOMAIN + secret.encode("utf-8", "surrogatepass"), hashlib.sha256)
+    return "hmac-sha256:" + mac.hexdigest()
 
 
 # ---------------------------------------------------------------- model ids
@@ -540,6 +612,8 @@ class SeparationReport:
     def to_record(self) -> dict:
         return {"ok": self.ok, "rule": "judge_is_not_monitored_agent", "checks": list(SEPARATION_CHECKS),
                 "same_provider": "allowed",
+                "credential_fingerprint": {"alg": "hmac-sha256", "key_id": fingerprint_key_id(),
+                                           "input": "secret with surrounding whitespace stripped"},
                 "refusals": list(self.refusals),
                 "agents": [a.to_record() for a in self.agents],
                 "judges": [j.to_record() for j in self.judges]}

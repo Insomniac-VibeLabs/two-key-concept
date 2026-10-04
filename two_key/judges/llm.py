@@ -211,6 +211,7 @@ class LLMJudge(Judge):
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(f"credential: {e}")
         sessions = {agent_session} if isinstance(agent_session, str) else set(agent_session or ())
+        sessions = {s.strip() for s in sessions if isinstance(s, str)}   # as for fingerprints
         sessions.discard("")
         if self.is_cloud() and not sessions:
             return self.abstain("cloud_judge_session_required")
@@ -221,7 +222,7 @@ class LLMJudge(Judge):
         if auth.lower().startswith("bearer "):
             tokens.append(auth.split(" ", 1)[1].strip())
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
-        if any(token and token in sessions for token in tokens):
+        if any(token and token.strip() in sessions for token in tokens):
             return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():
             # Two-Key's own call id. It is not a session at the provider.

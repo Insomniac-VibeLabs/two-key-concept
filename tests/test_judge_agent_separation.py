@@ -107,7 +107,7 @@ class Normalization(unittest.TestCase):
 
     def test_fingerprint_never_contains_the_key(self):
         fp = credential_fingerprint("sk-very-secret")
-        self.assertTrue(fp.startswith("sha256:"))
+        self.assertTrue(fp.startswith("hmac-sha256:"))
         self.assertNotIn("very-secret", fp)
         self.assertEqual(credential_fingerprint(""), "none")
 
