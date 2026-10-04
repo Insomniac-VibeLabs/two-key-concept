@@ -347,12 +347,15 @@ class ConceptTests(unittest.TestCase):
             self.assertTrue(first.lock_path().is_file())
             self.assertFalse(str(first.lock_path()).startswith(str(path) + os.sep))
 
-    def test_diversity_floors_default_on_and_can_be_opted_out(self):
+    def test_one_judge_default_and_high_assurance_opt_in(self):
         policy = QuorumPolicy()
-        self.assertEqual(policy.min_vendors, 2)
-        self.assertEqual(policy.min_local_judges, 1)
-        self.assertTrue(policy.require_local_yes)
+        self.assertEqual(policy.min_vendors, 1)
+        self.assertEqual(policy.min_local_judges, 0)
+        self.assertFalse(policy.require_local_yes)
         self.assertFalse(policy.require_path_a_first)
+        self.assertEqual(QuorumPolicy.without_diversity_floors(required_yes=2), QuorumPolicy(required_yes=2))
+        strict = QuorumPolicy.high_assurance()
+        self.assertEqual((strict.min_vendors, strict.min_local_judges, strict.require_local_yes), (2, 1, True))
         same = [FixedJudge("a", "yes", provider="p", vendor="v"),
                 FixedJudge("b", "yes", provider="p", vendor="v")]
         with tempfile.TemporaryDirectory() as tmp:
@@ -362,14 +365,29 @@ class ConceptTests(unittest.TestCase):
             constitution = verify_signed(env, key.public_key())
             with self.assertRaises(QuorumConfigError):
                 TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
-                       quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+                       quorum=QuorumPolicy.high_assurance(required_yes=2), allow_test_doubles=True)
             tk = TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
-                        quorum=QuorumPolicy.without_diversity_floors(required_yes=2),
-                        allow_test_doubles=True)
+                        quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
             decision = tk.authorize(
                 {"tool": "search", "amount_usd": 0, "data_class": "public", "irreversible": False},
                 {"q": "weather"}, "search")
             self.assertTrue(decision.allowed, decision.reason)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, one = _engine(tmp, ("yes",), quorum=QuorumPolicy(required_yes=1))
+            decision = one.authorize(
+                {"tool": "search", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"q": "weather"}, "search")
+            self.assertTrue(decision.allowed, decision.reason)
+
+    def test_quorum_profile_in_yaml(self):
+        from two_key.judges.config import load_config
+        judge = {"id": "l", "type": "ollama", "model": "qwen2.5:7b"}
+        _, policy = load_config({"judges": [judge]})
+        self.assertEqual((policy.required_yes, policy.min_vendors, policy.require_local_yes), (1, 1, False))
+        with self.assertRaises(JudgeConfigError):
+            load_config({"judges": [judge], "quorum": {"profile": "high_assurance", "required_yes": 1}})
+        with self.assertRaises(JudgeConfigError):
+            load_config({"judges": [judge], "quorum": {"profile": "paranoid"}})
 
     def test_section4_does_not_skip_path_b(self):
         with tempfile.TemporaryDirectory() as tmp:

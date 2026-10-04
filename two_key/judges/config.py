@@ -6,10 +6,11 @@ Format (see examples/judges.yaml):
       required_yes: 2          # k-of-n
       min_responding: 2        # spec 5.4 "K"
       min_distinct_providers: 1
-      # Diversity floors default on (QuorumPolicy). Opt out by setting:
-      min_vendors: 2           # set 1 to opt out
-      min_local_judges: 1      # set 0 to opt out
-      require_local_yes: true  # set false to opt out
+      # profile: high_assurance  # opt-in: 2 vendors, 1 local judge, require_local_yes
+      # Defaults shown (one judge is enough; see quorum.QuorumPolicy):
+      min_vendors: 1           # >= 2 with profile: high_assurance
+      min_local_judges: 0      # >= 1 with profile: high_assurance
+      require_local_yes: false # true with profile: high_assurance
       heterogeneity_scope: selection   # selection | responding
       judge_inputs: record_only        # record_only | record_and_proposal
       ballot_binding: stamp            # stamp | echo
@@ -62,7 +63,9 @@ JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
               "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
-               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny"}
+               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile"}
+# default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 vendors, 1 local, local yes).
+QUORUM_PROFILES = {"default", "high_assurance"}
 
 
 class JudgeConfigError(ValueError):
@@ -142,10 +145,19 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     if len(set(ids)) != len(ids):
         raise JudgeConfigError("judge ids must be unique")
     q = data.get("quorum") or {}
+    if not isinstance(q, dict):
+        raise JudgeConfigError("quorum must be a mapping")
+    q = dict(q)
     if set(q) - QUORUM_KEYS:
         raise JudgeConfigError(f"unknown quorum keys {sorted(set(q) - QUORUM_KEYS)}")
+    profile = q.pop("profile", "default")
+    if profile not in QUORUM_PROFILES:
+        raise JudgeConfigError(f"quorum profile must be one of {sorted(QUORUM_PROFILES)}")
     try:
-        policy = QuorumPolicy(**q) if q else QuorumPolicy(required_yes=min(2, len(judges)))
+        if profile == "high_assurance":
+            policy = QuorumPolicy.high_assurance(**q)
+        else:
+            policy = QuorumPolicy(**q) if q else QuorumPolicy(required_yes=min(2, len(judges)))
     except QuorumConfigError as e:
         raise JudgeConfigError(str(e)) from e
     if policy.required_yes > len(judges):
