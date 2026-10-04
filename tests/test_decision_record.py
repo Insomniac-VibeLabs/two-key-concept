@@ -1,4 +1,7 @@
-"""Fix 7: the ledger records the quorum policy in effect and each judge's resolved identity."""
+"""Fix 7: the ledger records the quorum policy in effect and each judge's resolved identity.
+
+The identities are written once, in constitution_loaded; each decision references them by digest.
+"""
 
 import json
 import os
@@ -6,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from two_key.canonical import canonical_hash
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
 from two_key.identity import credential_fingerprint, normalize_model
@@ -49,15 +53,22 @@ class DecisionRecord(unittest.TestCase):
             self.assertTrue(loaded["quorum_policy"]["tool_args_on_derive_deny"])
             decisions = [e.body for e in tk.ledger.entries if e.kind == "decision"]
             self.assertEqual(len(decisions), 3)
+            sep = loaded["judge_agent_separation"]
+            self.assertEqual(sep["identities_digest"],
+                             canonical_hash({"agents": sep["agents"], "judges": sep["judges"]}))
+            fp_key = tk.ledger.fingerprint_key()
             for d in decisions:
                 self.assertEqual(d["policy"], policy.to_record())
-                (j,) = d["judges"]
-                self.assertEqual(j["id"], "claude")
-                self.assertEqual(j["model"], normalize_model("claude-3-haiku"))
-                self.assertEqual(j["model_declared"], "claude-3-haiku-20240307")
-                self.assertEqual(j["upstream"], ["api.anthropic.com"])
-                self.assertEqual(j["credential_fingerprint"], [credential_fingerprint("judge-key")])
-                self.assertEqual(d["agents"][0]["upstream"], ["api.x.ai"])
+                self.assertNotIn("judges", d)          # identities are written once, referenced by digest
+                self.assertEqual(d["identities_digest"], sep["identities_digest"])
+            (j,) = sep["judges"]
+            self.assertEqual(j["id"], "claude")
+            self.assertEqual(j["model"], normalize_model("claude-3-haiku"))
+            self.assertEqual(j["model_declared"], "claude-3-haiku-20240307")
+            self.assertEqual(j["upstream"], ["api.anthropic.com"])
+            self.assertEqual(j["credential_fingerprint"], [credential_fingerprint("judge-key", fp_key)])
+            self.assertTrue(j["credential_fingerprint"][0].startswith("hmac-sha256:"))
+            self.assertEqual(sep["agents"][0]["upstream"], ["api.x.ai"])
             text = json.dumps([e.body for e in tk.ledger.entries])
             self.assertNotIn('"judge-key"', text)
             self.assertNotIn("agent-secret", text)

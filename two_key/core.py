@@ -22,7 +22,7 @@ from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fi
                          valid_ttl)
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
-from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation,
+from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation, fingerprint_key_id,
                        configured_agent_identity, judge_identity)
 from .derive import (DeriveError, args_too_large, blocked_from_rules, derive, disagreement, disallowed_party,
                      dropped_keys, form_for, size_record)
@@ -110,11 +110,15 @@ class TwoKey:
         check_judge_set(self.judges, self.quorum)
         # Judge != monitored agent, from operator configuration only (identity.py).
         self.separation = self._check_separation(monitored_agent, allow_test_doubles)
+        # The resolved identities are written once, in constitution_loaded; every decision entry
+        # carries the policy in effect and the digest of those identities (identities_digest).
         sep = self.separation.to_record()
-        # Every decision entry carries the policy in effect (opt-outs included) and the resolved
-        # identities it was decided under, so one entry can be audited on its own. Fingerprints only.
+        self._identities_digest = canonical_hash({"agents": sep["agents"], "judges": sep["judges"]})
+        sep = {**sep, "identities_digest": self._identities_digest,
+               "credential_fingerprint": {"alg": "hmac-sha256", "key_id": fingerprint_key_id(self._fp_key),
+                                          "input": "secret with surrounding whitespace stripped"}}
         self._decision_context = {"policy": self.quorum.to_record(),
-                                  "judges": sep["judges"], "agents": sep["agents"]}
+                                  "identities_digest": self._identities_digest}
         try:
             valid_ttl(ttl_seconds)       # an int in 1..MAX_TTL_SECONDS (300); NaN, inf, floats refused
         except ValueError as e:
@@ -154,17 +158,21 @@ class TwoKey:
         # when every judge is a test double too (an offline test). With a real judge, declare the real agent.
         allow_in_process = allow_test_doubles and all(getattr(j, "is_test_double", False) for j in self.judges)
         try:
+            self._fp_key = key = self.ledger.fingerprint_key()   # per-install HMAC key; fingerprints only
+        except LedgerError as e:
+            raise TwoKeyConfigError(str(e)) from e
+        try:
             agents = []
             for d in decls:
                 if isinstance(d, AgentDeclaration) or isinstance(d, Mapping):
                     if not isinstance(d, AgentDeclaration):
                         d = AgentDeclaration.from_mapping(d)
-                    agents.append(d.resolve(allow_in_process=allow_in_process))
+                    agents.append(d.resolve(allow_in_process=allow_in_process, fp_key=key))
                 elif all(hasattr(d, k) for k in ("agent_id", "model", "base_url", "credential")):
-                    agents.append(configured_agent_identity(d))  # a MonitoredAgent from agents.yaml
+                    agents.append(configured_agent_identity(d, key))  # a MonitoredAgent from agents.yaml
                 else:
                     raise IdentityError("monitored_agent must be a mapping, an AgentDeclaration, or a MonitoredAgent")
-            judges = [judge_identity(j) for j in self.judges]
+            judges = [judge_identity(j, key) for j in self.judges]
             return check_separation(agents, judges, self.quorum.allow_same_provider_judge)
         except IdentityError as e:
             raise TwoKeyConfigError(str(e)) from e

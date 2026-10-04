@@ -45,9 +45,9 @@ Each judge and agent is resolved to:
   by the endpoint host.
 - ``credential``: a fingerprint, HMAC-SHA256 of the key with leading and
   trailing whitespace stripped (``hmac-sha256:...``). The HMAC key is a
-  random per-install secret in ``fingerprint.key`` (created once with O_EXCL,
-  mode 0600; ``$TWO_KEY_FINGERPRINT_KEY`` names another path), so a ledger
-  reader cannot test guessed keys against a fingerprint. Raw keys are never
+  random per-install secret, ``fingerprint.key`` beside the ledger key
+  (``<ledger>.ledger-key/``, created once with O_EXCL, mode 0600), so a
+  ledger reader cannot test guessed keys against a fingerprint. Raw keys are never
   stored or logged. ``none`` means the endpoint takes no key; two keyless
   endpoints do not match on it.
 
@@ -107,21 +107,32 @@ class IdentityError(ValueError):
     """The agent or a judge cannot be identified, or a judge could be the agent."""
 
 
-FINGERPRINT_KEY_ENV = "TWO_KEY_FINGERPRINT_KEY"
 FINGERPRINT_KEY_BYTES = 32
-_FINGERPRINT_KEYS: dict[str, bytes] = {}
 
 
-def fingerprint_key_path() -> str:
-    """``$TWO_KEY_FINGERPRINT_KEY``, else ``$XDG_CONFIG_HOME/two-key/fingerprint.key`` (``~/.config``)."""
-    explicit = os.environ.get(FINGERPRINT_KEY_ENV)
-    if explicit:
-        return os.path.abspath(explicit)
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(os.path.abspath(base), "two-key", "fingerprint.key")
+def load_fingerprint_key(path: str | os.PathLike) -> bytes:
+    """Load the per-install HMAC key at ``path``, creating it the first time.
 
-
-def _read_fingerprint_key(path: str) -> bytes:
+    32 random bytes, created with O_EXCL (two processes never write different
+    keys) at mode 0600 in a 0700 directory. An existing key is read with
+    O_NOFOLLOW and refused if it is not a regular file, is group- or
+    world-accessible, or is not 32 bytes. Never regenerated.
+    """
+    path = os.fspath(path)
+    if not os.path.lexists(path):
+        try:
+            os.makedirs(os.path.dirname(path) or ".", mode=0o700, exist_ok=True)
+            os.chmod(os.path.dirname(path) or ".", 0o700)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        except FileExistsError:
+            fd = None                      # another process created it first: read theirs
+        except OSError as e:
+            raise IdentityError(f"fingerprint_key_unavailable: cannot create {path}: {e.strerror}") from None
+        if fd is not None:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(secrets.token_bytes(FINGERPRINT_KEY_BYTES))
+                fh.flush()
+                os.fsync(fh.fileno())
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except OSError as e:
@@ -140,42 +151,24 @@ def _read_fingerprint_key(path: str) -> bytes:
     return data
 
 
-def fingerprint_key(path: str | None = None) -> bytes:
-    """Load the per-install HMAC key, creating it (O_EXCL, 0600, directory 0700) the first time."""
-    path = path or fingerprint_key_path()
-    if path in _FINGERPRINT_KEYS:
-        return _FINGERPRINT_KEYS[path]
-    if not os.path.lexists(path):
-        try:
-            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        except FileExistsError:
-            fd = None                      # another process created it first: read theirs
-        except OSError as e:
-            raise IdentityError(f"fingerprint_key_unavailable: cannot create {path}: {e.strerror}; set "
-                                f"{FINGERPRINT_KEY_ENV} to a writable path") from None
-        if fd is not None:
-            with os.fdopen(fd, "wb") as fh:
-                fh.write(secrets.token_bytes(FINGERPRINT_KEY_BYTES))
-    key = _read_fingerprint_key(path)
-    _FINGERPRINT_KEYS[path] = key
-    return key
-
-
-def fingerprint_key_id(key: bytes | None = None) -> str:
+def fingerprint_key_id(key: bytes) -> str:
     """A public id for the HMAC key, so a ledger reader knows which install's fingerprints these are."""
-    key = fingerprint_key() if key is None else key
     return hashlib.sha256(b"two-key/fingerprint-key-id/1\x00" + key).hexdigest()[:16]
 
 
-def credential_fingerprint(secret: str | None, *, key: bytes | None = None) -> str:
-    """HMAC-SHA256 of the stripped secret under the per-install key; ``none`` for no secret."""
+def credential_fingerprint(secret: str | None, key: bytes | None = None) -> str:
+    """Fingerprint of the secret with surrounding whitespace stripped; ``none`` for no secret.
+
+    ``hmac-sha256:`` under the per-install key (TwoKey always passes one: ``Ledger.fingerprint_key``).
+    Without a key, a plain ``sha256:`` (offline use only).
+    """
     secret = (secret or "").strip()
     if not secret:
         return NO_CREDENTIAL
-    key = fingerprint_key() if key is None else key
-    mac = hmac.new(key, FINGERPRINT_DOMAIN + secret.encode("utf-8", "surrogatepass"), hashlib.sha256)
-    return "hmac-sha256:" + mac.hexdigest()
+    data = FINGERPRINT_DOMAIN + secret.encode("utf-8", "surrogatepass")
+    if key is not None:
+        return "hmac-sha256:" + hmac.new(key, data, hashlib.sha256).hexdigest()
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 # ---------------------------------------------------------------- model ids
@@ -499,7 +492,7 @@ def _secret_from(credential: Any) -> str:
     return token
 
 
-def judge_identity(judge: Any) -> ResolvedIdentity:
+def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     jid = str(getattr(judge, "judge_id", "?"))
     if getattr(judge, "is_test_double", False) and not getattr(judge, "base_url", None):
         vendor = str(getattr(judge, "vendor", None) or getattr(judge, "provider", "test-double"))
@@ -511,7 +504,7 @@ def judge_identity(judge: Any) -> ResolvedIdentity:
         raise IdentityError(f"judge {jid!r} declares no model and base_url; Two-Key cannot show it is not "
                             "the monitored agent")
     try:
-        fp = credential_fingerprint(_secret_from(getattr(judge, "credential", None)))
+        fp = credential_fingerprint(_secret_from(getattr(judge, "credential", None)), fp_key)
     except IdentityError as e:
         raise IdentityError(f"judge {jid!r}: {e}") from None
     tenant = validate_tenant(getattr(judge, "tenant", None), f"judge {jid!r}")
@@ -568,14 +561,15 @@ class AgentDeclaration:
         validate_tenant(self.tenant, f"monitored_agent {self.id!r}")
         validate_upstream(self.upstream, f"monitored_agent {self.id!r}")
 
-    def resolve(self, *, allow_in_process: bool = False, extra_secrets: Iterable[str] = ()) -> ResolvedIdentity:
+    def resolve(self, *, allow_in_process: bool = False, extra_secrets: Iterable[str] = (),
+                fp_key: bytes | None = None) -> ResolvedIdentity:
         self.validate(allow_in_process=allow_in_process)
-        fps = {credential_fingerprint(s) for s in extra_secrets if s}
+        fps = {credential_fingerprint(s, fp_key) for s in extra_secrets if s}
         if self.credential_env is not None:
             value = os.environ.get(self.credential_env) if isinstance(self.credential_env, str) else None
             if not value:
                 raise IdentityError(f"monitored_agent {self.id!r}: credential_env {self.credential_env} is not set")
-            fps.add(credential_fingerprint(value))
+            fps.add(credential_fingerprint(value, fp_key))
         else:
             fps.add(NO_CREDENTIAL)
         return _identity("agent", self.id, self.model, self.base_url, fps, self.provider,
@@ -589,7 +583,7 @@ class AgentDeclaration:
                 "upstream": sorted(validate_upstream(self.upstream, "monitored_agent")) or None}
 
 
-def configured_agent_identity(agent: Any) -> ResolvedIdentity:
+def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     """A MonitoredAgent from agents.yaml is operator configuration too."""
     secret = ""
     try:
@@ -597,7 +591,7 @@ def configured_agent_identity(agent: Any) -> ResolvedIdentity:
     except IdentityError:
         if agent.is_cloud():
             raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
-    return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {credential_fingerprint(secret)},
+    return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {credential_fingerprint(secret, fp_key)},
                      getattr(agent, "provider", None),
                      validate_tenant(getattr(agent, "tenant", None), f"agent {agent.agent_id!r}"),
                      validate_upstream(getattr(agent, "upstream", None), f"agent {agent.agent_id!r}"))
@@ -613,8 +607,6 @@ class SeparationReport:
     def to_record(self) -> dict:
         return {"ok": self.ok, "rule": "judge_is_not_monitored_agent", "checks": list(SEPARATION_CHECKS),
                 "same_provider": "allowed",
-                "credential_fingerprint": {"alg": "hmac-sha256", "key_id": fingerprint_key_id(),
-                                           "input": "secret with surrounding whitespace stripped"},
                 "refusals": list(self.refusals),
                 "agents": [a.to_record() for a in self.agents],
                 "judges": [j.to_record() for j in self.judges]}

@@ -194,6 +194,18 @@ class Ledger:
     def head_path(self) -> Path:
         return self.path / "head.json"
 
+    def fingerprint_key_path(self) -> Path:
+        """Per-install HMAC key for credential fingerprints, beside the ledger key, outside the ledger."""
+        return self.ledger_key_path.parent / "fingerprint.key"
+
+    def fingerprint_key(self) -> bytes:
+        """The HMAC key for credential fingerprints (identity.py): 32 bytes, O_EXCL, 0600, created once."""
+        from .identity import IdentityError, load_fingerprint_key
+        try:
+            return load_fingerprint_key(self.fingerprint_key_path())
+        except IdentityError as e:
+            raise LedgerError(str(e)) from None
+
     @property
     def wrap_path(self) -> Path:
         return self.path / "keywrap.json"

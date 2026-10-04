@@ -8,9 +8,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from two_key import identity
-from two_key.identity import (FINGERPRINT_DOMAIN, FINGERPRINT_KEY_ENV, IdentityError, credential_fingerprint,
-                              fingerprint_key, fingerprint_key_id)
+from two_key.identity import (FINGERPRINT_DOMAIN, IdentityError, credential_fingerprint, fingerprint_key_id,
+                              load_fingerprint_key)
+from two_key.keys import generate_private_key
+from two_key.ledger import Ledger, LedgerError
 from test_judge_agent_separation import Env, claude
 
 
@@ -18,48 +19,20 @@ class KeyFile(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.path = os.path.join(self.tmp.name, "conf", "two-key", "fingerprint.key")
-        old = os.environ.get(FINGERPRINT_KEY_ENV)
-        os.environ[FINGERPRINT_KEY_ENV] = self.path
-        self.addCleanup(lambda: os.environ.__setitem__(FINGERPRINT_KEY_ENV, old) if old is not None
-                        else os.environ.pop(FINGERPRINT_KEY_ENV, None))
-        identity._FINGERPRINT_KEYS.clear()
-        self.addCleanup(identity._FINGERPRINT_KEYS.clear)
+        self.path = os.path.join(self.tmp.name, "l.ledger-key", "fingerprint.key")
 
     def test_created_once_0600_in_a_0700_directory(self):
-        key = fingerprint_key()
+        key = load_fingerprint_key(self.path)
         self.assertEqual(len(key), 32)
         self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(os.stat(os.path.dirname(self.path)).st_mode), 0o700)
-        identity._FINGERPRINT_KEYS.clear()
-        self.assertEqual(fingerprint_key(), key, "an existing key is read, never regenerated")
-
-    def test_fingerprint_is_hmac_of_stripped_secret(self):
-        key = fingerprint_key()
-        want = "hmac-sha256:" + hmac.new(key, FINGERPRINT_DOMAIN + b"sk-abc", hashlib.sha256).hexdigest()
-        self.assertEqual(credential_fingerprint("sk-abc"), want)
-        plain = "sha256:" + hashlib.sha256(FINGERPRINT_DOMAIN + b"sk-abc").hexdigest()
-        self.assertNotEqual(credential_fingerprint("sk-abc").split(":", 1)[1], plain.split(":", 1)[1])
-
-    def test_whitespace_is_stripped_first(self):
-        fp = credential_fingerprint("sk-abc")
-        for variant in ("sk-abc\n", "  sk-abc", "\tsk-abc \r\n"):
-            self.assertEqual(credential_fingerprint(variant), fp, repr(variant))
-        self.assertEqual(credential_fingerprint(" \n\t"), "none")
-        self.assertNotEqual(credential_fingerprint("sk-a bc"), credential_fingerprint("sk-abc"))
-
-    def test_another_install_gets_other_fingerprints(self):
-        a = credential_fingerprint("sk-abc", key=b"a" * 32)
-        b = credential_fingerprint("sk-abc", key=b"b" * 32)
-        self.assertNotEqual(a, b)
-        self.assertNotEqual(fingerprint_key_id(b"a" * 32), fingerprint_key_id(b"b" * 32))
+        self.assertEqual(load_fingerprint_key(self.path), key, "an existing key is read, never regenerated")
 
     def test_group_readable_key_is_refused(self):
-        fingerprint_key()
+        load_fingerprint_key(self.path)
         os.chmod(self.path, 0o640)
-        identity._FINGERPRINT_KEYS.clear()
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_insecure"):
-            fingerprint_key()
+            load_fingerprint_key(self.path)
 
     def test_symlink_is_refused(self):
         os.makedirs(os.path.dirname(self.path))
@@ -68,7 +41,7 @@ class KeyFile(unittest.TestCase):
         os.chmod(target, 0o600)
         os.symlink(target, self.path)
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_unreadable"):
-            fingerprint_key()
+            load_fingerprint_key(self.path)
 
     def test_wrong_length_is_refused(self):
         os.makedirs(os.path.dirname(self.path))
@@ -76,16 +49,47 @@ class KeyFile(unittest.TestCase):
         os.write(fd, b"short")
         os.close(fd)
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_unreadable: .* 32-byte key"):
-            fingerprint_key()
+            load_fingerprint_key(self.path)
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root can write anywhere")
     def test_uncreatable_key_fails_closed(self):
         ro = Path(self.tmp.name) / "ro"
         ro.mkdir(mode=0o500)
         self.addCleanup(os.chmod, ro, 0o700)
-        os.environ[FINGERPRINT_KEY_ENV] = str(ro / "fingerprint.key")
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_unavailable"):
-            fingerprint_key()
+            load_fingerprint_key(ro / "sub" / "fingerprint.key")
+
+    def test_ledger_keeps_it_beside_the_ledger_key(self):
+        led = Ledger(Path(self.tmp.name) / "ledger", generate_private_key())
+        path = led.fingerprint_key_path()
+        self.assertEqual(path, led.ledger_key_path.parent / "fingerprint.key")
+        self.assertFalse(path.resolve().is_relative_to(led.path.resolve()))
+        self.assertEqual(led.fingerprint_key(), led.fingerprint_key())
+        os.chmod(path, 0o644)
+        with self.assertRaisesRegex(LedgerError, "fingerprint_key_insecure"):
+            led.fingerprint_key()
+
+
+class Fingerprint(unittest.TestCase):
+    KEY = b"k" * 32
+
+    def test_hmac_of_stripped_secret(self):
+        want = "hmac-sha256:" + hmac.new(self.KEY, FINGERPRINT_DOMAIN + b"sk-abc", hashlib.sha256).hexdigest()
+        self.assertEqual(credential_fingerprint("sk-abc", self.KEY), want)
+        self.assertNotEqual(credential_fingerprint("sk-abc", self.KEY).split(":", 1)[1],
+                            credential_fingerprint("sk-abc").split(":", 1)[1])
+
+    def test_whitespace_is_stripped_first(self):
+        for key in (self.KEY, None):
+            fp = credential_fingerprint("sk-abc", key)
+            for variant in ("sk-abc\n", "  sk-abc", "\tsk-abc \r\n"):
+                self.assertEqual(credential_fingerprint(variant, key), fp, repr(variant))
+            self.assertEqual(credential_fingerprint(" \n\t", key), "none")
+            self.assertNotEqual(credential_fingerprint("sk-a bc", key), fp)
+
+    def test_another_install_gets_other_fingerprints(self):
+        self.assertNotEqual(credential_fingerprint("sk-abc", b"a" * 32), credential_fingerprint("sk-abc", b"b" * 32))
+        self.assertNotEqual(fingerprint_key_id(b"a" * 32), fingerprint_key_id(b"b" * 32))
 
 
 class Separation(Env):
@@ -93,12 +97,15 @@ class Separation(Env):
         os.environ["SEP_AGENT_KEY"] = "agent-secret-key\n"
         self.refused([claude(key="  agent-secret-key")], "same credential fingerprint")
 
-    def test_record_names_the_fingerprint_scheme_not_the_key(self):
+    def test_ledger_records_hmac_fingerprints_and_the_key_id(self):
         tk = self.started([claude()])
-        rec = tk.separation.to_record()
-        self.assertEqual(rec["credential_fingerprint"]["alg"], "hmac-sha256")
-        self.assertEqual(rec["credential_fingerprint"]["key_id"], fingerprint_key_id())
-        self.assertNotIn(fingerprint_key().hex(), str(rec))
+        key = tk.ledger.fingerprint_key()
+        loaded = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body["judge_agent_separation"]
+        self.assertEqual(loaded["credential_fingerprint"]["alg"], "hmac-sha256")
+        self.assertEqual(loaded["credential_fingerprint"]["key_id"], fingerprint_key_id(key))
+        self.assertEqual(loaded["judges"][0]["credential_fingerprint"],
+                         [credential_fingerprint("judge-anthropic-key", key)])
+        self.assertNotIn(key.hex(), str(loaded))
 
 
 if __name__ == "__main__":

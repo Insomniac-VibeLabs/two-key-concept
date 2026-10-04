@@ -107,7 +107,8 @@ class Normalization(unittest.TestCase):
 
     def test_fingerprint_never_contains_the_key(self):
         fp = credential_fingerprint("sk-very-secret")
-        self.assertTrue(fp.startswith("hmac-sha256:"))
+        self.assertTrue(fp.startswith("sha256:"))          # no key: offline use only
+        self.assertTrue(credential_fingerprint("sk-very-secret", b"k" * 32).startswith("hmac-sha256:"))
         self.assertNotIn("very-secret", fp)
         self.assertEqual(credential_fingerprint(""), "none")
 
@@ -303,7 +304,8 @@ class Accepted(Env):
         self.assertEqual(rec["agents"][0]["upstream"], ["api.x.ai"])
         self.assertEqual({j["id"]: j["upstream"] for j in rec["judges"]},
                          {"claude": ["api.anthropic.com"], "q": ["localhost:11434", "maker:alibaba"]})
-        self.assertIn(credential_fingerprint("judge-anthropic-key"), rec["judges"][0]["credential_fingerprint"])
+        self.assertIn(credential_fingerprint("judge-anthropic-key", tk.ledger.fingerprint_key()),
+                      rec["judges"][0]["credential_fingerprint"])
         for raw in ("agent-secret-key", "judge-anthropic-key"):
             self.assertNotIn(raw, ledger_text)
 
