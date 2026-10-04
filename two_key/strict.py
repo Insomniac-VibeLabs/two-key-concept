@@ -14,18 +14,26 @@ import json
 from pathlib import Path
 from typing import Any
 
-__all__ = ["StrictParseError", "loads_json_strict", "loads_yaml_strict", "load_file_strict"]
+__all__ = ["StrictParseError", "DuplicateKeyError", "loads_json", "load_yaml", "load_file_strict"]
 
 
 class StrictParseError(ValueError):
     """The document is not valid, or repeats a key in one mapping."""
 
 
+class DuplicateKeyError(StrictParseError):
+    """A key repeated in one mapping (two-key's name)."""
+
+    def __init__(self, key, where: str = ""):
+        self.key = key
+        super().__init__(f"duplicate key {str(key)[:80]!r}{where}")
+
+
 def _no_duplicate_keys(pairs: list) -> dict:
     obj: dict = {}
     for k, v in pairs:
         if k in obj:
-            raise StrictParseError(f"duplicate key {str(k)[:80]!r}")
+            raise DuplicateKeyError(k)
         obj[k] = v
     return obj
 
@@ -34,7 +42,7 @@ def _no_constants(name: str):
     raise StrictParseError(f"non-standard JSON constant {name}")
 
 
-def loads_json_strict(text: str | bytes) -> Any:
+def loads_json(text: str | bytes) -> Any:
     """``json.loads`` that refuses duplicate keys at any depth and NaN/Infinity."""
     try:
         return json.loads(text, object_pairs_hook=_no_duplicate_keys, parse_constant=_no_constants)
@@ -64,7 +72,7 @@ def _strict_loader():
             key = loader.construct_object(key_node, deep=True)
             try:
                 if key in seen:
-                    raise StrictParseError(f"duplicate key {str(key)[:80]!r} at line {key_node.start_mark.line + 1}")
+                    raise DuplicateKeyError(key, f" at line {key_node.start_mark.line + 1}")
                 seen.add(key)
             except TypeError:
                 pass  # unhashable key: construct_mapping refuses it below
@@ -75,7 +83,7 @@ def _strict_loader():
     return _LOADER
 
 
-def loads_yaml_strict(text: str) -> Any:
+def load_yaml(text: str) -> Any:
     """``yaml.safe_load`` that refuses a key repeated in one mapping."""
     loader = _strict_loader()
     import yaml
@@ -95,5 +103,5 @@ def load_file_strict(path: Path | str) -> Any:
     path = Path(path)
     text = path.read_text(encoding="utf-8")
     if path.suffix.lower() == ".json":
-        return loads_json_strict(text)
-    return loads_yaml_strict(text)
+        return loads_json(text)
+    return load_yaml(text)

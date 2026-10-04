@@ -116,9 +116,9 @@ def _authorize(args) -> int:
             print(f"environment variable {args.agent_session_env} is not set", file=sys.stderr)
             return 1
     # Parsed first, strictly: a repeated key in --args is refused before anything is loaded.
-    from .strict import StrictParseError, loads_json_strict
+    from .strict import StrictParseError, loads_json
     try:
-        arguments = loads_json_strict(args.args)
+        arguments = loads_json(args.args)
     except StrictParseError as e:
         raise SystemExit(f"--args: {e}") from None
     if not isinstance(arguments, dict):

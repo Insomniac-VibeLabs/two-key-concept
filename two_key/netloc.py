@@ -46,8 +46,8 @@ def _ip(host: str):
         return None
 
 
-LOOPBACK_NETS = (ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("::1/128"))
-LOCAL_NETS = LOOPBACK_NETS + (
+LOOPBACK_NETWORKS = (ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("::1/128"))
+LOCAL_NETWORKS = LOOPBACK_NETWORKS + (
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
@@ -70,18 +70,27 @@ def host_is_loopback(host: str) -> bool:
     if host in LOOPBACK_NAMES:
         return True
     ip = _ip(host)
-    return ip is not None and _in(_unmapped(ip), LOOPBACK_NETS)
+    return ip is not None and _in(_unmapped(ip), LOOPBACK_NETWORKS)
 
 
 def host_is_local(host: str) -> bool:
     if host_is_loopback(host):
         return True
     ip = _ip((host or "").lower().rstrip("."))
-    return ip is not None and _in(_unmapped(ip), LOCAL_NETS)
+    return ip is not None and _in(_unmapped(ip), LOCAL_NETWORKS)
+
+
+_DASHES = re.compile(r"[\u2010-\u2015\u2212\u2043\u2e3a\u2e3b\ufe58\ufe63\uff0d]")
+_ZERO_WIDTH = re.compile(r"[\u200b-\u200d\u2060\ufeff\u00ad]")
+
+
+def fold_model_id(model: str | None) -> str:
+    """NFKC, lower case, Unicode dashes folded to ``-``, zero-width characters dropped, trimmed."""
+    m = unicodedata.normalize("NFKC", model or "")
+    m = _ZERO_WIDTH.sub("", _DASHES.sub("-", m))
+    return m.strip().lower()
 
 
 def model_is_cloud(model: str | None) -> bool:
     """True for a model id ending in ``:cloud`` or ``-cloud`` (case and Unicode forms folded)."""
-    m = unicodedata.normalize("NFKC", model or "").strip().lower()
-    m = re.sub(r"[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]", "-", m)
-    return bool(_CLOUD_MODEL.search(m))
+    return bool(_CLOUD_MODEL.search(fold_model_id(model)))

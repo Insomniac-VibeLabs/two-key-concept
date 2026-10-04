@@ -9,7 +9,7 @@ from two_key.constitution import ConstitutionError, load_envelope, load_unsigned
 from two_key.identity import IdentityError, load_monitored_agent_file
 from two_key.judges.config import JudgeConfigError, load_config_file
 from two_key.judges.llm import MalformedBallot, parse_ballot_strict
-from two_key.strict import StrictParseError, loads_json_strict, loads_yaml_strict
+from two_key.strict import StrictParseError, loads_json, load_yaml
 
 JUDGES = """judges:
   - id: a
@@ -22,24 +22,24 @@ class Loaders(unittest.TestCase):
     def test_json_duplicate_at_any_depth(self):
         for text in ('{"a": 1, "a": 2}', '{"x": {"a": 1, "a": 2}}', '[{"a": 1, "a": 1}]'):
             with self.assertRaisesRegex(StrictParseError, "duplicate key 'a'"):
-                loads_json_strict(text)
+                loads_json(text)
 
     def test_json_non_standard_constants(self):
         for c in ("NaN", "Infinity", "-Infinity"):
             with self.assertRaisesRegex(StrictParseError, "non-standard JSON constant"):
-                loads_json_strict('{"confidence": %s}' % c)
+                loads_json('{"confidence": %s}' % c)
 
     def test_yaml_duplicate_at_any_depth(self):
         for text in ("a: 1\na: 2\n", "x:\n  a: 1\n  a: 2\n", "- {a: 1, a: 2}\n"):
             with self.assertRaisesRegex(StrictParseError, "duplicate key 'a'"):
-                loads_yaml_strict(text)
+                load_yaml(text)
 
     def test_yaml_is_still_safe(self):
         with self.assertRaises(StrictParseError):
-            loads_yaml_strict("!!python/object/apply:os.system ['true']")
+            load_yaml("!!python/object/apply:os.system ['true']")
 
     def test_yaml_merge_keys_and_lists_still_load(self):
-        self.assertEqual(loads_yaml_strict("b: &b {k: 1}\nm:\n  <<: *b\n  k: 2\nl: [{x: 1}, {x: 2}]\n"),
+        self.assertEqual(load_yaml("b: &b {k: 1}\nm:\n  <<: *b\n  k: 2\nl: [{x: 1}, {x: 2}]\n"),
                          {"b": {"k": 1}, "m": {"k": 2}, "l": [{"x": 1}, {"x": 2}]})
 
 

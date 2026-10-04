@@ -321,5 +321,13 @@ class RuntimeSessionCheckForEveryJudge(unittest.TestCase):
                          "cloud_judge_reused_agent_session")
 
 
+class ModelFolding(unittest.TestCase):
+    def test_azure_gpt_35_and_unicode_forms(self):
+        from two_key.netloc import fold_model_id
+        self.assertEqual(normalize_model("gpt-35-turbo"), normalize_model("gpt-3.5-turbo"))
+        self.assertEqual(fold_model_id("\uff27PT\u2011\u200b4o "), "gpt-4o")
+        self.assertEqual(normalize_model("gpt\u20134o"), normalize_model("gpt-4o"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

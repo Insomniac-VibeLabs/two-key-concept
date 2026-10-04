@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 
-from .strict import StrictParseError, load_file_strict, loads_json_strict
+from .strict import StrictParseError, load_file_strict, loads_json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -261,7 +261,7 @@ def save_envelope(path: Path | str, envelope: dict) -> None:
 def load_envelope(path: Path | str) -> dict:
     """Read a signed constitution. A duplicate key is refused: the signature covers one reading only."""
     try:
-        return loads_json_strict(Path(path).read_text(encoding="utf-8"))
+        return loads_json(Path(path).read_text(encoding="utf-8"))
     except StrictParseError as e:
         raise ConstitutionError(f"constitution {path}: {e}") from None
 

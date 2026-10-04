@@ -23,7 +23,7 @@ from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential
 from .judges.llm import LOOPBACK
 from .judges.transport import pooled_transport
-from .strict import StrictParseError, load_file_strict, loads_json_strict
+from .strict import StrictParseError, load_file_strict, loads_json
 
 Transport = Callable[[str, dict, dict, float], dict]
 AGENT_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
@@ -111,7 +111,7 @@ def hosting_of(base_url: str, declared: str | None, *, local_default: bool = Fal
 def _loads_strict(text: str, what: str):
     """A repeated key could make the checked value differ from the one a tool reads, so it is refused."""
     try:
-        return loads_json_strict(text)
+        return loads_json(text)
     except StrictParseError as e:
         msg = str(e)
         if msg.startswith("not valid JSON: "):

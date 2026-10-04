@@ -79,25 +79,15 @@ import secrets
 import stat
 import re
 import sys
-import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
-from .netloc import host_is_local, host_is_loopback, model_is_cloud
+from .netloc import fold_model_id, host_is_local, host_is_loopback, model_is_cloud
 
 FINGERPRINT_DOMAIN = b"two-key/credential-fingerprint/1\x00"
 NO_CREDENTIAL = "none"
 IN_PROCESS = "in-process"
-_FOLD = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2043\ufe58\ufe63\uff0d"), "-")
-_FOLD.update(dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None))
-
-
-def fold_model_text(model: str | None) -> str:
-    """NFKC, Unicode dashes to '-', zero-width characters removed, trimmed, lower case."""
-    return unicodedata.normalize("NFKC", model or "").translate(_FOLD).strip().lower()
-
-
 AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "tenant", "upstream"}
 TENANT_KEYS = ("organization", "project", "account", "deployment")
 SEPARATION_CHECKS = ("same_credential", "unresolved_identity", "same_model_same_endpoint", "same_tenant")
@@ -215,7 +205,8 @@ _SUFFIXES = [
 
 def _bare(model: str) -> tuple[str, str | None]:
     """(model id without router/maker prefixes, maker named by a prefix if any)."""
-    m = fold_model_text(model)
+    m = fold_model_id(model)                                  # NFKC, Unicode dashes, zero-width, case
+    m = re.sub(r"^gpt-35(?=-|$)", "gpt-3.5", m)               # Azure OpenAI names gpt-3.5 "gpt-35"
     maker = None
     m = re.sub(r"^projects/[^/]+/locations/[^/]+/", "", m)
     pub = re.match(r"^publishers/([^/]+)/models/(.+)$", m)
