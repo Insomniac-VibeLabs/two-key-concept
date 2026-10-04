@@ -25,16 +25,23 @@ Each judge and agent is resolved to:
   characters are removed, so ``gpt\u20104o`` and fullwidth ``gpt-4o`` equal
   ``gpt-4o``.
 - ``endpoint``: the normalized ``host:port`` of ``base_url`` (lower case,
-  default port filled in, every loopback name or address written
-  ``localhost``).
+  default port filled in, every alias of this machine written ``localhost``:
+  loopback names and addresses in any spelling such as ``127.1``,
+  ``localhost.localdomain``, ``0.0.0.0``/``::``, and the machine's own names
+  and addresses). Other hosts are compared literally.
 - ``upstreams``: who really serves or made the model, as upstream hosts.
   A direct provider host is itself (``api.openai.com``). A recognized router
   (OpenRouter, Azure OpenAI and Azure AI, Bedrock, Vertex, Cloudflare AI
   Gateway, Portkey) or a ``provider/model`` id (LiteLLM style) resolves to the
   model maker's API host, or ``maker:<name>`` for a maker without one. A
   loopback or private host is itself. An unrecognized host or router that
-  cannot be resolved from the model id stays **unresolved**. Upstreams are
-  used only to detect an unresolved identity; a shared upstream is allowed.
+  cannot be resolved from the model id stays **unresolved**. Upstream labels
+  are normalized (``host`` or ``host:port``, default port removed). A shared
+  maker upstream is allowed; the same *model* reaching the same route is not
+  (see ``routes``).
+- ``routes``: where the model is actually served, for the same-model check:
+  the endpoint, every declared ``upstream:``, and ``ollama.com`` for an Ollama
+  cloud model.
 - ``tenant``: account ids, each scoped by provider family, from what the
   base_url shows plus what the operator declares under ``tenant:``
   (keys ``organization``, ``project``, ``account``, ``deployment``):
@@ -42,7 +49,9 @@ Each judge and agent is resolved to:
   Vertex project (``/projects/<id>/`` in the path, or declared ``project``),
   Bedrock ``account`` (declared) with the region from the host, OpenAI
   ``organization`` / ``project`` (declared). Elsewhere a declared id is scoped
-  by the endpoint host.
+  by provider family: the endpoint's, or for a proxy (local or unrecognized
+  host) the family of its declared upstream, its Ollama cloud model, or its
+  model maker, never the proxy's address.
 - ``credential``: a fingerprint, HMAC-SHA256 of the key with leading and
   trailing whitespace stripped (``hmac-sha256:...``). The HMAC key is a
   random per-install secret, ``fingerprint.key`` beside the ledger key
@@ -57,13 +66,21 @@ Refusals, judge against agent (all hard, no opt-out), message prefix
 - same credential fingerprint
 - either side unresolved (unknown identity fails closed)
 - same normalized model on the same normalized endpoint ``host:port``
+- same normalized model where either side is a loopback or private endpoint
+  (a proxy or daemon, keyed or not) with no declared ``upstream:``: it could
+  forward to the other side's provider and account, so upstream and tenant
+  are unknown
+- same normalized model with a shared route (declared upstreams count as
+  endpoints), unless both sides declare tenants (a shared one is refused next)
 - a shared tenant id (same Azure resource or deployment, OpenAI organization
   or project, Bedrock account in the same region, Vertex project, or a
   declared id on the same host)
 
 Allowed: the same provider or upstream with a different model, the same
-endpoint with a different model, and the same model on a different endpoint
-in a different (or undeclared) tenant with a different key.
+endpoint with a different model, the same model on a different endpoint
+in a different (or undeclared) tenant with a different key, a local proxy
+declaring a different provider upstream, a different daemon (each declaring
+its own address), and a different declared account on a shared upstream.
 ``allow_same_provider_judge`` is a deprecated no-op.
 
 The runtime check stays as a second layer: a judge whose credential equals
@@ -75,10 +92,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import ipaddress
 import secrets
+import socket
 import stat
 import re
 import sys
+from functools import lru_cache
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -90,7 +110,8 @@ NO_CREDENTIAL = "none"
 IN_PROCESS = "in-process"
 AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "tenant", "upstream"}
 TENANT_KEYS = ("organization", "project", "account", "deployment")
-SEPARATION_CHECKS = ("same_credential", "unresolved_identity", "same_model_same_endpoint", "same_tenant")
+SEPARATION_CHECKS = ("same_credential", "unresolved_identity", "same_model_same_endpoint",
+                     "same_model_unknown_upstream", "same_model_same_upstream", "same_tenant")
 
 
 class IdentityError(ValueError):
@@ -293,7 +314,70 @@ def _router(host: str) -> str | None:
     return None
 
 
+_LOCAL_NAMES = {"localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"}
+
+
+@lru_cache(maxsize=1)
+def _own_addresses() -> frozenset[str]:
+    """This machine's own names and addresses (best effort, no network traffic)."""
+    out: set[str] = set()
+    try:
+        names = {socket.gethostname().lower(), socket.getfqdn().lower()} - {""}
+    except OSError:
+        names = set()
+    out |= names
+    for name in names:
+        try:
+            for info in socket.getaddrinfo(name, None):
+                out.add(str(info[4][0]).split("%", 1)[0].lower())
+        except (OSError, UnicodeError):
+            pass
+    # The source address of the default route. Connecting a UDP socket sends no packet; the target is
+    # a documentation address that is never contacted.
+    for family, target in ((socket.AF_INET, "192.0.2.1"), (socket.AF_INET6, "2001:db8::1")):
+        try:
+            with socket.socket(family, socket.SOCK_DGRAM) as probe:
+                probe.connect((target, 9))
+                out.add(str(probe.getsockname()[0]).split("%", 1)[0].lower())
+        except OSError:
+            pass
+    return frozenset(out)
+
+
+def _legacy_ipv4(host: str):
+    """``127.1``, ``0x7f.1``, ``2130706433``: forms inet_aton accepts but ipaddress does not."""
+    if not re.fullmatch(r"[0-9a-fx.]+", host) or not re.search(r"[0-9]", host):
+        return None
+    try:
+        return ipaddress.IPv4Address(socket.inet_aton(host))
+    except (OSError, ValueError):
+        return None
+
+
+def local_alias(host: str) -> bool:
+    """True for a name or address that reaches this machine: a loopback name or address (any
+    127.0.0.0/8 spelling, ``::1``), ``localhost.localdomain``, an unspecified address (which a client
+    connects to as this machine), or one of this machine's own names or addresses."""
+    host = (host or "").lower().rstrip(".").strip("[]").split("%", 1)[0]
+    if not host:
+        return False
+    if host in _LOCAL_NAMES or host_is_loopback(host):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = _legacy_ipv4(host)
+    if ip is not None:
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        if ip.is_unspecified or ip.is_loopback:
+            return True
+        return str(ip) in _own_addresses()
+    return host in _own_addresses()
+
+
 def endpoint_key(base_url: str) -> str:
+    """``host:port`` with the default port filled in; every local alias of this machine is ``localhost``."""
     u = urlparse(base_url or "")
     host = (u.hostname or "").lower().rstrip(".")
     if u.scheme == IN_PROCESS:
@@ -302,9 +386,31 @@ def endpoint_key(base_url: str) -> str:
         port = u.port or {"https": 443, "http": 80}.get(u.scheme, 0)
     except ValueError:
         port = 0
-    if host_is_loopback(host):
+    if local_alias(host):
         host = "localhost"
     return f"{host}:{port}"
+
+
+def normalize_upstream(label: str) -> str:
+    """A comparable upstream: a URL or ``host[:port]`` becomes lower-case ``host`` or ``host:port`` with a
+    default port (80, 443) removed and local aliases written ``localhost``; ``maker:<name>`` and
+    ``in-process:`` labels are kept as they are."""
+    s = (label or "").strip().lower()
+    if not s or s.startswith(("maker:", f"{IN_PROCESS}:")):
+        return s
+    try:
+        u = urlparse(s if "://" in s else f"//{s}")
+        host = (u.hostname or "").rstrip(".")
+        port = u.port
+    except ValueError:
+        return s
+    if not host:
+        return s
+    if local_alias(host):
+        host = "localhost"
+    elif ":" in host:
+        host = f"[{host}]"
+    return host if port in (None, 80, 443) else f"{host}:{port}"
 
 
 def resolve_upstream_info(base_url: str, model: str) -> tuple[frozenset[str], str | None, str | None]:
@@ -355,6 +461,7 @@ def resolve_upstream_info(base_url: str, model: str) -> tuple[frozenset[str], st
             up.add(_maker_upstream(prefixed))
             by = "model_prefix"
         # otherwise unresolved: an unrecognized host may be a router to anything
+    up = {normalize_upstream(x) for x in up}
     return frozenset(up), router, (by if up else None)
 
 
@@ -375,7 +482,7 @@ def validate_upstream(upstream: Any, who: str) -> frozenset[str]:
     for v in items:
         if not isinstance(v, str) or not v.strip() or v.startswith("REPLACE_"):
             raise IdentityError(f"{who}: upstream entries must be non-empty strings")
-        out.add(v.strip().lower())
+        out.add(normalize_upstream(v))
     return frozenset(out)
 
 
@@ -397,8 +504,46 @@ def validate_tenant(tenant: Any, who: str) -> dict[str, str]:
     return out
 
 
-def resolve_tenants(base_url: str, declared: Mapping[str, str] | None = None) -> frozenset[str]:
-    """Account ids, scoped by provider family, from the base_url plus the operator's declaration."""
+def _family(label: str) -> str:
+    """The provider family of a normalized upstream label, for scoping tenant ids."""
+    if label.startswith("maker:"):
+        return label[len("maker:"):]
+    host = label.rsplit(":", 1)[0] if label.count(":") == 1 else label
+    if host in _DIRECT_HOSTS:
+        return _DIRECT_HOSTS[host]
+    if host == "ollama.com":
+        return "ollama"
+    if host.endswith(".openai.com") and not host.endswith(".azure.com"):
+        return "openai"
+    router = _router(host)
+    return {"azure-openai": "azure", "azure-ai": "azure", "bedrock": "aws", "vertex": "gcp"}.get(router or "", router or label)
+
+
+def _tenant_scopes(host: str, base_url: str, model: str | None, upstreams: frozenset[str]) -> list[str]:
+    """Where a declared tenant id lives: the provider family of the endpoint, or for a proxy (a local
+    or unrecognized host) the family of its declared upstream, its Ollama cloud model, or its model
+    maker. Never the proxy's own address while any of those is known."""
+    if host in _DIRECT_HOSTS or host == "ollama.com" or host.endswith(".openai.com"):
+        return [_family(host)]
+    if host in _INFERENCE_HOSTS:
+        return [host]
+    if upstreams:
+        return sorted({_family(u) for u in upstreams})
+    if model and model_is_cloud(model):
+        return ["ollama"]
+    maker = model_maker(model) if model else None
+    if maker:
+        return [maker]
+    return [endpoint_key(base_url)]
+
+
+def resolve_tenants(base_url: str, declared: Mapping[str, str] | None = None, *, model: str | None = None,
+                    upstreams: Iterable[str] = ()) -> frozenset[str]:
+    """Account ids, scoped by provider family, from the base_url plus the operator's declaration.
+
+    A declared id on a proxy is scoped by the family it reaches (declared ``upstreams``, an Ollama
+    cloud model, or the model maker), so ``project: p1`` behind a local proxy to OpenAI is the same
+    tenant as ``project: p1`` at api.openai.com."""
     u = urlparse(base_url or "")
     host = (u.hostname or "").lower().rstrip(".")
     path = u.path or ""
@@ -423,12 +568,12 @@ def resolve_tenants(base_url: str, declared: Mapping[str, str] | None = None) ->
         for project in {m.group(1) if m else None, declared.pop("project", None)} - {None}:
             ids.add(f"gcp:project:{project.lower()}")
         scope = "gcp"
-    elif host == "api.openai.com" or (host.endswith(".openai.com") and not host.endswith(".azure.com")):
-        scope = "openai"
     else:
-        scope = endpoint_key(base_url)
-    for k, v in declared.items():
-        ids.add(f"{scope}:{k}:{v.lower()}")
+        scope = None
+    scopes = [scope] if scope else _tenant_scopes(host, base_url, model, frozenset(upstreams))
+    for sc in scopes:
+        for k, v in declared.items():
+            ids.add(f"{sc}:{k}:{v.lower()}")
     return frozenset(ids)
 
 
@@ -446,6 +591,9 @@ class ResolvedIdentity:
     provider_label: str | None = None
     tenants: frozenset[str] = field(default_factory=frozenset)       # scoped account ids, see resolve_tenants
     resolved_by: str | None = None    # endpoint | model_prefix | declared_upstream; None = unresolved
+    declared_upstreams: frozenset[str] = field(default_factory=frozenset)   # normalized operator `upstream:`
+    local: bool = False               # the endpoint is this machine or a private address (a proxy or daemon)
+    routes: frozenset[str] = field(default_factory=frozenset)   # endpoint + declared upstreams (+ ollama.com)
 
     @property
     def unresolved(self) -> bool:
@@ -456,6 +604,8 @@ class ResolvedIdentity:
                 "upstream": sorted(self.upstreams) or None, "router": self.router, "endpoint": self.endpoint,
                 "credential_fingerprint": sorted(self.credentials) or None,
                 "tenant": sorted(self.tenants) or None, "resolved_by": self.resolved_by,
+                "upstream_declared": sorted(self.declared_upstreams) or None, "local_endpoint": self.local,
+                "routes": sorted(self.routes) or None,
                 "provider_label": self.provider_label, "resolved": not self.unresolved}
 
 
@@ -463,10 +613,20 @@ def _identity(role: str, ident: str, model: str, base_url: str, credentials: Ite
               provider_label: str | None, tenant: Mapping[str, str] | None = None,
               upstream: frozenset[str] = frozenset()) -> ResolvedIdentity:
     upstreams, router, by = resolve_upstream_info(base_url, model)
+    upstream = frozenset(normalize_upstream(u) for u in upstream)
     if upstream:                       # operator-attested; ledgered, not verified
         upstreams, by = frozenset(upstreams | upstream), "declared_upstream"
+    host = (urlparse(base_url or "").hostname or "").lower().rstrip(".")
+    local = urlparse(base_url or "").scheme != IN_PROCESS and (local_alias(host) or host_is_local(host))
+    # Where the model is really served, for the same-model comparison: the endpoint itself, every
+    # declared upstream, and ollama.com for an Ollama cloud model (the local daemon forwards it there).
+    routes = {normalize_upstream(base_url)} | set(upstream)
+    if model_is_cloud(model):
+        routes.add("ollama.com")
     return ResolvedIdentity(role, ident, model, normalize_model(model), endpoint_key(base_url), upstreams,
-                            router, frozenset(credentials), provider_label, resolve_tenants(base_url, tenant), by)
+                            router, frozenset(credentials), provider_label,
+                            resolve_tenants(base_url, tenant, model=model, upstreams=upstream), by,
+                            upstream, local, frozenset(routes - {""}))
 
 
 def _secret_from(credential: Any) -> str:
@@ -612,8 +772,23 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
         side = "agent" if agent.unresolved else "judge"
         return (f"{who}: {side} upstream unresolved (unrecognized router or host, or a local proxy with no "
                 f"recognizable model maker; declare upstream: to attest it); treated as a match")
-    if agent.model == judge.model and agent.endpoint == judge.endpoint:
-        return f"{who}: same model {judge.model!r} on the same endpoint {judge.endpoint}"
+    if agent.model == judge.model:
+        if agent.endpoint == judge.endpoint:
+            return f"{who}: same model {judge.model!r} on the same endpoint {judge.endpoint}"
+        # A loopback or private endpoint (a LiteLLM-style proxy, a local Ollama daemon) can forward the
+        # same model to the other side's provider and account without a key of its own. Its upstream
+        # and tenant are unknown unless the operator declares an upstream.
+        for side, label in ((judge, "judge"), (agent, "agent")):
+            if side.local and not side.declared_upstreams:
+                return (f"{who}: same model {judge.model!r} through a local proxy or daemon ({label} at "
+                        f"{side.endpoint}) with no declared upstream; upstream and tenant unknown "
+                        "(declare upstream: on it)")
+        # Declared upstreams count as endpoints: the same model reaching the same upstream is the same
+        # agent, unless both sides declare tenants (different accounts; a shared one is refused below).
+        via = agent.routes & judge.routes
+        if via and not (agent.tenants and judge.tenants):
+            return (f"{who}: same model {judge.model!r} through the same upstream {sorted(via)[0]} "
+                    "(declare tenant: on both sides if they are different accounts)")
     shared = agent.tenants & judge.tenants
     if shared:
         return f"{who}: same tenant {sorted(shared)[0]}"

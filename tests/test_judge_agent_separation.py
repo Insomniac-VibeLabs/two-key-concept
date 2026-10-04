@@ -212,7 +212,7 @@ class SameProvider(Env):
         self.assertTrue(rec["ok"])
         self.assertEqual(rec["same_provider"], "allowed")
         self.assertEqual(rec["checks"], ["same_credential", "unresolved_identity", "same_model_same_endpoint",
-                                         "same_tenant"])
+                                         "same_model_unknown_upstream", "same_model_same_upstream", "same_tenant"])
         self.refused([oai("same", "gpt-4o-2024-08-06", "https://api.openai.com/v1", "k2")],
                      "same model 'gpt4o' on the same endpoint api.openai.com:443", agent=agent)
 
@@ -221,7 +221,11 @@ class SameProvider(Env):
         self.assertTrue(self.started([oai("or", "openai/gpt-4o", "https://openrouter.ai/api/v1", "k3")],
                                      agent).separation.ok)
         agent = dict(AGENT, model="llama3.1:8b", base_url="https://api.together.xyz/v1")
-        self.assertTrue(self.started([OllamaJudge("q", "ollama", "llama3.1:8b")], agent).separation.ok)
+        # B5: a local daemon with the same model must say where it gets the model (here, its own weights).
+        self.refused([OllamaJudge("q", "ollama", "llama3.1:8b")], "through a local proxy or daemon", agent=agent)
+        local_weights = OllamaJudge("q", "ollama", "llama3.1:8b")
+        local_weights.upstream = ["localhost:11434"]
+        self.assertTrue(self.started([local_weights], agent).separation.ok)
 
     def test_same_local_endpoint(self):
         agent = {"id": "local-agent", "model": "llama3.1:8b", "provider": "ollama",

@@ -138,9 +138,12 @@ and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
 whitespace stripped). It refuses to start (`judge_matches_agent:`) only
 when a judge is the same agent: the same credential, a shared tenant id,
-or the same model on the same endpoint. An identity it cannot resolve also
-refuses, including a local proxy serving an alias model unless you declare
-its `upstream:`. The same provider with a different model is allowed and
+the same model on the same endpoint (every alias of this machine is one
+endpoint), the same model reaching the same declared upstream, or the same
+model through a loopback or private proxy or daemon that declares no
+`upstream:` (it could forward to the agent's own account without a key).
+An identity it cannot resolve also refuses, including a local proxy serving
+an alias model unless you declare its `upstream:`. The same provider with a different model is allowed and
 recorded. `allow_same_provider_judge` is accepted and has no effect.
 Without a declaration it refuses with `monitored_agent_required:`. The
 result is in the `constitution_loaded` ledger entry. Provider labels are

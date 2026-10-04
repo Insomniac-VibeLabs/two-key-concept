@@ -108,8 +108,11 @@ At startup each judge and agent is resolved to:
   zero-width characters removed, lower case, then router prefixes, dated
   snapshot suffixes, `-latest`, Vertex `@` versions, Bedrock `-v2:0`,
   Ollama `:latest`, Azure's `gpt-35`, and a few aliases removed or mapped;
-- the endpoint `host:port` of `base_url` (every loopback name or address
-  is written `localhost`);
+- the endpoint `host:port` of `base_url`. Every name or address of this
+  machine is written `localhost`: loopback names and addresses (including
+  `127.1`), `localhost.localdomain`, `0.0.0.0` and `::`, and the machine's
+  own host name and addresses. Other hosts are compared literally by
+  `host:port`;
 - the upstream that serves the model, and how it was found
   (`resolved_by`): `endpoint` (a direct provider host, Azure OpenAI, or a
   known inference host), `model_prefix` (a recognized router, a local
@@ -122,8 +125,13 @@ At startup each judge and agent is resolved to:
   deployment and the Vertex project read from the URL, plus a `tenant:`
   mapping you declare with any of `organization`, `project`, `account`,
   and `deployment` (for example `tenant: {organization: org-123}`). A
-  Bedrock `account` is scoped by the region in the host; elsewhere a
-  declared id is scoped by the endpoint host;
+  Bedrock `account` is scoped by the region in the host. Elsewhere a
+  declared id is scoped by the provider family: the endpoint's (`openai`,
+  `anthropic`, `ollama`, ...), or for a proxy on a local or unrecognized
+  host the family of its declared `upstream:`, its Ollama cloud model, or
+  its model maker, never the proxy's own address. So `project: p1` behind a
+  local proxy to OpenAI is the same tenant as `project: p1` at
+  api.openai.com;
 - a credential fingerprint: HMAC-SHA256 of the key with surrounding
   whitespace stripped, under a per-install key,
   `<ledger>.ledger-key/fingerprint.key` (32 random bytes, created once with
@@ -135,6 +143,18 @@ agent:
 - the same credential fingerprint;
 - a shared tenant id;
 - the same normalized model on the same endpoint `host:port`;
+- the same normalized model where either side is a loopback or private
+  endpoint (a LiteLLM-style proxy or a local daemon, with or without a key)
+  that declares no `upstream:`. Such an endpoint can forward the agent's
+  model to the agent's provider and account, so its upstream and tenant are
+  unknown. A local daemon serving its own weights declares its own address
+  (`upstream: localhost:11434`);
+- the same normalized model reaching the same upstream: declared upstreams
+  count as endpoints, and an Ollama cloud model (`:cloud`, `-cloud`) reaches
+  `ollama.com` even through a local daemon. Different accounts on that
+  upstream are allowed only when both sides declare `tenant:` and no tenant
+  id is shared. Upstreams are compared as lower-case `host` or `host:port`
+  with the default port removed;
 - or either side is unresolved: an unrecognized host or router whose model
   names no maker, or a loopback or private endpoint (a local proxy such as
   LiteLLM) whose model is an alias with no recognizable maker. Declare
@@ -142,8 +162,10 @@ agent:
   to attest where such a proxy routes. It is recorded, not verified.
 
 The same provider or upstream with a different model, the same endpoint
-with a different model, and the same model through another endpoint (for
-example a router) with another key and tenant are allowed and recorded
+with a different model, the same model through another endpoint (for
+example a router) with another key and tenant, a local proxy that declares
+a different provider (`upstream: api.groq.com`), a different daemon, and
+a different declared account are allowed and recorded
 (`same_provider: allowed`). `allow_same_provider_judge` is accepted, prints
 a deprecation note, and has no effect.
 

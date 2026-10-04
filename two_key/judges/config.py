@@ -24,7 +24,7 @@ Format (see examples/judges.yaml):
       base_url: https://api.openai.com/v1
       credential_env: OPENAI_AGENT_API_KEY   # or credential: none for a keyless loopback agent
       # tenant: {organization: org-123}   # optional: organization, project, account, deployment
-      # upstream: api.openai.com # declare for a loopback/private proxy whose model names no known maker
+      # upstream: api.openai.com # declare for a loopback/private proxy or daemon: an alias model, or the same model as a judge
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama

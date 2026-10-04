@@ -26,7 +26,9 @@ floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
 (profile: high_assurance) sets 2 vendors, 1 local judge, and a local yes.
 TwoKey needs monitored_agent, declared by the operator. It refuses a judge
 that is the same agent: same credential fingerprint (HMAC, per-install key),
-shared tenant id, same model on the same endpoint, or an unresolved identity.
+shared tenant id, same model on the same endpoint or declared upstream, same
+model through a local proxy or daemon with no declared upstream, or an
+unresolved identity.
 The same provider is allowed. Local means loopback, RFC 1918, or fc00::/7.
 JSON and YAML inputs refuse duplicate keys. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
