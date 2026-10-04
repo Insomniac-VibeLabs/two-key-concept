@@ -171,6 +171,24 @@ allowed and recorded
 (`same_provider: allowed`). `allow_same_provider_judge` is accepted, prints
 a deprecation note, and has no effect.
 
+`quorum: allow_same_model_distinct_tenant: true` is a logged opt-in, off by
+default. With it, the same model on the same endpoint or upstream is
+allowed only when all of these hold:
+- both sides declare `tenant:`;
+- the scoped tenant ids are non-empty and share nothing;
+- both sides have a key, and the fingerprints differ.
+
+A keyless side (such as a local daemon), an undeclared tenant, a local proxy
+with no `upstream:`, and an unresolved side are still refused. The flag:
+- prints `two-key: WARNING: allow_same_model_distinct_tenant is set: ...` on stderr;
+- records `same_model_tenant_optin: true` and
+  `same_model_tenant_optin_pairs` (agent, judge, model, and both tenant
+  labels) in `constitution_loaded`;
+- is in `quorum_policy`, so it is part of `policy_digest`.
+
+Tenants are declared, not verified. A misspelled key is refused as
+`unknown quorum keys`.
+
 Judge credentials are read at startup for this check, so a judge key that
 cannot be read refuses to start. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
@@ -463,6 +481,63 @@ A redemption intent is checkpointed before the tool runs. A crash after that
 intent, including after the tool has returned, does not run the token again.
 A tool exception appends an abort and leaves the token usable. A crash before
 the tool runs also blocks a retry.
+
+## Known trade-offs by configuration
+
+Each line is a trade-off that depends on how you configure Two-Key, and
+names the setting or declaration that controls it.
+
+- `upstream:` on a judge or `monitored_agent` is attested, not checked.
+  The same model through another endpoint is accepted by design, and a
+  `maker/` model prefix is taken as given.
+- A local daemon serving its own weights is refused against the same model
+  until you declare its own address (`upstream: localhost:11434`).
+- A private-address `base_url` (RFC 1918, fc00::/7) is treated as a local
+  proxy, so it needs `upstream:` when it serves the agent's model.
+- This machine's own addresses are read once per process. After an address
+  change, restart before relying on how `base_url` hosts fold to `localhost`.
+- A `tenant:` on a proxy is scoped by the provider family its `upstream:`
+  reaches, not by the proxy's address.
+- `allow_same_model_distinct_tenant: true` trusts declared `tenant:` values
+  that are never verified. Leave it off unless the accounts are separate.
+- Two judges, or a judge and the agent, on the same endpoint and model are
+  refused whatever their `tenant:`, unless that flag is set.
+- The runtime agent is not matched against `monitored_agent:`. The
+  declaration is what is compared.
+- `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
+  when the agent runs behind a proxy.
+- A `gateway_denied` entry is written for each replay of a refused token.
+  `ttl_seconds` bounds how long a token can be replayed. There is no
+  per-jti cap.
+- The gateway pins the capability key from the latest
+  `constitution_loaded`. Reload the constitution or revoke to change it.
+- `payload:` paths in a tool spec may overlap each other. Only overlap
+  with control paths is refused.
+- `dropped_keys` is checked against every declared path, so the cost grows
+  with the size of a tool spec.
+- `model:` ids are not length-capped before they are normalized. Keep them
+  to real model names.
+- A token's `iat`/`exp` are read with `float()`. Tokens minted here are
+  always numeric, so this only matters for tokens from another issuer.
+- Config errors from the CLI print a traceback. Check judges.yaml with a
+  dry start.
+- A `ttl_seconds` out of range is reported with the prefix
+  `ttl_out_of_range:`.
+- On Python 3.12, an agent reply nested past 62 levels parses and is
+  `invalid_call`. On 3.10 and 3.11 it is `malformed_proposal`. Both deny.
+- `agent_session` is the frozen session. The agent's key is not added to it
+  (unlike two-key 3af9f0a).
+- The ledger's own records are read with the standard JSON parser, not the
+  strict one, because they are signed and hash-chained.
+- `audit.check_decision_digests` on a ledger from before 0.2.0 reports the
+  missing digests as mismatches. Start a new ledger, or read those as "pre-0.2.0".
+
+Open items that no setting changes:
+- Test gaps: the ledger's O_EXCL path, the case-folded control-path check,
+  the audit self-check, and five bare `assertRaises`.
+- Comments that still cite design notes not in the repository.
+- Names that differ from two-key for the same concept.
+- Stale docs: the test count in llms.txt, and the file list in SCOPE.md.
 
 ## Stop
 

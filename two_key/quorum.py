@@ -103,6 +103,10 @@ class QuorumPolicy:
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
     tool_args_on_derive_deny: bool = False
+    # Logged opt-in, default off: allow a judge on the agent's own model and endpoint or upstream when both
+    # sides declare different tenants and both have different keys (identity.compare). Recorded in
+    # constitution_loaded as same_model_tenant_optin, part of the policy digest, warned on stderr.
+    allow_same_model_distinct_tenant: bool = False
 
 
     def __post_init__(self):
@@ -135,6 +139,8 @@ class QuorumPolicy:
             raise QuorumConfigError("require_local_yes must be a boolean")
         if not isinstance(self.tool_args_on_derive_deny, bool):
             raise QuorumConfigError("tool_args_on_derive_deny must be a boolean")
+        if not isinstance(self.allow_same_model_distinct_tenant, bool):
+            raise QuorumConfigError("allow_same_model_distinct_tenant must be a boolean")
         if not isinstance(self.allow_same_provider_judge, bool):
             raise QuorumConfigError("allow_same_provider_judge must be a boolean")
 
@@ -177,7 +183,8 @@ class QuorumPolicy:
                 "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first,
                 "require_local_yes": self.require_local_yes,
                 "tool_args_on_derive_deny": self.tool_args_on_derive_deny,
-                "allow_same_provider_judge": self.allow_same_provider_judge}
+                "allow_same_provider_judge": self.allow_same_provider_judge,
+                "allow_same_model_distinct_tenant": self.allow_same_model_distinct_tenant}
 
     @property
     def effective_min_responding(self) -> int | None:

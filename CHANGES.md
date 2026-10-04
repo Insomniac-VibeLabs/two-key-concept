@@ -250,6 +250,15 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   any other exception in `authorize` (`internal_error:<Type>`), and a deny
   that cannot be ledgered (`ledger_failed:<LedgerError message>`, or
   `ledger_failed:<Type>` for any other exception; also on stderr).
+- Logged opt-in `quorum: allow_same_model_distinct_tenant: true` (default
+  off). It allows the agent's model on the same endpoint or upstream only
+  when both sides declare a tenant, the scoped tenant ids are non-empty and
+  disjoint, and both have keys with different fingerprints. It prints a
+  stderr warning and records `same_model_tenant_optin` and
+  `same_model_tenant_optin_pairs` (both tenant labels) in
+  `constitution_loaded`. It is part of `policy_digest`. A misspelled key is
+  refused.
+- HOWTO has a "Known trade-offs by configuration" section.
 - One copy: tool args, the action claim, and the proposal are each copied
   once into built-in types (`canonical.to_plain`), in `authorize` and at the
   gateway. Any `collections.abc.Mapping` becomes a dict, a tuple becomes a

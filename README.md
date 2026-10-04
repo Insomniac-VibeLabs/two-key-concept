@@ -146,7 +146,12 @@ model through a loopback or private proxy or daemon that declares no
 `upstream:` (it could forward to the agent's own account without a key).
 An identity it cannot resolve also refuses, including a local proxy serving
 an alias model unless you declare its `upstream:`. The same provider with a different model is allowed and
-recorded. `allow_same_provider_judge` is accepted and has no effect.
+recorded. `allow_same_provider_judge` is accepted and has no effect. The
+quorum flag `allow_same_model_distinct_tenant: true` is a logged opt-in,
+off by default. It allows the agent's model on the same endpoint or upstream
+only when both sides declare different tenants and use different keys. It
+warns on stderr, is recorded as `same_model_tenant_optin` in
+`constitution_loaded`, and is part of `policy_digest`.
 Without a declaration it refuses with `monitored_agent_required:`. The
 result is in the `constitution_loaded` ledger entry. Provider labels are
 never compared. HOWTO has the details.

@@ -155,6 +155,10 @@ class TwoKey:
             "capability_key_fingerprint": (None if self.issuer is None
                                            else capability_key_fingerprint(self.issuer.public_key)),
             "judge_agent_separation": sep,
+            # The logged opt-in (QuorumPolicy.allow_same_model_distinct_tenant), with both tenant labels of
+            # every judge it let through. Also in quorum_policy, so it is part of policy_digest.
+            "same_model_tenant_optin": self.quorum.allow_same_model_distinct_tenant,
+            "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
         })
         self.ledger.checkpoint()
 
@@ -184,7 +188,8 @@ class TwoKey:
                 else:
                     raise IdentityError("monitored_agent must be a mapping, an AgentDeclaration, or a MonitoredAgent")
             judges = [judge_identity(j, key) for j in self.judges]
-            return check_separation(agents, judges, self.quorum.allow_same_provider_judge)
+            return check_separation(agents, judges, self.quorum.allow_same_provider_judge,
+                                    allow_same_model_distinct_tenant=self.quorum.allow_same_model_distinct_tenant)
         except IdentityError as e:
             raise TwoKeyConfigError(str(e)) from e
 

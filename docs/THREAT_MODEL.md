@@ -76,7 +76,9 @@ the code wins, then this file should be corrected.
   still not a skip. `min_distinct_providers` still defaults to 1.
 - A judge that is the monitored agent: the same credential, a shared tenant
   id, the same model on the same endpoint or upstream (different declared
-  tenants do not lift this), the same
+  tenants do not lift this unless the logged opt-in
+  `allow_same_model_distinct_tenant` is set and both sides have different
+  declared tenants and different keys), the same
   model through a loopback or private proxy or daemon with no declared
   `upstream:` (a keyless local proxy can forward to the agent's own
   account), or an identity that cannot be resolved refuses to start. The agent is declared by the operator, never

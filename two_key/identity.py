@@ -87,6 +87,16 @@ daemon (each declaring its own address). The same provider on another model
 or endpoint is allowed.
 ``allow_same_provider_judge`` is a deprecated no-op.
 
+Logged opt-in, default off: ``allow_same_model_distinct_tenant: true`` in the
+quorum config lifts the same-endpoint and same-upstream refusals only when
+both sides declare a tenant, the scoped tenant ids are non-empty and share
+nothing, and both sides have keys with different fingerprints. A keyless
+side, an undeclared tenant, a local proxy with no declared upstream, or an
+unresolved side is still refused. When the flag is set, a warning goes to
+stderr, and ``constitution_loaded`` records ``same_model_tenant_optin: true``
+with both tenant labels of every pair it let through. The flag is part of
+the quorum policy, so it is in ``policy_digest``.
+
 The runtime check stays as a second layer: a judge whose credential equals
 the frozen agent session abstains with ``cloud_judge_reused_agent_session``.
 """
@@ -598,6 +608,7 @@ class ResolvedIdentity:
     declared_upstreams: frozenset[str] = field(default_factory=frozenset)   # normalized operator `upstream:`
     local: bool = False               # the endpoint is this machine or a private address (a proxy or daemon)
     routes: frozenset[str] = field(default_factory=frozenset)   # endpoint + declared upstreams (+ ollama.com)
+    tenant_declared: bool = False     # the operator declared a non-empty tenant: mapping
 
     @property
     def unresolved(self) -> bool:
@@ -609,7 +620,7 @@ class ResolvedIdentity:
                 "credential_fingerprint": sorted(self.credentials) or None,
                 "tenant": sorted(self.tenants) or None, "resolved_by": self.resolved_by,
                 "upstream_declared": sorted(self.declared_upstreams) or None, "local_endpoint": self.local,
-                "routes": sorted(self.routes) or None,
+                "routes": sorted(self.routes) or None, "tenant_declared": self.tenant_declared,
                 "provider_label": self.provider_label, "resolved": not self.unresolved}
 
 
@@ -630,7 +641,7 @@ def _identity(role: str, ident: str, model: str, base_url: str, credentials: Ite
     return ResolvedIdentity(role, ident, model, normalize_model(model), endpoint_key(base_url), upstreams,
                             router, frozenset(credentials), provider_label,
                             resolve_tenants(base_url, tenant, model=model, upstreams=upstream), by,
-                            upstream, local, frozenset(routes - {""}))
+                            upstream, local, frozenset(routes - {""}), bool(tenant))
 
 
 def _secret_from(credential: Any) -> str:
@@ -759,17 +770,50 @@ class SeparationReport:
     judges: tuple[ResolvedIdentity, ...]
     refusals: tuple[str, ...]
 
+    tenant_optin: bool = False
+    tenant_optin_pairs: tuple[dict, ...] = ()
+
     def to_record(self) -> dict:
         return {"ok": self.ok, "rule": "judge_is_not_monitored_agent", "checks": list(SEPARATION_CHECKS),
                 "same_provider": "allowed",
+                "same_model_tenant_optin": self.tenant_optin,
+                "same_model_tenant_optin_pairs": list(self.tenant_optin_pairs),
                 "refusals": list(self.refusals),
                 "agents": [a.to_record() for a in self.agents],
                 "judges": [j.to_record() for j in self.judges]}
 
 
-def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
-    """The refusal for one judge against one agent, or None. The same provider alone is not a match."""
+TENANT_OPTIN_FLAG = "allow_same_model_distinct_tenant"
+TENANT_OPTIN_WARNING = ("two-key: WARNING: allow_same_model_distinct_tenant is set: a judge running the monitored "
+                        "agent's model on the same endpoint or upstream is allowed when both sides declare "
+                        "different tenants and use different keys. Tenants are declared by the operator, not "
+                        "verified; this is logged as same_model_tenant_optin in constitution_loaded.")
+
+
+def distinct_tenants(agent: ResolvedIdentity, judge: ResolvedIdentity) -> bool:
+    """Both sides declared a tenant, the scoped tenant ids are non-empty and share nothing, and both sides
+    have a key with different fingerprints. A keyless side (a local daemon) or an undeclared tenant is not."""
+    def keyed(side: ResolvedIdentity) -> bool:
+        return bool(side.credentials) and NO_CREDENTIAL not in side.credentials
+    return (agent.tenant_declared and judge.tenant_declared and bool(agent.tenants) and bool(judge.tenants)
+            and not (agent.tenants & judge.tenants) and keyed(agent) and keyed(judge)
+            and not (agent.credentials & judge.credentials))
+
+
+def same_model_overlap(agent: ResolvedIdentity, judge: ResolvedIdentity) -> bool:
+    """The same normalized model on the same endpoint or a shared upstream route."""
+    return agent.model == judge.model and (agent.endpoint == judge.endpoint or bool(agent.routes & judge.routes))
+
+
+def compare(agent: ResolvedIdentity, judge: ResolvedIdentity, *,
+            allow_same_model_distinct_tenant: bool = False) -> str | None:
+    """The refusal for one judge against one agent, or None. The same provider alone is not a match.
+
+    With ``allow_same_model_distinct_tenant`` (a logged opt-in, default off), the same model on the same
+    endpoint or upstream is allowed when ``distinct_tenants`` holds. Every other refusal still applies:
+    the same key, an unresolved side, a local proxy with no declared upstream, and a shared tenant id."""
     who = f"judge {judge.id!r} vs agent {agent.id!r}"
+    optin = allow_same_model_distinct_tenant and distinct_tenants(agent, judge)
     if (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
         return f"{who}: same credential fingerprint"
     if agent.unresolved or judge.unresolved:
@@ -777,7 +821,7 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
         return (f"{who}: {side} upstream unresolved (unrecognized router or host, or a local proxy with no "
                 f"recognizable model maker; declare upstream: to attest it); treated as a match")
     if agent.model == judge.model:
-        if agent.endpoint == judge.endpoint:
+        if agent.endpoint == judge.endpoint and not optin:
             return f"{who}: same model {judge.model!r} on the same endpoint {judge.endpoint}"
         # A loopback or private endpoint (a LiteLLM-style proxy, a local Ollama daemon) can forward the
         # same model to the other side's provider and account without a key of its own. Its upstream
@@ -790,7 +834,7 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
         # Declared upstreams count as endpoints: the same model reaching the same upstream is the same
         # agent. Declared tenants do not lift it; a different account on one upstream is still that model.
         via = agent.routes & judge.routes
-        if via:
+        if via and not optin:
             return f"{who}: same model {judge.model!r} through the same upstream {sorted(via)[0]}"
     shared = agent.tenants & judge.tenants
     if shared:
@@ -799,17 +843,28 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
 
 
 def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[ResolvedIdentity],
-                     allow_same_provider_judge: bool | None = None) -> SeparationReport:
-    """Refuse any judge that is the same agent. ``allow_same_provider_judge`` is a deprecated no-op."""
+                     allow_same_provider_judge: bool | None = None, *,
+                     allow_same_model_distinct_tenant: bool = False) -> SeparationReport:
+    """Refuse any judge that is the same agent. ``allow_same_provider_judge`` is a deprecated no-op.
+
+    ``allow_same_model_distinct_tenant`` is the logged opt-in (see ``compare``). When it is set, a warning
+    goes to stderr and the report lists every pair it let through with both tenant labels."""
     if not agents:
         raise IdentityError("monitored_agent_required: declare the monitored agent (monitored_agent: model, provider, base_url, "
                             "credential_env) whenever judges are configured")
     if allow_same_provider_judge:
         warn_allow_same_provider_judge()
-    refusals = [r for a in agents for j in judges if (r := compare(a, j))]
+    optin = allow_same_model_distinct_tenant is True
+    if optin:
+        print(TENANT_OPTIN_WARNING, file=sys.stderr)
+    refusals = [r for a in agents for j in judges
+                if (r := compare(a, j, allow_same_model_distinct_tenant=optin))]
     if refusals:
         raise IdentityError("judge_matches_agent: a judge could be the monitored agent: " + "; ".join(refusals))
-    return SeparationReport(True, tuple(agents), tuple(judges), ())
+    pairs = tuple({"agent": a.id, "judge": j.id, "model": j.model,
+                   "agent_tenant": sorted(a.tenants), "judge_tenant": sorted(j.tenants)}
+                  for a in agents for j in judges if optin and same_model_overlap(a, j))
+    return SeparationReport(True, tuple(agents), tuple(judges), (), optin, pairs)
 
 
 def warn_allow_same_provider_judge() -> None:
