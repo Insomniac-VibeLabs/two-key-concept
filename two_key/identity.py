@@ -1,19 +1,19 @@
 """
 Two-Key: a Path B judge must not be the monitored agent
 =======================================================
-The rule (the owner's, approved by the Cybersecurity Practitioner): at least
-one judge, and no judge may be the monitored agent. ``TwoKey`` checks it when
-it starts and refuses with ``TwoKeyConfigError``.
+The rule (the owner's, revised 2026-10-03): at least one judge, and no judge
+may be the *same agent* as the monitored agent. The same provider is allowed.
+``TwoKey`` checks it when it starts and refuses with ``TwoKeyConfigError``.
 
 The agent's identity comes only from operator configuration
-(``TwoKey(monitored_agent=...)``: a mapping, an ``AgentDeclaration``, a
-``MonitoredAgent`` built from agents.yaml, or a list of them; the CLI reads
-the ``monitored_agent:`` block of judges.yaml), never from anything the agent
+(``TwoKey(monitored_agent=...)``, the ``monitored_agent:`` block of
+judges.yaml, and any configured ``agents``), never from anything the agent
 says about itself. The declaration names the model, the provider (recorded as
-a label, never compared), the endpoint ``base_url``, and the credential: the
-name of the environment variable that holds the agent's key
-(``credential_env``), or ``credential: none`` for a keyless loopback agent.
-If any of these is missing or cannot be read, Two-Key refuses to start.
+a label, never compared), the endpoint ``base_url``, the credential (the
+name of the environment variable that holds the agent's key,
+``credential_env``, or ``credential: none`` for a keyless loopback agent),
+and optionally a ``tenant`` mapping (see below). If any required field is
+missing or cannot be read, Two-Key refuses to start.
 
 Each judge and agent is resolved to:
 
@@ -22,56 +22,48 @@ Each judge and agent is resolved to:
   ``-2024-08-06`` or ``-20241022``, ``-latest``, Vertex ``@`` versions,
   Bedrock ``-v2:0``, Ollama ``:latest``, and a few known aliases). The id is
   NFKC-normalized first, Unicode dashes are folded to ``-``, and zero-width
-  characters are removed, so ``gpt‐4o`` and ``ｇｐｔ-4o`` equal ``gpt-4o``.
-- ``upstream``: the normalized endpoint that really serves the model, as
-  ``host:port``. A direct provider host or an inference host is its own
-  ``host:port``. A recognized router (OpenRouter, Azure OpenAI and Azure AI,
-  Bedrock, Vertex, Cloudflare AI Gateway, Portkey) or a ``provider/model`` id
-  on any other host (LiteLLM style) resolves to the model maker's API host
-  (``api.openai.com:443``), or ``maker:<name>`` for a maker without one. A
-  loopback or private host is itself when the model id names a known maker;
-  if that maker only serves its models from its own API (GPT, Claude,
-  Gemini, Grok), the host is a proxy and the maker's API host is added. A
-  ``-cloud`` Ollama model adds ``ollama.com:443``. A loopback or private
-  host whose model names no known maker, and an unrecognized host or router
-  that cannot be resolved from the model id, stay **unresolved**, and
-  unresolved is treated as a match, unless the operator declares
-  ``upstream:`` (a host, URL, or maker name) for that judge or agent.
-- ``resolved_by``: ``endpoint`` (the host, or a router plus the model's
-  family), ``declared_upstream`` (the operator's ``upstream:``, recorded in
-  the ledger), or ``model_prefix`` (a ``maker/model`` id on a host Two-Key
-  does not know). Both of the last two are operator-attested and not
-  verified: Two-Key cannot see where a proxy really forwards.
-- ``tenant``: account, org, project, or deployment ids. Declared with the
-  optional ``tenant`` key (a string or a list) on the agent or a judge, or
-  derived from the URL: ``azure:<resource>`` for Azure OpenAI and Azure AI,
-  ``gcp-project:<project>`` for a Vertex path or model id,
-  ``cloudflare-account:<id>`` for Cloudflare AI Gateway. Compared as
-  lower-case strings.
-- ``endpoint``: the ``host:port`` of ``base_url``.
+  characters are removed, so ``gpt\u20104o`` and fullwidth ``gpt-4o`` equal
+  ``gpt-4o``.
+- ``endpoint``: the normalized ``host:port`` of ``base_url`` (lower case,
+  default port filled in, every loopback name or address written
+  ``localhost``).
+- ``upstreams``: who really serves or made the model, as upstream hosts.
+  A direct provider host is itself (``api.openai.com``). A recognized router
+  (OpenRouter, Azure OpenAI and Azure AI, Bedrock, Vertex, Cloudflare AI
+  Gateway, Portkey) or a ``provider/model`` id (LiteLLM style) resolves to the
+  model maker's API host, or ``maker:<name>`` for a maker without one. A
+  loopback or private host is itself. An unrecognized host or router that
+  cannot be resolved from the model id stays **unresolved**. Upstreams are
+  used only to detect an unresolved identity; a shared upstream is allowed.
+- ``tenant``: account ids, each scoped by provider family, from what the
+  base_url shows plus what the operator declares under ``tenant:``
+  (keys ``organization``, ``project``, ``account``, ``deployment``):
+  Azure resource (host) and deployment (``/openai/deployments/<name>``),
+  Vertex project (``/projects/<id>/`` in the path, or declared ``project``),
+  Bedrock ``account`` (declared) with the region from the host, OpenAI
+  ``organization`` / ``project`` (declared). Elsewhere a declared id is scoped
+  by the endpoint host.
 - ``credential``: a fingerprint, SHA-256 over a domain-separated encoding of
   the key (``sha256:...``). Raw keys are never stored or logged. ``none``
   means the endpoint takes no key; two keyless endpoints do not match on it.
 
-A judge is refused only when it is the same agent (owner decision,
-2026-10-03):
+Refusals, judge against agent (all hard, no opt-out), message prefix
+``judge_matches_agent:``:
 
-- the same credential fingerprint;
-- the same tenant, account, org, project, or deployment id;
-- the same normalized model on the same normalized endpoint (a shared
-  ``upstream``);
-- either side unresolved, or undeclared (fail closed).
+- same credential fingerprint
+- either side unresolved (unknown identity fails closed)
+- same normalized model on the same normalized endpoint ``host:port``
+- a shared tenant id (same Azure resource or deployment, OpenAI organization
+  or project, Bedrock account in the same region, Vertex project, or a
+  declared id on the same host)
 
-The same provider with a different model, or the same model at a different
-endpoint, is allowed. Such pairs are recorded in ``same_provider_allowed``.
-``allow_same_provider_judge`` is accepted for old configurations and has no
-effect.
+Allowed: the same provider or upstream with a different model, the same
+endpoint with a different model, and the same model on a different endpoint
+in a different (or undeclared) tenant with a different key.
+``allow_same_provider_judge`` is a deprecated no-op.
 
-Free-text provider labels are recorded and never compared.
-
-The runtime check stays as a second layer, for every judge: a judge whose
-credential equals the ``agent_session`` passed to ``authorize`` abstains with
-``cloud_judge_reused_agent_session``.
+The runtime check stays as a second layer: a judge whose credential equals
+the frozen agent session abstains with ``cloud_judge_reused_agent_session``.
 """
 
 from __future__ import annotations
@@ -85,20 +77,23 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
-from .netloc import host_is_local
+from .netloc import host_is_local, host_is_loopback, model_is_cloud
 
 FINGERPRINT_DOMAIN = b"two-key/credential-fingerprint/1\x00"
 NO_CREDENTIAL = "none"
 IN_PROCESS = "in-process"
+_FOLD = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2043\ufe58\ufe63\uff0d"), "-")
+_FOLD.update(dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None))
+
+
+def fold_model_text(model: str | None) -> str:
+    """NFKC, Unicode dashes to '-', zero-width characters removed, trimmed, lower case."""
+    return unicodedata.normalize("NFKC", model or "").translate(_FOLD).strip().lower()
+
+
 AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "tenant", "upstream"}
-RESOLVED_BY = ("endpoint", "declared_upstream", "model_prefix")
-_DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2043\ufe58\ufe63\uff0d"), "-")
-_DASHES.update(dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None))
-
-
-def fold_model_text(model: str) -> str:
-    """NFKC, Unicode dashes to '-', zero-width characters removed, lower case."""
-    return unicodedata.normalize("NFKC", model or "").translate(_DASHES).strip().lower()
+TENANT_KEYS = ("organization", "project", "account", "deployment")
+SEPARATION_CHECKS = ("same_credential", "unresolved_identity", "same_model_same_endpoint", "same_tenant")
 
 
 class IdentityError(ValueError):
@@ -247,109 +242,138 @@ def endpoint_key(base_url: str) -> str:
     host = (u.hostname or "").lower().rstrip(".")
     if u.scheme == IN_PROCESS:
         return f"{IN_PROCESS}:{host}"
-    port = u.port or {"https": 443, "http": 80}.get(u.scheme, 0)
+    try:
+        port = u.port or {"https": 443, "http": 80}.get(u.scheme, 0)
+    except ValueError:
+        port = 0
+    if host_is_loopback(host):
+        host = "localhost"
     return f"{host}:{port}"
 
 
-def _hostport(host: str) -> str:
-    return host if host.startswith("maker:") else f"{host}:443"
+def resolve_upstream_info(base_url: str, model: str) -> tuple[frozenset[str], str | None, str | None]:
+    """(upstream hosts, router name, resolved_by). An empty set means unresolved (resolved_by None).
 
-
-# Makers whose models are served only from the maker's own API (or a cloud reseller): a loopback or
-# private host serving one of these is a proxy, so the maker's API host is added.
-_CLOSED = re.compile(r"^(gpt-(?!oss)|gpt\d|chatgpt|o[1-9]|text-davinci|claude|gemini|palm|text-bison|chat-bison|grok)")
-
-
-def declared_upstream(value: Any, who: str) -> str | None:
-    """Normalize an operator's ``upstream:`` to host:port, or maker:<name>."""
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip() or value.startswith("REPLACE_"):
-        raise IdentityError(f"{who}: upstream must be a host, a URL, or a maker name")
-    v = value.strip().lower()
-    if "://" in v:
-        return endpoint_key(v)
-    if v.startswith("maker:"):
-        return v
-    if v in _PREFIX_MAKERS:
-        return _hostport(_maker_upstream(_PREFIX_MAKERS[v]))
-    host, _, port = v.partition(":")
-    if not host or (port and not port.isdigit()):
-        raise IdentityError(f"{who}: upstream {value!r} is not a host, a URL, or a maker name")
-    return f"{host}:{port or 443}"
-
-
-def resolve_upstreams(base_url: str, model: str, declared: str | None = None) -> tuple[frozenset[str], str | None, str | None]:
-    """(normalized serving endpoints as host:port, router name, resolved_by). An empty set means unresolved."""
+    ``resolved_by``: ``endpoint`` (the host itself says who serves the model), ``model_prefix`` (the
+    model id names its maker; operator-attested through the model name, not verified). A loopback or
+    private endpoint whose model names no recognizable maker is unresolved: a local proxy can route
+    an alias anywhere. ``declared_upstream`` is set by ``_identity`` when the operator declares one.
+    """
     u = urlparse(base_url or "")
     host = (u.hostname or "").lower().rstrip(".")
     maker = model_maker(model)
     up: set[str] = set()
-    by = "endpoint"
     if u.scheme == IN_PROCESS:
-        return frozenset({f"{IN_PROCESS}:{host}"}), None, by
+        return frozenset({f"{IN_PROCESS}:{host}"}), None, "endpoint"
     router = _router(host)
     bare, prefixed = _bare(model)
+    by: str | None = None
     if host in _DIRECT_HOSTS:
-        up.add(endpoint_key(base_url))
+        up.add(_maker_upstream(_DIRECT_HOSTS[host]))
+        if maker:
+            up.add(_maker_upstream(maker))
+        by = "endpoint"
     elif router == "azure-openai":
-        up.add(_hostport(_maker_upstream("openai")))  # deployment names are free text; the maker is OpenAI
+        up.add(_maker_upstream("openai"))        # deployment names are free text; the maker is OpenAI
+        by = "endpoint"
     elif router is not None:
-        if maker:                                # the router itself routes by this id
-            up.add(_hostport(_maker_upstream(maker)))
+        if maker:
+            up.add(_maker_upstream(maker))
+            by = "model_prefix"
     elif host in _INFERENCE_HOSTS:
         up.add(endpoint_key(base_url))
+        if maker:
+            up.add(_maker_upstream(maker))
+        by = "endpoint"
     elif host_is_local(host):
-        if maker:                                # a local host with no known maker stays unresolved
+        if maker or model_is_cloud(model):
             up.add(endpoint_key(base_url))
-            by = "model_prefix" if prefixed else "endpoint"
-            if _CLOSED.match(bare):
-                up.add(_hostport(_maker_upstream(maker)))   # these weights are not local: a proxy
-        if re.search(r"[:-]cloud$", fold_model_text(model)):
-            up.add(endpoint_key(base_url))
-            up.add("ollama.com:443")             # an Ollama cloud model, proxied by the local daemon
+            if maker:
+                up.add(_maker_upstream(maker))
+            if model_is_cloud(model):
+                up.add("ollama.com")             # an Ollama cloud model, proxied by the local daemon
+            by = "model_prefix"
+        # otherwise unresolved: a local proxy (LiteLLM and the like) can route an alias to anything
     else:
         if prefixed:                             # LiteLLM-style provider/model id on an unrecognized host
-            up.add(_hostport(_maker_upstream(prefixed)))
+            up.add(_maker_upstream(prefixed))
             by = "model_prefix"
         # otherwise unresolved: an unrecognized host may be a router to anything
-    if declared:
-        if not up:
-            by = "declared_upstream"             # resolved only because the operator said so
-        up.add(declared)                         # the operator's statement; added, never a replacement
-    if not up:
-        by = None
-    return frozenset(up), router, by
+    return frozenset(up), router, (by if up else None)
 
 
-def derive_tenants(base_url: str, model: str = "") -> frozenset[str]:
-    """Account, project, or deployment ids that the URL or model id names."""
-    u = urlparse(base_url or "")
-    host = (u.hostname or "").lower().rstrip(".")
-    path = (u.path or "").lower()
-    out: set[str] = set()
-    azure = re.fullmatch(r"([a-z0-9-]+)\.(openai\.azure\.com|services\.ai\.azure\.com|"
-                         r"models\.ai\.azure\.com|inference\.ai\.azure\.com)", host)
-    if azure:
-        out.add(f"azure:{azure.group(1)}")
-    for text in (path, (model or "").strip().lower()):
-        project = re.search(r"(?:^|/)projects/([^/]+)/", text)
-        if project:
-            out.add(f"gcp-project:{project.group(1)}")
-    if host == "gateway.ai.cloudflare.com":
-        cf = re.match(r"^/v1/([^/]+)/", path)
-        if cf:
-            out.add(f"cloudflare-account:{cf.group(1)}")
+def resolve_upstreams(base_url: str, model: str) -> tuple[frozenset[str], str | None]:
+    """(upstream hosts, router name). An empty set means unresolved."""
+    up, router, _ = resolve_upstream_info(base_url, model)
+    return up, router
+
+
+def validate_upstream(upstream: Any, who: str) -> frozenset[str]:
+    """An operator-declared ``upstream:`` (a host or label, or a list of them). Ledgered; not verified."""
+    if upstream is None:
+        return frozenset()
+    items = [upstream] if isinstance(upstream, str) else upstream
+    if not isinstance(items, (list, tuple)) or not items:
+        raise IdentityError(f"{who}: upstream must be a non-empty string or list of strings")
+    out = set()
+    for v in items:
+        if not isinstance(v, str) or not v.strip() or v.startswith("REPLACE_"):
+            raise IdentityError(f"{who}: upstream entries must be non-empty strings")
+        out.add(v.strip().lower())
     return frozenset(out)
 
 
-def declared_tenants(value: Any, who: str) -> frozenset[str]:
-    if value is None:
-        return frozenset()
-    items = [value] if isinstance(value, str) else value
-    if not isinstance(items, (list, tuple)) or not all(isinstance(v, str) and v.strip() for v in items):
-        raise IdentityError(f"{who}: tenant must be a non-empty string or a list of them")
-    return frozenset(v.strip().lower() for v in items)
+# ---------------------------------------------------------------- tenants
+def validate_tenant(tenant: Any, who: str) -> dict[str, str]:
+    """An operator-declared ``tenant:`` mapping: organization, project, account, deployment."""
+    if tenant is None:
+        return {}
+    if not isinstance(tenant, Mapping):
+        raise IdentityError(f"{who}: tenant must be a mapping of {', '.join(TENANT_KEYS)}")
+    extra = set(tenant) - set(TENANT_KEYS)
+    if extra:
+        raise IdentityError(f"{who}: unknown tenant key(s) {sorted(extra)}")
+    out = {}
+    for k, v in tenant.items():
+        if not isinstance(v, str) or not v.strip() or v.startswith("REPLACE_"):
+            raise IdentityError(f"{who}: tenant {k} must be a non-empty string")
+        out[k] = v.strip()
+    return out
+
+
+def resolve_tenants(base_url: str, declared: Mapping[str, str] | None = None) -> frozenset[str]:
+    """Account ids, scoped by provider family, from the base_url plus the operator's declaration."""
+    u = urlparse(base_url or "")
+    host = (u.hostname or "").lower().rstrip(".")
+    path = u.path or ""
+    router = _router(host)
+    declared = dict(declared or {})
+    ids: set[str] = set()
+    if router in ("azure-openai", "azure-ai"):
+        resource = host.split(".", 1)[0]
+        ids.add(f"azure:resource:{resource}")
+        m = re.search(r"/openai/deployments/([^/?#]+)", path)
+        for dep in {m.group(1) if m else None, declared.pop("deployment", None)} - {None}:
+            ids.add(f"azure:deployment:{resource}/{dep.lower()}")
+        scope = "azure"
+    elif router == "bedrock":
+        region = host.split(".")[1]
+        account = declared.pop("account", None)
+        if account:
+            ids.add(f"aws:account:{account.lower()}@{region}")
+        scope = "aws"
+    elif router == "vertex":
+        m = re.search(r"/projects/([^/?#]+)", path)
+        for project in {m.group(1) if m else None, declared.pop("project", None)} - {None}:
+            ids.add(f"gcp:project:{project.lower()}")
+        scope = "gcp"
+    elif host == "api.openai.com" or (host.endswith(".openai.com") and not host.endswith(".azure.com")):
+        scope = "openai"
+    else:
+        scope = endpoint_key(base_url)
+    for k, v in declared.items():
+        ids.add(f"{scope}:{k}:{v.lower()}")
+    return frozenset(ids)
 
 
 # ---------------------------------------------------------------- identities
@@ -364,9 +388,8 @@ class ResolvedIdentity:
     router: str | None
     credentials: frozenset[str] = field(default_factory=frozenset)   # fingerprints; may include "none"
     provider_label: str | None = None
-    tenants: frozenset[str] = field(default_factory=frozenset)
-    resolved_by: str | None = "endpoint"
-    upstream_declared: str | None = None
+    tenants: frozenset[str] = field(default_factory=frozenset)       # scoped account ids, see resolve_tenants
+    resolved_by: str | None = None    # endpoint | model_prefix | declared_upstream; None = unresolved
 
     @property
     def unresolved(self) -> bool:
@@ -376,20 +399,18 @@ class ResolvedIdentity:
         return {"role": self.role, "id": self.id, "model": self.model, "model_declared": self.model_declared,
                 "upstream": sorted(self.upstreams) or None, "router": self.router, "endpoint": self.endpoint,
                 "credential_fingerprint": sorted(self.credentials) or None,
-                "tenant": sorted(self.tenants) or None,
-                "resolved_by": self.resolved_by if not self.unresolved else None,
-                "upstream_declared": self.upstream_declared,
+                "tenant": sorted(self.tenants) or None, "resolved_by": self.resolved_by,
                 "provider_label": self.provider_label, "resolved": not self.unresolved}
 
 
 def _identity(role: str, ident: str, model: str, base_url: str, credentials: Iterable[str],
-              provider_label: str | None, tenant: Any = None, upstream: Any = None) -> ResolvedIdentity:
-    who = f"{role} {ident!r}"
-    declared = declared_upstream(upstream, who)
-    upstreams, router, by = resolve_upstreams(base_url, model, declared)
-    tenants = derive_tenants(base_url, model) | declared_tenants(tenant, who)
+              provider_label: str | None, tenant: Mapping[str, str] | None = None,
+              upstream: frozenset[str] = frozenset()) -> ResolvedIdentity:
+    upstreams, router, by = resolve_upstream_info(base_url, model)
+    if upstream:                       # operator-attested; ledgered, not verified
+        upstreams, by = frozenset(upstreams | upstream), "declared_upstream"
     return ResolvedIdentity(role, ident, model, normalize_model(model), endpoint_key(base_url), upstreams,
-                            router, frozenset(credentials), provider_label, tenants, by, declared)
+                            router, frozenset(credentials), provider_label, resolve_tenants(base_url, tenant), by)
 
 
 def _secret_from(credential: Any) -> str:
@@ -421,8 +442,9 @@ def judge_identity(judge: Any) -> ResolvedIdentity:
         fp = credential_fingerprint(_secret_from(getattr(judge, "credential", None)))
     except IdentityError as e:
         raise IdentityError(f"judge {jid!r}: {e}") from None
-    return _identity("judge", jid, model, base_url, {fp}, getattr(judge, "provider", None),
-                     getattr(judge, "tenant", None), getattr(judge, "upstream", None))
+    tenant = validate_tenant(getattr(judge, "tenant", None), f"judge {jid!r}")
+    upstream = validate_upstream(getattr(judge, "upstream", None), f"judge {jid!r}")
+    return _identity("judge", jid, model, base_url, {fp}, getattr(judge, "provider", None), tenant, upstream)
 
 
 @dataclass(frozen=True)
@@ -435,8 +457,8 @@ class AgentDeclaration:
     credential_env: str | None = None
     credential: str | None = None        # only "none", for a keyless loopback agent
     id: str = "monitored-agent"
-    tenant: Any = None                   # optional account/org/project/deployment id, or a list
-    upstream: str | None = None          # optional: where a proxy really forwards (operator-attested)
+    tenant: Mapping[str, str] | None = None   # organization / project / account / deployment, if declared
+    upstream: Any = None                      # operator-declared upstream host(s), for a proxy; not verified
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "AgentDeclaration":
@@ -447,7 +469,8 @@ class AgentDeclaration:
             raise IdentityError(f"monitored_agent: unknown key(s) {sorted(extra)}")
         return cls(model=data.get("model"), provider=data.get("provider"), base_url=data.get("base_url"),
                    credential_env=data.get("credential_env"), credential=data.get("credential"),
-                   id=data.get("id") or "monitored-agent", tenant=data.get("tenant"),
+                   id=data.get("id") or "monitored-agent",
+                   tenant=validate_tenant(data.get("tenant"), "monitored_agent") or None,
                    upstream=data.get("upstream"))
 
     def validate(self, *, allow_in_process: bool = False) -> None:
@@ -469,6 +492,8 @@ class AgentDeclaration:
         if self.credential == NO_CREDENTIAL and u.scheme != IN_PROCESS and not host_is_local(u.hostname or ""):
             raise IdentityError(f"monitored_agent {self.id!r}: credential: none is only for a loopback or "
                                 "private-address agent; declare credential_env")
+        validate_tenant(self.tenant, f"monitored_agent {self.id!r}")
+        validate_upstream(self.upstream, f"monitored_agent {self.id!r}")
 
     def resolve(self, *, allow_in_process: bool = False, extra_secrets: Iterable[str] = ()) -> ResolvedIdentity:
         self.validate(allow_in_process=allow_in_process)
@@ -480,13 +505,15 @@ class AgentDeclaration:
             fps.add(credential_fingerprint(value))
         else:
             fps.add(NO_CREDENTIAL)
-        return _identity("agent", self.id, self.model, self.base_url, fps, self.provider, self.tenant,
-                         self.upstream)
+        return _identity("agent", self.id, self.model, self.base_url, fps, self.provider,
+                         validate_tenant(self.tenant, f"monitored_agent {self.id!r}"),
+                         validate_upstream(self.upstream, f"monitored_agent {self.id!r}"))
 
     def to_record(self) -> dict:
         return {"id": self.id, "model": self.model, "provider": self.provider, "base_url": self.base_url,
-                "credential_env": self.credential_env, "credential": self.credential, "tenant": self.tenant,
-                "upstream": self.upstream}
+                "credential_env": self.credential_env, "credential": self.credential,
+                "tenant": dict(self.tenant) if self.tenant else None,
+                "upstream": sorted(validate_upstream(self.upstream, "monitored_agent")) or None}
 
 
 def configured_agent_identity(agent: Any) -> ResolvedIdentity:
@@ -498,8 +525,9 @@ def configured_agent_identity(agent: Any) -> ResolvedIdentity:
         if agent.is_cloud():
             raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
     return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {credential_fingerprint(secret)},
-                     getattr(agent, "provider", None), getattr(agent, "tenant", None),
-                     getattr(agent, "upstream", None))
+                     getattr(agent, "provider", None),
+                     validate_tenant(getattr(agent, "tenant", None), f"agent {agent.agent_id!r}"),
+                     validate_upstream(getattr(agent, "upstream", None), f"agent {agent.agent_id!r}"))
 
 
 @dataclass(frozen=True)
@@ -508,69 +536,49 @@ class SeparationReport:
     agents: tuple[ResolvedIdentity, ...]
     judges: tuple[ResolvedIdentity, ...]
     refusals: tuple[str, ...]
-    same_provider_allowed: tuple[str, ...]
-    allow_same_provider_judge: bool
 
     def to_record(self) -> dict:
-        return {"ok": self.ok, "rule": "judge_is_not_monitored_agent",
-                "allow_same_provider_judge": self.allow_same_provider_judge,
-                "same_provider_allowed": list(self.same_provider_allowed),
+        return {"ok": self.ok, "rule": "judge_is_not_monitored_agent", "checks": list(SEPARATION_CHECKS),
+                "same_provider": "allowed",
                 "refusals": list(self.refusals),
                 "agents": [a.to_record() for a in self.agents],
                 "judges": [j.to_record() for j in self.judges]}
 
 
-def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> tuple[str | None, str | None]:
-    """(refusal, same-provider note) for one judge against one agent.
-
-    Refused only when the judge is the same agent: a shared credential, a shared
-    tenant id, or the same normalized model on a shared normalized endpoint.
-    Unresolved is a refusal (fail closed). The same provider is allowed and noted.
-    """
+def compare(agent: ResolvedIdentity, judge: ResolvedIdentity) -> str | None:
+    """The refusal for one judge against one agent, or None. The same provider alone is not a match."""
     who = f"judge {judge.id!r} vs agent {agent.id!r}"
-    shared = (agent.credentials & judge.credentials) - {NO_CREDENTIAL}
-    if shared:
-        return f"{who}: same credential fingerprint", None
-    tenants = agent.tenants & judge.tenants
-    if tenants:
-        return f"{who}: same tenant {sorted(tenants)[0]!r}", None
+    if (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
+        return f"{who}: same credential fingerprint"
     if agent.unresolved or judge.unresolved:
         side = "agent" if agent.unresolved else "judge"
-        return (f"{who}: {side} upstream unresolved (unrecognized router or host, or a local endpoint whose "
-                f"model names no known maker); treated as a match (declare upstream: to name it)"), None
-    common = agent.upstreams & judge.upstreams
-    if agent.model == judge.model and common:
-        return f"{who}: same model {judge.model!r} on the same endpoint {sorted(common)[0]}", None
-    if agent.model == judge.model:
-        return None, f"{who}: same model {judge.model!r} on a different endpoint"
-    if common or agent.endpoint == judge.endpoint:
-        where = sorted(common)[0] if common else agent.endpoint
-        return None, f"{who}: same provider {where} with a different model"
-    return None, None
+        return (f"{who}: {side} upstream unresolved (unrecognized router or host, or a local proxy with no "
+                f"recognizable model maker; declare upstream: to attest it); treated as a match")
+    if agent.model == judge.model and agent.endpoint == judge.endpoint:
+        return f"{who}: same model {judge.model!r} on the same endpoint {judge.endpoint}"
+    shared = agent.tenants & judge.tenants
+    if shared:
+        return f"{who}: same tenant {sorted(shared)[0]}"
+    return None
 
 
 def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[ResolvedIdentity],
-                     allow_same_provider_judge: bool = False) -> SeparationReport:
-    """Refuse a judge that is the monitored agent. ``allow_same_provider_judge`` is a deprecated no-op."""
+                     allow_same_provider_judge: bool | None = None) -> SeparationReport:
+    """Refuse any judge that is the same agent. ``allow_same_provider_judge`` is a deprecated no-op."""
     if not agents:
         raise IdentityError("monitored_agent_required: declare the monitored agent (monitored_agent: model, provider, base_url, "
                             "credential_env) whenever judges are configured")
-    refusals, same = [], []
-    for a in agents:
-        for j in judges:
-            refusal, note = compare(a, j)
-            if refusal:
-                refusals.append(refusal)
-            elif note:
-                same.append(note)
-    report = SeparationReport(not refusals, tuple(agents), tuple(judges), tuple(refusals), tuple(same),
-                              allow_same_provider_judge)
+    if allow_same_provider_judge:
+        warn_allow_same_provider_judge()
+    refusals = [r for a in agents for j in judges if (r := compare(a, j))]
     if refusals:
         raise IdentityError("judge_matches_agent: a judge could be the monitored agent: " + "; ".join(refusals))
-    if allow_same_provider_judge:
-        print("two-key: allow_same_provider_judge is deprecated and has no effect; "
-              "the same provider is allowed by default", file=sys.stderr)
-    return report
+    return SeparationReport(True, tuple(agents), tuple(judges), ())
+
+
+def warn_allow_same_provider_judge() -> None:
+    print("two-key: allow_same_provider_judge is deprecated and has no effect: the same provider is allowed "
+          "by default; a judge is refused only when it is the same agent", file=sys.stderr)
 
 
 def load_monitored_agent(data: Mapping[str, Any] | None) -> AgentDeclaration | None:

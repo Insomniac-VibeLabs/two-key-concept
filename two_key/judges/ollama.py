@@ -20,16 +20,12 @@ not change the ballot.
 
 from __future__ import annotations
 
-import re
-
-from ..netloc import host_is_local, url_host
+from ..netloc import host_is_local, model_is_cloud, url_host
 from .llm import LLMJudge
-
-_CLOUD_MODEL = re.compile(r"[:-]cloud$")
 
 
 def is_ollama_cloud_model(model) -> bool:
-    return isinstance(model, str) and bool(_CLOUD_MODEL.search(model.strip().lower()))
+    return isinstance(model, str) and model_is_cloud(model)
 
 
 class OllamaJudge(LLMJudge):

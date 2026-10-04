@@ -23,8 +23,8 @@ Format (see examples/judges.yaml):
       provider: openai          # a label; recorded, never compared
       base_url: https://api.openai.com/v1
       credential_env: OPENAI_AGENT_API_KEY   # or credential: none for a keyless loopback agent
-      # tenant: org-123          # optional account/org/project/deployment id (string or list)
-      # upstream: api.openai.com # required for a loopback/private proxy whose model names no known maker
+      # tenant: {organization: org-123}   # optional: organization, project, account, deployment
+      # upstream: api.openai.com # declare for a loopback/private proxy whose model names no known maker
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
@@ -147,20 +147,14 @@ def build_judge(spec: dict, transport=None) -> Judge:
         judge = ADAPTERS[t](**kw)
     except (TypeError, ValueError) as e:
         raise JudgeConfigError(f"judge {spec.get('id')!r}: {e}") from e
-    if "tenant" in spec:
-        from ..identity import IdentityError, declared_tenants
+    if "tenant" in spec or "upstream" in spec:
+        from ..identity import IdentityError, validate_tenant, validate_upstream
         try:
-            declared_tenants(spec["tenant"], f"judge {spec.get('id')!r}")
+            judge.tenant = validate_tenant(spec.get("tenant"), f"judge {spec.get('id')!r}") or None
+            # where a proxy forwards; operator-attested, ledgered, not verified
+            judge.upstream = sorted(validate_upstream(spec.get("upstream"), f"judge {spec.get('id')!r}")) or None
         except IdentityError as e:
             raise JudgeConfigError(str(e)) from None
-        judge.tenant = spec["tenant"]  # account/org/project/deployment id; compared with the agent's
-    if "upstream" in spec:
-        from ..identity import IdentityError, declared_upstream
-        try:
-            declared_upstream(spec["upstream"], f"judge {spec.get('id')!r}")
-        except IdentityError as e:
-            raise JudgeConfigError(str(e)) from None
-        judge.upstream = spec["upstream"]  # where a proxy forwards; operator-attested, recorded
     return judge
 
 

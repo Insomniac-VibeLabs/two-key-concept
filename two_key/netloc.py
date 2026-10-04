@@ -5,12 +5,20 @@
 unique-local). A DNS name other than ``localhost`` is not local, even if it
 resolves to a private address today: names can be repointed. Link-local
 addresses (for example 169.254.169.254, a cloud metadata service) are not local.
+
+``model_is_cloud`` marks a model id ending in ``:cloud`` or ``-cloud`` (an
+Ollama cloud model, run by ollama.com even when the local daemon proxies it).
+Such a judge or agent is cloud and never local, whatever its host.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import re
+import unicodedata
 from urllib.parse import urlparse
+
+_CLOUD_MODEL = re.compile(r"[:-]cloud$")
 
 LOOPBACK_NAMES = {"localhost"}
 
@@ -46,3 +54,10 @@ def host_is_local(host: str) -> bool:
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         return host_is_local(str(ip.ipv4_mapped))
     return ip.is_private
+
+
+def model_is_cloud(model: str | None) -> bool:
+    """True for a model id ending in ``:cloud`` or ``-cloud`` (case and Unicode forms folded)."""
+    m = unicodedata.normalize("NFKC", model or "").strip().lower()
+    m = re.sub(r"[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]", "-", m)
+    return bool(_CLOUD_MODEL.search(m))

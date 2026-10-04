@@ -16,7 +16,7 @@ from two_key.action import normalize_action
 from two_key.agents import load_agents
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
-from two_key.identity import (AgentDeclaration, credential_fingerprint, derive_tenants, load_monitored_agent,
+from two_key.identity import (AgentDeclaration, credential_fingerprint, load_monitored_agent, resolve_tenants, resolve_upstream_info,
                               model_maker, normalize_model, resolve_upstreams)
 from two_key.judges.anthropic import AnthropicJudge
 from two_key.judges.credentials import EnvApiKey, StaticToken
@@ -81,28 +81,29 @@ class Normalization(unittest.TestCase):
         self.assertEqual(model_maker("meta-llama/Llama-3.1-8B-Instruct"), "meta")
 
     def test_routers_resolve_to_the_real_upstream(self):
-        cases = {("https://api.openai.com/v1", "gpt-4o"): {"api.openai.com:443"},
-                 ("https://openrouter.ai/api/v1", "anthropic/claude-3.5-sonnet"): {"api.anthropic.com:443"},
-                 ("https://res.openai.azure.com", "my-deployment"): {"api.openai.com:443"},
+        cases = {("https://api.openai.com/v1", "gpt-4o"): {"api.openai.com"},
+                 ("https://openrouter.ai/api/v1", "anthropic/claude-3.5-sonnet"): {"api.anthropic.com"},
+                 ("https://res.openai.azure.com", "my-deployment"): {"api.openai.com"},
                  ("https://bedrock-runtime.us-east-1.amazonaws.com", "anthropic.claude-3-haiku-20240307-v1:0"):
-                     {"api.anthropic.com:443"},
+                     {"api.anthropic.com"},
                  ("https://us-central1-aiplatform.googleapis.com/v1", "gemini-1.5-pro"):
-                     {"generativelanguage.googleapis.com:443"},
-                 ("http://localhost:4000", "openai/gpt-4o"): {"localhost:4000", "api.openai.com:443"},
-                 ("https://llm.corp.example/v1", "anthropic/claude-3-5-sonnet"): {"api.anthropic.com:443"}}
+                     {"generativelanguage.googleapis.com"},
+                 ("http://localhost:4000", "openai/gpt-4o"): {"api.openai.com", "localhost:4000"},
+                 ("https://llm.corp.example/v1", "anthropic/claude-3-5-sonnet"): {"api.anthropic.com"}}
         for (url, model), want in cases.items():
             self.assertEqual(set(resolve_upstreams(url, model)[0]), want, (url, model))
         for url, model in (("https://openrouter.ai/api/v1", "mystery-model"), ("https://llm.corp.example/v1", "gpt-4o")):
             self.assertEqual(resolve_upstreams(url, model)[0], frozenset(), (url, model))
-        self.assertIn("ollama.com:443", resolve_upstreams("http://localhost:11434", "gpt-oss:120b-cloud")[0])
+        self.assertIn("ollama.com", resolve_upstreams("http://localhost:11434", "gpt-oss:120b-cloud")[0])
 
-    def test_tenants_derived_from_the_url(self):
-        self.assertEqual(derive_tenants("https://acme.openai.azure.com/openai/deployments/d"), {"azure:acme"})
-        self.assertEqual(derive_tenants("https://us-central1-aiplatform.googleapis.com/v1/projects/p1/locations/x"),
-                         {"gcp-project:p1"})
-        self.assertEqual(derive_tenants("https://gateway.ai.cloudflare.com/v1/acct9/gw/openai"),
-                         {"cloudflare-account:acct9"})
-        self.assertEqual(derive_tenants("https://api.openai.com/v1"), frozenset())
+    def test_tenants_from_the_url_and_the_declaration(self):
+        self.assertEqual(resolve_tenants("https://acme.openai.azure.com/openai/deployments/d"),
+                         {"azure:resource:acme", "azure:deployment:acme/d"})
+        self.assertEqual(resolve_tenants("https://us-central1-aiplatform.googleapis.com/v1/projects/p1/locations/x"),
+                         {"gcp:project:p1"})
+        self.assertEqual(resolve_tenants("https://api.openai.com/v1", {"organization": "Org-1"}),
+                         {"openai:organization:org-1"})
+        self.assertEqual(resolve_tenants("https://api.openai.com/v1"), frozenset())
 
     def test_fingerprint_never_contains_the_key(self):
         fp = credential_fingerprint("sk-very-secret")
@@ -134,9 +135,10 @@ class Declaration(Env):
 
 
 class Refusals(Env):
-    def test_same_model_by_any_route(self):
-        self.refused([oai("or", "x-ai/grok-4", "https://openrouter.ai/api/v1", "openrouter-key")],
-                     "^judge_matches_agent: .*same model")
+    def test_same_model_through_a_router_is_a_different_endpoint(self):
+        # Owner rule (2026-10-03): the same model is refused only on the same normalized endpoint.
+        self.assertTrue(self.started([oai("or", "x-ai/grok-4", "https://openrouter.ai/api/v1",
+                                          "openrouter-key")]).separation.ok)
 
     def test_same_endpoint_and_model(self):
         self.refused([oai("direct", "grok-4", "https://api.x.ai/v1", "other-key")], "^judge_matches_agent: ")
@@ -170,24 +172,26 @@ class Refusals(Env):
         self.refused([j], "same model 'grok4' on the same endpoint api.x.ai:443")
 
     def test_same_tenant_declared_or_derived(self):
-        agent = dict(AGENT, tenant="org-acme")
-        j = oai("o", "gpt-4o", "https://api.openai.com/v1", "judge-openai-key")
-        j.tenant = ["ORG-acme"]
-        self.refused([j], "same tenant 'org-acme'", agent=agent)
+        agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1", tenant={"organization": "org-acme"})
+        j = oai("o", "gpt-4o-mini", "https://api.openai.com/v1", "judge-openai-key")
+        j.tenant = {"organization": "ORG-acme"}
+        self.refused([j], "same tenant openai:organization:org-acme", agent=agent)
         agent = dict(AGENT, model="gpt-4o", base_url="https://acme.openai.azure.com/openai/deployments/agent")
         judge = oai("az", "judge-deployment", "https://acme.openai.azure.com/openai/deployments/judge", "az-key")
-        self.refused([judge], "same tenant 'azure:acme'", agent=agent)
+        self.refused([judge], "same tenant azure:resource:acme", agent=agent)
         other = oai("az2", "judge-deployment", "https://other.openai.azure.com/openai/deployments/j", "az-key2")
         self.assertTrue(self.started([other], agent).separation.ok)
 
     def test_tenant_yaml_keys(self):
         from two_key.judges.config import JudgeConfigError, load_config
-        judges, _ = load_config({"judges": [{"id": "l", "type": "ollama", "model": "m", "tenant": "t1"}],
-                                 "quorum": {"required_yes": 1}})
-        self.assertEqual(judges[0].tenant, "t1")
-        with self.assertRaisesRegex(JudgeConfigError, "tenant must be"):
-            load_config({"judges": [{"id": "l", "type": "ollama", "model": "m", "tenant": 5}]})
-        self.assertEqual(load_monitored_agent({"monitored_agent": dict(AGENT, tenant=["a"])}).tenant, ["a"])
+        judges, _ = load_config({"judges": [{"id": "l", "type": "ollama", "model": "llama3",
+                                             "tenant": {"account": "t1"}}], "quorum": {"required_yes": 1}})
+        self.assertEqual(judges[0].tenant, {"account": "t1"})
+        for bad in ("t1", {"tenant_id": "x"}, {"account": ""}):
+            with self.assertRaisesRegex(JudgeConfigError, "tenant"):
+                load_config({"judges": [{"id": "l", "type": "ollama", "model": "m", "tenant": bad}]})
+        self.assertEqual(load_monitored_agent({"monitored_agent": dict(AGENT, tenant={"project": "p"})}).tenant,
+                         {"project": "p"})
 
     def test_configured_agent_object_is_checked(self):
         os.environ["SEP_OTHER"] = "other-agent-key"
@@ -200,35 +204,34 @@ class Refusals(Env):
 class SameProvider(Env):
     """The same provider is allowed by default. allow_same_provider_judge is a deprecated no-op."""
 
-    def test_same_provider_different_model_is_allowed_and_recorded(self):
+    def test_same_provider_different_model_is_allowed(self):
         agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1")
-        judge = oai("mini", "gpt-4o-mini", "https://api.openai.com/v1", "judge-openai-key")
-        tk = self.started([judge], agent)
+        tk = self.started([oai("mini", "gpt-4o-mini", "https://api.openai.com/v1", "judge-openai-key")], agent)
         rec = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body["judge_agent_separation"]
         self.assertTrue(rec["ok"])
-        self.assertFalse(rec["allow_same_provider_judge"])
-        self.assertEqual(len(rec["same_provider_allowed"]), 1)
-        self.assertIn("same provider api.openai.com:443 with a different model", rec["same_provider_allowed"][0])
-        self.refused([oai("same", "gpt-4o-2024-08-06", "https://api.openai.com/v1", "k2")], "same model", agent=agent)
-        # The same model through a router to the same upstream is the same agent.
-        self.refused([oai("or", "openai/gpt-4o", "https://openrouter.ai/api/v1", "k3")],
+        self.assertEqual(rec["same_provider"], "allowed")
+        self.assertEqual(rec["checks"], ["same_credential", "unresolved_identity", "same_model_same_endpoint",
+                                         "same_tenant"])
+        self.refused([oai("same", "gpt-4o-2024-08-06", "https://api.openai.com/v1", "k2")],
                      "same model 'gpt4o' on the same endpoint api.openai.com:443", agent=agent)
 
     def test_same_model_on_a_different_endpoint_is_allowed(self):
+        agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1")
+        self.assertTrue(self.started([oai("or", "openai/gpt-4o", "https://openrouter.ai/api/v1", "k3")],
+                                     agent).separation.ok)
         agent = dict(AGENT, model="llama3.1:8b", base_url="https://api.together.xyz/v1")
-        tk = self.started([OllamaJudge("q", "ollama", "llama3.1:8b")], agent)
-        self.assertIn("same model 'llama3.1-8b' on a different endpoint", tk.separation.same_provider_allowed[0])
+        self.assertTrue(self.started([OllamaJudge("q", "ollama", "llama3.1:8b")], agent).separation.ok)
 
     def test_same_local_endpoint(self):
         agent = {"id": "local-agent", "model": "llama3.1:8b", "provider": "ollama",
                  "base_url": "http://localhost:11434", "credential": "none"}
         self.assertTrue(self.started([OllamaJudge("q", "ollama", "qwen2.5:7b")], agent).separation.ok)
-        self.refused([OllamaJudge("q", "ollama", "llama3.1:8b")], "same model 'llama3.1-8b' on the same endpoint "
-                     "localhost:11434", agent=agent)
+        self.refused([OllamaJudge("q", "ollama", "llama3.1:8b", base_url="http://127.0.0.1:11434")],
+                     "same model 'llama3.1-8b' on the same endpoint localhost:11434", agent=agent)
 
     def test_allow_same_provider_judge_is_a_deprecated_no_op(self):
         from two_key.judges.config import load_config
-        _, policy = load_config({"judges": [{"id": "l", "type": "ollama", "model": "m"}],
+        _, policy = load_config({"judges": [{"id": "l", "type": "ollama", "model": "llama3"}],
                                  "quorum": {"required_yes": 1, "allow_same_provider_judge": True}})
         self.assertTrue(policy.allow_same_provider_judge)
         agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1")
@@ -237,9 +240,9 @@ class SameProvider(Env):
             self.started([oai("mini", "gpt-4o-mini", "https://api.openai.com/v1", "jk")], agent,
                          quorum=QuorumPolicy(required_yes=1, allow_same_provider_judge=True))
         self.assertIn("deprecated and has no effect", err.getvalue())
-        # It never relaxes a refusal.
-        self.refused([oai("same", "gpt-4o", "https://api.openai.com/v1", "k2")], "same model", agent=agent,
-                     quorum=QuorumPolicy(required_yes=1, allow_same_provider_judge=True))
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.refused([oai("same", "gpt-4o", "https://api.openai.com/v1", "k2")], "same model", agent=agent,
+                         quorum=QuorumPolicy(required_yes=1, allow_same_provider_judge=True))
 
 
 class ResolutionRereview(Env):
@@ -248,7 +251,7 @@ class ResolutionRereview(Env):
     def test_local_endpoint_without_a_known_maker_is_unresolved(self):
         for url in ("http://127.0.0.1:4000", "http://[::1]:4000", "http://10.0.0.5:4000"):
             j = OpenAICompatibleJudge("p", "x", "judge-alias", url, None, allow_insecure_http=True)
-            self.refused([j], "judge upstream unresolved .*declare upstream")
+            self.refused([j], "judge upstream unresolved .*declare upstream: to attest it")
         agent = {"id": "proxy-agent", "model": "agent-alias", "provider": "x", "base_url": "http://127.0.0.1:4000",
                  "credential": "none"}
         self.refused([claude()], "agent upstream unresolved", agent=agent)
@@ -259,25 +262,19 @@ class ResolutionRereview(Env):
         tk = self.started([j])
         rec = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body["judge_agent_separation"]
         judge = rec["judges"][0]
-        self.assertEqual((judge["resolved_by"], judge["upstream_declared"], judge["upstream"]),
-                         ("declared_upstream", "api.anthropic.com:443", ["api.anthropic.com:443"]))
+        self.assertEqual((judge["resolved_by"], judge["upstream"]), ("declared_upstream", ["api.anthropic.com"]))
         agent = {"id": "proxy-agent", "model": "agent-alias", "provider": "x", "base_url": "http://127.0.0.1:4000",
                  "credential": "none", "upstream": "https://api.x.ai/v1"}
         tk = self.started([claude()], agent=agent)
         self.assertEqual(tk.separation.agents[0].resolved_by, "declared_upstream")
 
-    def test_local_proxy_for_a_closed_model_resolves_to_the_maker(self):
-        agent = dict(AGENT, model="gpt-4o", base_url="https://api.openai.com/v1")
-        j = OpenAICompatibleJudge("p", "x", "gpt-4o", "http://127.0.0.1:4000", None, allow_insecure_http=True)
-        self.refused([j], "same model 'gpt4o' on the same endpoint api.openai.com:443", agent=agent)
-
     def test_resolved_by(self):
-        self.assertEqual(resolve_upstreams("https://api.openai.com/v1", "gpt-4o")[2], "endpoint")
-        self.assertEqual(resolve_upstreams("https://openrouter.ai/api/v1", "openai/gpt-4o")[2], "endpoint")
-        self.assertEqual(resolve_upstreams("https://llm.corp.example/v1", "openai/gpt-4o")[2], "model_prefix")
-        self.assertEqual(resolve_upstreams("http://localhost:4000", "openai/gpt-4o")[2], "model_prefix")
-        self.assertIsNone(resolve_upstreams("http://localhost:4000", "alias")[2])
-        self.assertEqual(resolve_upstreams("http://localhost:4000", "alias", "maker:meta")[2], "declared_upstream")
+        self.assertEqual(resolve_upstream_info("https://api.openai.com/v1", "gpt-4o")[2], "endpoint")
+        self.assertEqual(resolve_upstream_info("https://api.openai.com/v1", "gpt-4o")[2], "endpoint")
+        self.assertEqual(resolve_upstream_info("https://openrouter.ai/api/v1", "openai/gpt-4o")[2], "model_prefix")
+        self.assertEqual(resolve_upstream_info("https://llm.corp.example/v1", "openai/gpt-4o")[2], "model_prefix")
+        self.assertEqual(resolve_upstream_info("http://localhost:4000", "qwen2.5:7b")[2], "model_prefix")
+        self.assertIsNone(resolve_upstream_info("http://localhost:4000", "alias")[2])
 
     def test_unicode_model_ids_fold(self):
         for m in ("gpt\u20104o", "\uff47\uff50\uff54-4o", "gpt\u200b-4o", "GPT\u22124o"):
@@ -290,9 +287,9 @@ class ResolutionRereview(Env):
         judges, _ = load_config({"judges": [{"id": "l", "type": "openai_compatible", "model": "alias",
                                              "base_url": "http://localhost:4000", "upstream": "api.openai.com"}],
                                  "quorum": {"required_yes": 1}})
-        self.assertEqual(judges[0].upstream, "api.openai.com")
-        with self.assertRaisesRegex(JudgeConfigError, "upstream must be"):
-            load_config({"judges": [{"id": "l", "type": "ollama", "model": "m", "upstream": ""}]})
+        self.assertEqual(judges[0].upstream, ["api.openai.com"])
+        with self.assertRaisesRegex(JudgeConfigError, "upstream entries must be non-empty strings"):
+            load_config({"judges": [{"id": "l", "type": "ollama", "model": "m", "upstream": [""]}]})
 
 
 class Accepted(Env):
@@ -303,9 +300,9 @@ class Accepted(Env):
         self.assertTrue(rec["ok"])
         self.assertEqual(rec["rule"], "judge_is_not_monitored_agent")
         self.assertEqual([a["id"] for a in rec["agents"]], ["grok-agent"])
-        self.assertEqual(rec["agents"][0]["upstream"], ["api.x.ai:443"])
+        self.assertEqual(rec["agents"][0]["upstream"], ["api.x.ai"])
         self.assertEqual({j["id"]: j["upstream"] for j in rec["judges"]},
-                         {"claude": ["api.anthropic.com:443"], "q": ["localhost:11434"]})
+                         {"claude": ["api.anthropic.com"], "q": ["localhost:11434", "maker:alibaba"]})
         self.assertIn(credential_fingerprint("judge-anthropic-key"), rec["judges"][0]["credential_fingerprint"])
         for raw in ("agent-secret-key", "judge-anthropic-key"):
             self.assertNotIn(raw, ledger_text)
