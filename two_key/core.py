@@ -90,9 +90,13 @@ class TwoKey:
         # identities it was decided under, so one entry can be audited on its own. Fingerprints only.
         self._decision_context = {"policy": self.quorum.to_record(),
                                   "judges": sep["judges"], "agents": sep["agents"]}
+        if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, int) or ttl_seconds < 1:
+            raise TwoKeyConfigError("ttl_seconds must be a positive integer")
         self.ttl_seconds = ttl_seconds
         # The minting key is not the principal key, and it is not given to the gateway.
-        self.issuer = CapabilityIssuer(open_capability_key(ledger), clock=clock) if private_key else None
+        # max_ttl_seconds: verify() refuses any token that lives longer than this TwoKey's TTL.
+        self.issuer = (CapabilityIssuer(open_capability_key(ledger), clock=clock, max_ttl_seconds=ttl_seconds)
+                       if private_key else None)
         self._clock = clock
         self.ledger.append("constitution_loaded", {
             "digest": constitution.digest,

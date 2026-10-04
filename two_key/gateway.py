@@ -19,9 +19,12 @@ try:
 except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
-from .capability import CapabilityIssuer, CapabilityVerifier, TokenError, args_hash
+from .capability import DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, args_hash
 from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match, project_arguments
 from .ledger import LedgerError
+
+
+_BOUND_FIELDS = ("jti", "tool", "args_hash", "bytecode_hash", "nl_hash", "ledger_root", "ledger_size")
 
 
 @dataclass(frozen=True)
@@ -36,11 +39,12 @@ def _as_verifier(issuer) -> CapabilityVerifier:
     if isinstance(issuer, CapabilityIssuer):
         return issuer.verifier()
     if isinstance(issuer, CapabilityVerifier):
-        return CapabilityVerifier(issuer.public_key, clock=issuer.clock)
+        return CapabilityVerifier(issuer.public_key, clock=issuer.clock, max_ttl_seconds=issuer.max_ttl_seconds)
     public = getattr(issuer, "public_key", None)
     if public is None or not hasattr(issuer, "verify"):
         raise TokenError("gateway requires a token verifier")
-    return CapabilityVerifier(public, clock=getattr(issuer, "clock", None))
+    return CapabilityVerifier(public, clock=getattr(issuer, "clock", None),
+                              max_ttl_seconds=getattr(issuer, "max_ttl_seconds", DEFAULT_MAX_TTL_SECONDS))
 
 
 class ToolGateway:
@@ -57,6 +61,8 @@ class ToolGateway:
             payload = self.issuer.verify(token)
         except TokenError as e:
             return GatewayResult(False, str(e))
+        if any(name not in payload for name in _BOUND_FIELDS):
+            return GatewayResult(False, "malformed_token")  # a signed token without a binding field
         if payload["tool"] != tool:
             return GatewayResult(False, "tool_mismatch")
         if payload["args_hash"] != args_hash(arguments):
