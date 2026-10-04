@@ -40,7 +40,7 @@ from ..action import Action
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge
 from .credentials import CredentialError, CredentialProvider, NoCredential
-from ..netloc import host_is_local, host_is_loopback, url_host
+from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
 
 Transport = Callable[[str, dict, dict, float], dict]
@@ -194,12 +194,16 @@ class LLMJudge(Judge):
         return self.score_bound(constitution_text, action, proposal, None)
 
     def is_cloud(self) -> bool:
-        """True unless the endpoint host is loopback. ``local_weights`` does not change this."""
-        return not host_is_loopback(url_host(self.base_url))
+        """True unless the endpoint host is loopback, and always for a ``:cloud``/``-cloud`` model id
+        (an Ollama cloud model runs at ollama.com even behind a local daemon or a local
+        OpenAI-compatible endpoint). ``local_weights`` does not change this."""
+        return not host_is_loopback(url_host(self.base_url)) or model_is_cloud(self.model)
 
     def is_local(self) -> bool:
-        """Counts as a local judge only if declared ``local_weights`` AND the host is loopback or private."""
-        return bool(self.local_weights) and host_is_local(url_host(self.base_url))
+        """Counts as a local judge only if declared ``local_weights`` AND the host is loopback or private
+        AND the model is not a ``:cloud``/``-cloud`` model, whatever the judge class."""
+        return (bool(self.local_weights) and host_is_local(url_host(self.base_url))
+                and not model_is_cloud(self.model))
 
     def score_bound(self, constitution_text: str, action: Action, proposal: str, binding,
                     agent_session: str | None = None) -> Ballot:

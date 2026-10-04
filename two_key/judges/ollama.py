@@ -40,12 +40,7 @@ class OllamaJudge(LLMJudge):
             kw["local_weights"] = host_is_local(url_host(base_url)) and not is_ollama_cloud_model(model)
         super().__init__(*a, **kw)
 
-    def is_cloud(self) -> bool:
-        """An Ollama cloud model runs at ollama.com, whatever the daemon's host."""
-        return is_ollama_cloud_model(self.model) or super().is_cloud()
-
-    def is_local(self) -> bool:
-        return not is_ollama_cloud_model(self.model) and super().is_local()
+    # is_cloud / is_local: LLMJudge treats a :cloud / -cloud model as cloud for every judge class.
 
     def _request(self, system: str, user: str):
         body = {

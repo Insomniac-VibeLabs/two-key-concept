@@ -23,6 +23,7 @@ from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential
 from .judges.llm import LOOPBACK
 from .judges.transport import pooled_transport
+from .netloc import model_is_cloud
 from .strict import StrictParseError, load_file_strict, loads_json
 
 Transport = Callable[[str, dict, dict, float], dict]
@@ -97,11 +98,12 @@ class AgentProposal:
                 "model": self.model, "proposal": self.proposal, "action": self.action}
 
 
-def hosting_of(base_url: str, declared: str | None, *, local_default: bool = False) -> str:
-    """A vendor host stays cloud even if the file says local."""
+def hosting_of(base_url: str, declared: str | None, *, local_default: bool = False,
+               model: str | None = None) -> str:
+    """A vendor host, or a ``:cloud``/``-cloud`` model on any host, stays cloud even if the file says local."""
     host = (urlparse(base_url).hostname or "").lower()
     vendor = bool(host) and host not in LOOPBACK
-    if declared == "cloud" or vendor:
+    if declared == "cloud" or vendor or model_is_cloud(model):
         return "cloud"
     if declared == "local" or local_default:
         return "local"
@@ -290,7 +292,7 @@ def build_agent(spec: dict, transport=None) -> MonitoredAgent:
     except JudgeConfigError as e:
         raise AgentConfigError(str(e)) from e
     return MonitoredAgent(spec.get("id") or "", spec.get("provider") or kind, model, base,
-                          hosting_of(base, declared, local_default=kind == "ollama"), cred,
+                          hosting_of(base, declared, local_default=kind == "ollama", model=model), cred,
                           kind=kind, timeout=float(spec.get("timeout", 60)),
                           max_tokens=int(spec.get("max_tokens", 800)), transport=transport)
 

@@ -213,7 +213,9 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   per-install key, `<ledger>.ledger-key/fingerprint.key` (O_EXCL, 0600).
 - Locality comes from the endpoint host and an explicit allowlist
   (loopback, RFC 1918, fc00::/7), never from a declared flag or
-  `is_private`. Ollama `:cloud` / `-cloud` models are never local.
+  `is_private`. A `:cloud` / `-cloud` model (an Ollama cloud model) is cloud
+  and never local for every judge class (OllamaJudge, OpenAI-compatible,
+  and the rest), and a monitored agent with one is hosted `cloud`.
 - Start-up refuses: no judge, `timeout_seconds: null`, duplicate or empty
   judge ids, `require_local_yes` with no local judge, an unreadable judge
   credential, unknown top-level config keys, overlapping payload and field

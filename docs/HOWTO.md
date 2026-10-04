@@ -113,7 +113,7 @@ At startup each judge and agent is resolved to:
   server, or an unknown host where the model id names its maker, such as
   `openai/gpt-4o` or `qwen2.5:7b`), or `declared_upstream` (your
   `upstream:` key). `model_prefix` is operator-attested through the model
-  name and is not verified. An Ollama model ending in `:cloud` or `-cloud`
+  name and is not verified. A model id ending in `:cloud` or `-cloud`
   adds `ollama.com` and is never local;
 - tenant ids, each scoped by provider family: the Azure resource and
   deployment and the Vertex project read from the URL, plus a `tenant:`
@@ -204,8 +204,10 @@ unique-local fc00::/7. Documentation, benchmark (198.18/15), reserved,
 CGNAT (100.64/10), link-local (including 169.254.169.254), and NAT64
 (64:ff9b::/96) addresses are not local, even where Python's `is_private`
 says so. A DNS name other than `localhost` is not local. Ollama defaults
-`local_weights` from the host, so a remote Ollama is not local, and an
-Ollama `:cloud` or `-cloud` model is never local, even on loopback. Plain
+`local_weights` from the host, so a remote Ollama is not local, and a
+model id ending in `:cloud` or `-cloud` (an Ollama cloud model) is cloud
+and never local for every judge class, including an OpenAI-compatible
+judge pointed at a local Ollama `/v1`, even on loopback. Plain
 HTTP to a host other than `localhost`, `127.0.0.1`, or `::1` is refused
 unless the judge sets `allow_insecure_http`. A judge on a LAN address is local for the quorum
 floors but not loopback, so it still needs the agent session at call time.
