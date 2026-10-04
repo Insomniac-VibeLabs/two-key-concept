@@ -92,6 +92,29 @@ class NoSilentRegeneration(unittest.TestCase):
             self.assertNotEqual(capability_key_fingerprint(again.issuer.public_key),
                                 capability_key_fingerprint(tk.issuer.public_key))
 
+    def test_issued_tokens_without_a_pin_fail_closed(self):
+        # A ledger from before pinning, or one whose last constitution_loaded lacks the pin.
+        for pin in (None, ""):
+            with self.subTest(pin=pin), tempfile.TemporaryDirectory() as tmp:
+                key = generate_private_key()
+                tk = engine(Path(tmp, "l"), key)
+                self.assertTrue(tk.authorize(SEARCH, {}, "s").allowed)
+                body = {"constitution_hash": "x"}
+                if pin is not None:
+                    body["capability_key_fingerprint"] = pin
+                tk.ledger.append("constitution_loaded", body)
+                tk.ledger.checkpoint()
+                with self.assertRaisesRegex(TwoKeyConfigError, "^capability_key_unpinned"):
+                    engine(Path(tmp, "l"), key)
+
+    def test_no_pin_needed_before_any_issuance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key = generate_private_key()
+            tk = engine(Path(tmp, "l"), key)
+            tk.ledger.append("constitution_loaded", {"constitution_hash": "x"})
+            tk.ledger.checkpoint()
+            engine(Path(tmp, "l"), key)
+
 
 class PinAndPrincipalSplit(unittest.TestCase):
     def test_fingerprint_recorded_and_pinned(self):

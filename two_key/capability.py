@@ -90,7 +90,11 @@ def open_capability_key(ledger, principal_public=None):
     at mode 0700. Once the ledger holds a ``capability_issued`` entry, a missing
     key file, or a key whose fingerprint differs from the one pinned in the last
     ``constitution_loaded`` entry, is refused (``CapabilityKeyError``) rather than
-    silently replaced. A key whose public half is the principal key is refused.
+    silently replaced. Issued tokens with no pinned fingerprint in the last
+    ``constitution_loaded`` entry (a ledger from before pinning, or an edited
+    one) are refused too (``capability_key_unpinned``), since then nothing
+    ties the key on disk to the tokens already issued.
+    A key whose public half is the principal key is refused.
     The gateway must not call this. It verifies with the public half only.
     """
     path = ledger.capability_key_path()
@@ -106,7 +110,11 @@ def open_capability_key(ledger, principal_public=None):
         save_private_key(path, key, private_dir=True)
         save_public_key(path.with_name("capability.pub.pem"), public_key(key))
     pinned = _pinned(ledger)
-    if issued and pinned and pinned != capability_key_fingerprint(key.public_key()):
+    if issued and not (isinstance(pinned, str) and pinned):
+        raise CapabilityKeyError(
+            "capability_key_unpinned: the ledger has capability_issued entries but no pinned key fingerprint; "
+            "refusing to mint with a key the ledger cannot vouch for")
+    if issued and pinned != capability_key_fingerprint(key.public_key()):
         raise CapabilityKeyError("capability_key_changed: the key does not match the fingerprint pinned in the ledger")
     if principal_public is not None and _raw(key.public_key()) == _raw(principal_public):
         raise CapabilityKeyError("capability_key_is_principal_key: the token key must not be the principal key")

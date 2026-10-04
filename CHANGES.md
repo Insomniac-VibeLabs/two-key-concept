@@ -240,7 +240,9 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   5 s ahead (`issued_in_future`), and missing or non-finite time fields
   (`malformed_token`) are refused. The capability key is created
   exclusively, never regenerated after issuance, and its fingerprint is
-  pinned and checked by the gateway.
+  pinned and checked by the gateway. A ledger that has issued tokens but
+  has no pinned fingerprint is refused at start-up
+  (`capability_key_unpinned:`).
 - CLI: the bearer token is never printed (`token_jti`, `token_digest`);
   `--emit-token PATH` writes it 0600 and refuses to overwrite;
   `--agent-session-env NAME` replaces `--agent-session`; a `--key` readable
@@ -279,7 +281,10 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 7. CLI: replace `--agent-session VALUE` with `--agent-session-env NAME`,
    read the token from `--emit-token PATH`, and `chmod 600` the `--key`
    file. Keep `--ttl-seconds` at 300 or less.
-8. Tests that use `testing.TEST_AGENT` must use only test-double judges;
+8. A 0.1.12 ledger that has issued tokens has no pinned capability key and
+   is refused (`capability_key_unpinned:`). Keep it for audit and start a
+   new ledger directory.
+9. Tests that use `testing.TEST_AGENT` must use only test-double judges;
    with a real judge, declare a real agent.
 
 #### Troubleshooting: start-up refusals
@@ -309,6 +314,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `payload path ... overlaps the field path` | A payload path equals, contains, or sits under an amount, currency, or counterparty path | Split the paths |
 | `ttl_out_of_range:` | `ttl_seconds` not an integer from 1 to 300 | Use 1-300 |
 | `capability_key_missing:` / `capability_key_changed:` | The token key was removed or replaced after tokens were issued | Restore `<ledger>.capability/capability.pem`, or start a new ledger |
+| `capability_key_unpinned:` | The ledger has issued tokens but its last `constitution_loaded` entry pins no token key (a 0.1.12 ledger, or an edited one) | Keep the old ledger for audit and start a new one |
 | `capability_key_is_principal_key` | The token key equals the principal key | Remove the copied key; Two-Key creates its own |
 | `fingerprint_key_insecure:` / `fingerprint_key_unreadable:` / `fingerprint_key_unavailable:` | `<ledger>.ledger-key/fingerprint.key` is group/world-readable, a symlink, the wrong size, or cannot be created | `chmod 600` it, restore it, or make the directory writable |
 | `ledger_key_insecure:` / `ledger_key_unreadable:` / `ledger_key_unavailable:` | `<ledger>.ledger-key/ledger.key` is group/world-readable, a symlink, the wrong size, or cannot be created | `chmod 600` it, restore it, or make the directory writable |

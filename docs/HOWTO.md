@@ -377,7 +377,8 @@ next to the ledger directory, not inside it. The public half is
 `capability.pub.pem` beside it. The key is created once with mode 0600 in a
 0700 directory. After a token has been issued it is never regenerated: a
 missing or different key refuses to start (`capability_key_missing`,
-`capability_key_changed`). A capability key equal to the principal key is
+`capability_key_changed`), and so does a ledger with issued tokens but no
+pinned key fingerprint (`capability_key_unpinned`). A capability key equal to the principal key is
 refused. The principal key on the ledger signs the head. A token signed
 with that principal key does not redeem.
 
