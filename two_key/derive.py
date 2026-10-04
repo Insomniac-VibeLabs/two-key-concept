@@ -7,7 +7,8 @@ disagrees is a deny. This module does not read English and it does not
 classify free text.
 
 Keys the spec does not name do not reach the tool. ``deny_unmapped`` defaults
-off: those keys are dropped at the gateway. When a spec sets it, an unnamed
+off: those keys are dropped at the gateway. Their names (never their values)
+are written to the ledger (``dropped_keys``). When a spec sets it, an unnamed
 key is a deny instead. A declared path covers that value and everything
 under it. A counterparty path copies only values on its allow list, and the
 tool receives the canonical value. A payload path is not interpreted.
@@ -234,6 +235,36 @@ def _unmapped(arguments: Mapping[str, Any], declared: tuple[str, ...]) -> bool:
         return False
 
     return walk(arguments, "")
+
+
+MAX_DROPPED_NAMES = 64
+MAX_DROPPED_NAME_CHARS = 128
+
+
+def dropped_keys(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> list[str]:
+    """Dotted names of argument keys the tool will not receive. Names only, never values.
+
+    A declared path covers itself and its children. The list is sorted, capped at
+    ``MAX_DROPPED_NAMES`` names of at most ``MAX_DROPPED_NAME_CHARS`` characters each.
+    """
+    if not isinstance(arguments, Mapping):
+        return []
+    declared = set(_declared_paths(spec))
+    found: list[str] = []
+
+    def walk(node: Mapping[str, Any], prefix: str) -> None:
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if path in declared:
+                continue
+            if isinstance(key, str) and any(item.startswith(path + ".") for item in declared) \
+                    and isinstance(value, Mapping):
+                walk(value, path)
+                continue
+            found.append(path[:MAX_DROPPED_NAME_CHARS])
+
+    walk(arguments, "")
+    return sorted(set(found))[:MAX_DROPPED_NAMES]
 
 
 def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:

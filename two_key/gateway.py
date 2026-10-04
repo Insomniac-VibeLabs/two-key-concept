@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          args_hash, capability_key_fingerprint)
-from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match, project_arguments
+from .derive import DeriveError, blocked_from_rules, derive, dropped_keys, form_for, forms_match, project_arguments
 from .ledger import LedgerError
 
 
@@ -111,7 +111,8 @@ class ToolGateway:
             if self.ledger.redemption_started(payload["jti"]):
                 return GatewayResult(False, "already_attempted")
             try:
-                self.ledger.append("redemption_started", {"jti": payload["jti"], "tool": tool})
+                self.ledger.append("redemption_started", {"jti": payload["jti"], "tool": tool,
+                                                          "dropped_keys": dropped_keys(spec, arguments)})
                 self.ledger.checkpoint()
             except LedgerError as e:
                 return GatewayResult(False, f"ledger_failed:{e}")

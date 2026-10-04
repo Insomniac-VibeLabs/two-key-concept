@@ -22,7 +22,7 @@ from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation,
                        configured_agent_identity, judge_identity)
-from .derive import DeriveError, blocked_from_rules, derive, disagreement, disallowed_party, form_for
+from .derive import DeriveError, blocked_from_rules, derive, disagreement, disallowed_party, dropped_keys, form_for
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene
@@ -242,6 +242,8 @@ class TwoKey:
                     "form": form,
                     "claimed_data_class": claimed_data_class,
                     "deny_reason": deny_reason,
+                    # Names of keys the tool will not receive. Never their values.
+                    "dropped_keys": dropped_keys(spec, arguments),
                 })
             self.ledger.append("path_a", path_a_rec)
             self.ledger.append("path_b", path_b_rec)

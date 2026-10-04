@@ -372,9 +372,14 @@ class ProblemFTests(unittest.TestCase):
                 {"invoice": {"total": 10, "note": "x"}, "currency": "usd", "to": "power-co.example"},
                 "pay")
             self.assertEqual(nested.reason, "derive_failed:unmapped_field")
+        # A payload path that is an ancestor of the amount path is refused (it would carry the amount
+        # unread). Name the sibling key instead.
+        with self.assertRaisesRegex(ConstitutionError, "overlaps the field path"):
+            sign_constitution(PROSE, RULES, generate_private_key(),
+                              dict(specs, pay_bill=dict(specs["pay_bill"], payload=[{"json_path": "invoice"}])))
         specs["pay_bill"] = dict(
             specs["pay_bill"],
-            payload=[{"json_path": "invoice"}],
+            payload=[{"json_path": "invoice.note"}],
         )
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp, specs=specs)
