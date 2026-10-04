@@ -40,8 +40,10 @@ class DeepArgs(unittest.TestCase):
                          allow_test_doubles=True, monitored_agent=TEST_AGENT)
 
     def test_canonical_encoding_raises_encoding_error(self):
-        with self.assertRaisesRegex(EncodingError, "tool args are nested too deeply"):
+        with self.assertRaisesRegex(EncodingError, "^value is nested too deeply$"):
             canonical_bytes(nest(5000))
+        with self.assertRaisesRegex(EncodingError, "^tool args are nested too deeply$"):
+            canonical_bytes(nest(5000), what="tool args are")
 
     def test_authorize_denies(self):
         d = self.tk.authorize(PAY, {"amount": 1, "to": "bob", "memo": nest(5000)}, "pay bob")

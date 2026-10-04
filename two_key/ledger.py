@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from .canonical import canonical_bytes, canonical_hash
+from .canonical import EncodingError, canonical_bytes, canonical_hash
 from .keys import (
     generate_private_key, load_private_key, public_from_raw, public_key,
     public_raw, save_private_key, save_public_key, sign, verify,
@@ -122,6 +122,25 @@ def _open(data_key: bytes, record: str) -> str:
         raise
     except Exception as e:
         raise LedgerError("ledger record rejected (wrong key or tampered ciphertext)") from e
+
+
+_KEEP_CHARS = 200
+
+
+def omitted_body(body: dict, error: Exception) -> dict:
+    """What ``append_bounded`` records for a body that cannot be encoded: its short scalar fields, and the
+    size and SHA-256 of its JSON (non-JSON values written as ``<TypeName>``), never the other values."""
+    kept = {k: v for k, v in body.items()
+            if type(k) is str and len(k) <= 64 and k not in ("body_size", "body_digest", "body_omitted")
+            and (v is None or type(v) in (bool, int) or (type(v) is str and len(v) <= _KEEP_CHARS))}
+    try:
+        data = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                          default=lambda o: f"<{type(o).__name__}>").encode("utf-8", "surrogatepass")
+    except (RecursionError, ValueError, TypeError):
+        data = None
+    return {**kept, "body_size": -1 if data is None else len(data),
+            "body_digest": None if data is None else "sha256:" + hashlib.sha256(data).hexdigest(),
+            "body_omitted": True, "body_error": str(error)[:_KEEP_CHARS]}
 
 
 @dataclass(frozen=True)
@@ -339,6 +358,15 @@ class Ledger:
 
     def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
         return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
+
+    def append_bounded(self, kind: str, body: dict) -> Entry:
+        """``append``, except that a body the canonical encoder refuses (nested too deeply, a type JSON has
+        no form for) is still recorded. Only its short scalar fields (reason, jti, tool, allowed) are kept,
+        plus the body's size and digest and the encoding error, so the entry is never silently lost."""
+        try:
+            return self.append(kind, body)
+        except EncodingError as e:
+            return self.append(kind, omitted_body(body, e))
 
     def append(self, kind: str, body: dict) -> Entry:
         if not isinstance(body, dict):

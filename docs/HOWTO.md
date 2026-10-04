@@ -277,8 +277,21 @@ The ledger keeps only `tool_args_size`, `tool_args_digest`, and
 nested too deeply to encode are denied in `authorize` and at the gateway
 with `invalid_call:tool args are nested too deeply`; the ledger keeps
 `tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
-size check, so the reason is the same on Python 3.10, 3.11, and 3.12. A value too deep to
-derive is `derive_failed:value_unreadable:RecursionError`.
+size check, so the reason is the same on Python 3.10, 3.11, and 3.12.
+
+"Too deeply" means more than 62 levels of objects and arrays
+(`canonical.MAX_INPUT_DEPTH`). The encoder itself allows 64
+(`canonical.MAX_DEPTH`) and counts without recursion. The two spare levels
+are the ones an input gains inside a ledger entry or a judge's record
+(`raw.tool_args`), so arguments at exactly 62 still encode there. The
+action claim (usually `raw`) and a structured proposal have the same limit.
+One level more is `malformed_action:action claim is nested too deeply` or
+`malformed_proposal`, and it is ledgered.
+
+If a ledger body still cannot be encoded, `Ledger.append_bounded` writes
+the entry anyway. It keeps only the body's short scalar fields (reason,
+jti, tool, allowed), plus `body_size`, `body_digest`, `body_omitted: true`,
+and `body_error`.
 
 The token lifetime (`TwoKey(ttl_seconds=...)`, `--ttl-seconds`) is an
 integer from 1 to 300 seconds; anything else, including a float, NaN, or

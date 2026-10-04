@@ -173,7 +173,8 @@ upstream, endpoint, tenant ids, and credential fingerprint, never a key.
 Every JSON and YAML input is parsed strictly: a repeated key at any depth
 is refused, never last-one-wins. Unknown top-level keys in judges.yaml or
 agents.yaml are refused. Tool arguments or a proposal over 256 KiB, or
-nested too deeply to encode, are denied before they are ledgered.
+tool arguments, the action claim, or a structured proposal nested more than
+62 levels, are denied before they are ledgered.
 
 One call, in code order:
 

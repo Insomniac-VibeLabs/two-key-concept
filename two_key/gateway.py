@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover - POSIX only
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
-from .canonical import EncodingError, canonical_bytes, digest_hex
+from .canonical import MAX_INPUT_DEPTH, EncodingError, canonical_bytes, digest_hex
 from .derive import (DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
                      project_arguments, size_record)
 from .ledger import LedgerError
@@ -108,7 +108,7 @@ class ToolGateway:
         else:
             body.update(size_record(arguments, "tool_args"))
         try:
-            self.ledger.append("gateway_denied", body)
+            self.ledger.append_bounded("gateway_denied", body)
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks it
             print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
@@ -129,7 +129,7 @@ class ToolGateway:
         # Encoded before the size check, so nesting too deep is invalid_call on every Python version.
         # Encoded once: the same bytes give the hash and settle the size cap.
         try:
-            frozen = canonical_bytes(arguments)
+            frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
             return GatewayResult(False, f"invalid_call:{e}")
         encoded["frozen"] = frozen
@@ -177,8 +177,8 @@ class ToolGateway:
             if self.ledger.redemption_started(payload["jti"]):
                 return GatewayResult(False, "already_attempted")
             try:
-                self.ledger.append("redemption_started", {"jti": payload["jti"], "tool": tool,
-                                                          "dropped_keys": dropped_keys(spec, arguments)})
+                self.ledger.append_bounded("redemption_started", {"jti": payload["jti"], "tool": tool,
+                                                                  "dropped_keys": dropped_keys(spec, arguments)})
                 self.ledger.checkpoint()
             except LedgerError as e:
                 return GatewayResult(False, f"ledger_failed:{e}")
@@ -186,13 +186,13 @@ class ToolGateway:
                 output = fn(project_arguments(spec, arguments))
             except Exception as e:
                 try:
-                    self.ledger.append("redemption_aborted", {"jti": payload["jti"], "tool": tool})
+                    self.ledger.append_bounded("redemption_aborted", {"jti": payload["jti"], "tool": tool})
                     self.ledger.checkpoint()
                 except LedgerError as le:
                     return GatewayResult(False, f"ledger_failed:{le}")
                 return GatewayResult(False, f"tool_error:{type(e).__name__}", None)
             try:
-                self.ledger.append("redemption", {"jti": payload["jti"], "tool": tool})
+                self.ledger.append_bounded("redemption", {"jti": payload["jti"], "tool": tool})
                 self.ledger.checkpoint()
             except LedgerError as e:
                 return GatewayResult(False, f"ledger_failed:{e}", output)

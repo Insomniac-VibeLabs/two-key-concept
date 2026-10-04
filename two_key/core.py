@@ -18,7 +18,7 @@ from typing import Any, Mapping
 
 from .action import Action, ActionValidationError, normalize_action
 from .audit import identities_digest, policy_digest
-from .canonical import EncodingError, canonical_bytes, canonical_hash, digest_hex
+from .canonical import MAX_INPUT_DEPTH, EncodingError, canonical_bytes, canonical_hash, digest_hex
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
@@ -212,6 +212,13 @@ class TwoKey:
             agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
         # The raw claim is measured before anything reads it: an oversized one keeps only size and digest.
         claim = action.to_record() if isinstance(action, Action) else action
+        # Depth and type first, so a claim nested too deeply is malformed_action on every Python version.
+        # MAX_INPUT_DEPTH leaves room for the levels the claim gains inside a judge's record or the ledger.
+        try:
+            canonical_bytes(claim, max_depth=MAX_INPUT_DEPTH, what="action claim is")
+        except EncodingError as e:
+            return self._deny(origin, f"malformed_action:{e}", agent, None, None,
+                              {"action_omitted": True, "action_error": str(e)})
         claim_size = args_size(claim)
         if claim_size < 0 or claim_size > MAX_ACTION_BYTES:
             return self._deny(origin, "action_too_large", agent, None, None, size_record(claim, "action"))
@@ -224,7 +231,7 @@ class TwoKey:
             # a value that cannot be encoded (nested too deeply, NaN, a non-string key) is
             # invalid_call on every Python version, not args_too_large where the sizer recursed out.
             try:
-                frozen = canonical_bytes(arguments)
+                frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
             except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
                 return self._deny(origin, f"invalid_call:{e}", agent, None, None,
                                   {"tool_args_omitted": True, "tool_args_error": str(e)})
@@ -236,6 +243,12 @@ class TwoKey:
         # Before anything is derived, judged, or ledgered: only the size and digest are kept.
         if oversized:
             return self._deny(origin, "args_too_large", agent, None, None, size_record(arguments, "tool_args"))
+        if not isinstance(proposal, str):   # a structured proposal is held to the same depth and types
+            try:
+                canonical_bytes(proposal, max_depth=MAX_INPUT_DEPTH, what="proposal is")
+            except EncodingError as e:
+                return self._deny(origin, "malformed_proposal", agent, None, None,
+                                  {"proposal_omitted": True, "proposal_error": str(e)})
         if args_too_large(proposal):
             return self._deny(origin, "proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         spec = None
@@ -306,9 +319,9 @@ class TwoKey:
             reason = path_a.reason if not path_a.allowed else quorum.reason
         token = None
         try:
-            self.ledger.append("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
+            self.ledger.append_bounded("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
             if spec is not None:
-                self.ledger.append("action_normalized", {
+                self.ledger.append_bounded("action_normalized", {
                     "tool": normalized.tool,
                     "form": form,
                     "claimed_data_class": claimed_data_class,
@@ -316,8 +329,8 @@ class TwoKey:
                     # Names of keys the tool will not receive. Never their values.
                     "dropped_keys": dropped_keys(spec, arguments),
                 })
-            self.ledger.append("path_a", path_a_rec)
-            self.ledger.append("path_b", path_b_rec)
+            self.ledger.append_bounded("path_a", path_a_rec)
+            self.ledger.append_bounded("path_b", path_b_rec)
             if allowed:
                 if self.issuer is None:
                     allowed, reason = False, "no_issuer_key"
@@ -330,11 +343,11 @@ class TwoKey:
                         form=form, claimed_data_class=claimed_data_class if form is not None else None,
                         ttl_seconds=self.ttl_seconds)
                     token = issued.token
-                    self.ledger.append("capability_issued", {"jti": issued.payload["jti"],
-                                                            "token_hash": issued.token_hash,
-                                                            "ledger_root": issued.payload["ledger_root"]})
-            self.ledger.append("decision", {"allowed": allowed, "reason": reason, "agent": agent,
-                                            "origin": origin, **self._decision_context})
+                    self.ledger.append_bounded("capability_issued", {"jti": issued.payload["jti"],
+                                                                    "token_hash": issued.token_hash,
+                                                                    "ledger_root": issued.payload["ledger_root"]})
+            self.ledger.append_bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
+                                                    "origin": origin, **self._decision_context})
             self.ledger.checkpoint()
         except LedgerError as e:
             return Decision(False, f"ledger_failed:{e}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
@@ -376,9 +389,9 @@ class TwoKey:
     def _deny(self, origin: str, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
         """Ledger a deny decision. ``origin`` is passed down by the caller, never stored on ``self``."""
         try:
-            self.ledger.append("decision", {"allowed": False, "reason": reason, "agent": agent,
-                                            "origin": origin,
-                                            **(extra or {}), **self._decision_context})
+            self.ledger.append_bounded("decision", {"allowed": False, "reason": reason, "agent": agent,
+                                                    "origin": origin,
+                                                    **(extra or {}), **self._decision_context})
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
             print(f"two-key: could not record deny decision {reason!r}: {type(e).__name__}: {e}"[:500],

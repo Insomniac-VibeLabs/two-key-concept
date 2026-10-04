@@ -242,13 +242,25 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   never a value or an unknown key name.
 - Denies instead of errors: arguments or a proposal over 256 KiB
   (`args_too_large`, `proposal_too_large`; only size and digest are
-  ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`,
-  checked before the size so Python 3.10 and 3.11 give the same reason), an
+  ledgered), arguments nested more than 62 levels (`invalid_call:tool args are nested too deeply`,
+  checked before the size so every Python version gives the same reason), an
   unreadable amount (`derive_failed:amount_unreadable`, for example
   `10**400`) or other derived value (`derive_failed:value_unreadable:<Type>`),
   any other exception in `authorize` (`internal_error:<Type>`), and a deny
   that cannot be ledgered (`ledger_failed:<LedgerError message>`, or
   `ledger_failed:<Type>` for any other exception; also on stderr).
+- Depth: the canonical encoder refuses containers nested more than 64
+  levels (`canonical.MAX_DEPTH`), counted without recursion. Tool args, the
+  action claim, and a structured (non-text) proposal are held to 62
+  (`MAX_INPUT_DEPTH`). That leaves room for the two levels an input gains
+  inside a ledger entry or a judge's record (`raw.tool_args`), so an accepted
+  input always encodes again. One level more is a ledgered deny:
+  `invalid_call:tool args are nested too deeply`,
+  `malformed_action:action claim is nested too deeply`, or
+  `malformed_proposal`. It is never `internal_error`. A ledger body that
+  still cannot be encoded is recorded by `Ledger.append_bounded` with only
+  its short scalar fields, `body_size`, `body_digest`, `body_omitted`, and
+  `body_error`. The entry is not lost.
 - Tokens: a lifetime over the TTL (`ttl_too_long`), an issue time more than
   5 s ahead (`issued_in_future`), and missing or non-finite time fields
   (`malformed_token`) are refused. The capability key is created
@@ -376,7 +388,9 @@ on stderr, not a refusal.
 | `malformed_action:unknown action fields (<n>)` / `<field>: ...` | An unknown or invalid action field (the reason names the field, not the value) | Fix the claim |
 | `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON, or agent proposal text over 1,048,576 characters | Send less; only size and digest are ledgered |
 | `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
-| `invalid_call:<why>` (authorize and gateway) | Arguments nested too deeply, NaN, or a non-string key | Flatten or fix the arguments |
+| `invalid_call:<why>` (authorize and gateway) | Arguments nested more than 62 levels, NaN, or a non-string key | Flatten or fix the arguments |
+| `malformed_action:action claim is nested too deeply` | The action claim (usually `raw`) nests more than 62 levels | Flatten `raw` |
+| `body_omitted: true` on a ledger entry | The entry's body could not be encoded; only its short fields, size, and digest were kept | Read `body_error`; report it |
 | `derive_failed:amount_unreadable` | The amount cannot be read (for example `10**400`, `"1e400"`, or a non-number) | Send a readable amount |
 | `derive_failed:value_unreadable:<Type>` | Another derived value cannot be read (for example nested too deeply to walk) | Send a readable value |
 | `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |

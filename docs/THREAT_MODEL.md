@@ -82,6 +82,8 @@ the code wins, then this file should be corrected.
   by the agent. The same provider is allowed.
 - A value read twice: every JSON and YAML input refuses a repeated key.
   Oversized or too-deeply nested arguments are a deny before the ledger.
+  Inputs stop at 62 levels, two under the encoder's 64, so the ledger and
+  judge wrappers always encode.
 - A token replay, a token used for different argument bytes, a token used
   after expiry (120 seconds unless you change it, at most 300), a token
   whose lifetime exceeds the TTL or whose issue time is in the future, and

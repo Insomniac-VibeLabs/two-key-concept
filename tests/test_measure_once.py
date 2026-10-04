@@ -51,10 +51,10 @@ class EncodedOnce(unittest.TestCase):
         real = canonical_mod.canonical_bytes
         seen = []
 
-        def spy(value):
+        def spy(value, **kw):
             if value is args:
                 seen.append(1)
-            return real(value)
+            return real(value, **kw)
         real_size = derive_mod._json_bytes
         sized, hashed = [], []
 
