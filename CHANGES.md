@@ -224,7 +224,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   abstains (`judge_id_mismatch`). Vendor names compare case-insensitively.
 - Denies instead of errors: arguments or a proposal over 256 KiB
   (`args_too_large`, `proposal_too_large`; only size and digest are
-  ledgered), arguments nested too deeply (`args_unreadable:...`), an
+  ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`), an
   unreadable derived value (`derive_failed:value_unreadable:<Type>`), any
   other exception in `authorize` (`internal_error:<Type>`), and a deny that
   cannot be ledgered (`ledger_failed:<Type>`, also on stderr).
@@ -305,7 +305,7 @@ on stderr, not a refusal.
 | Deny or abstain reason | Cause | Fix |
 |---|---|---|
 | `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON | Send less; only size and digest are ledgered |
-| `args_unreadable:<why>` (gateway: `args_unreadable`) | Arguments nested too deeply, NaN, or a non-string key | Flatten or fix the arguments |
+| `invalid_call:<why>` (authorize and gateway) | Arguments nested too deeply, NaN, or a non-string key | Flatten or fix the arguments |
 | `derive_failed:value_unreadable:<Type>` | A derived value cannot be read (for example `10**400`) | Send a readable value |
 | `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |
 | `ledger_failed:<Type>` | The deny could not be written (also printed on stderr) | Check the ledger directory |

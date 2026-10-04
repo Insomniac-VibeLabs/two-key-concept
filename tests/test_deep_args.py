@@ -40,14 +40,16 @@ class DeepArgs(unittest.TestCase):
                          allow_test_doubles=True, monitored_agent=TEST_AGENT)
 
     def test_canonical_encoding_raises_encoding_error(self):
-        with self.assertRaisesRegex(EncodingError, "nests too deeply"):
+        with self.assertRaisesRegex(EncodingError, "tool args are nested too deeply"):
             canonical_bytes(nest(5000))
 
     def test_authorize_denies(self):
         d = self.tk.authorize(PAY, {"amount": 1, "to": "bob", "memo": nest(5000)}, "pay bob")
         self.assertFalse(d.allowed)
-        self.assertEqual(d.reason, "args_unreadable:value_nests_too_deeply")
-        self.assertTrue(self.tk.ledger.entries[-1].body.get("tool_args_omitted"))
+        self.assertEqual(d.reason, "invalid_call:tool args are nested too deeply")
+        body = self.tk.ledger.entries[-1].body
+        self.assertTrue(body.get("tool_args_omitted"))
+        self.assertEqual(body.get("tool_args_error"), "tool args are nested too deeply")
 
     def test_shallow_nesting_still_allowed(self):
         self.assertTrue(self.tk.authorize(PAY, {"amount": 1, "to": "bob", "memo": nest(50)}, "pay bob").allowed)
@@ -68,7 +70,7 @@ class DeepArgs(unittest.TestCase):
         gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled, tools={"pay": lambda a: "paid"})
         r = gw.invoke(d.token, "pay", {"amount": 1, "to": "bob", "memo": nest(5000)})
         self.assertFalse(r.allowed)
-        self.assertEqual(r.reason, "args_unreadable")
+        self.assertEqual(r.reason, "invalid_call:tool args are nested too deeply")
 
 
 if __name__ == "__main__":

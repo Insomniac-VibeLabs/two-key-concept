@@ -219,9 +219,9 @@ class TwoKey:
             # encoded (nested too deeply, NaN, a non-string key) is a deny here, not an error later.
             try:
                 canonical_bytes(arguments)
-            except EncodingError as e:
-                slug = "_".join(str(e).split()[:4]).lower()
-                return self._deny(f"args_unreadable:{slug}", agent, None, None, size_record(arguments, "tool_args"))
+            except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
+                return self._deny(f"invalid_call:{e}", agent, None, None,
+                                  {"tool_args_omitted": True, "tool_args_error": str(e)})
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)

@@ -228,8 +228,9 @@ Tool arguments or a proposal over 256 KiB of UTF-8 JSON are denied before
 anything reads or ledgers them (`args_too_large`, `proposal_too_large`).
 The ledger keeps only `tool_args_size`, `tool_args_digest`, and
 `tool_args_omitted: true` (or the `proposal_` equivalents). Arguments
-nested too deeply to encode are denied (`args_unreadable:value_nests_too_deeply`),
-and the gateway returns `args_unreadable` for them. A value too deep to
+nested too deeply to encode are denied in `authorize` and at the gateway
+with `invalid_call:tool args are nested too deeply`; the ledger keeps
+`tool_args_omitted: true` and `tool_args_error`. A value too deep to
 derive is `derive_failed:value_unreadable:RecursionError`.
 
 The token lifetime (`TwoKey(ttl_seconds=...)`, `--ttl-seconds`) is an

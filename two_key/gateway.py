@@ -77,8 +77,8 @@ class ToolGateway:
             return GatewayResult(False, "tool_mismatch")
         try:
             hashed = args_hash(arguments)
-        except EncodingError:
-            return GatewayResult(False, "args_unreadable")  # nested too deeply, NaN, or a non-string key
+        except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
+            return GatewayResult(False, f"invalid_call:{e}")
         if payload["args_hash"] != hashed:
             return GatewayResult(False, "args_mismatch")
         if payload["bytecode_hash"] != self.compiled.bytecode_hash or payload["nl_hash"] != self.compiled.nl_hash:

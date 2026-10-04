@@ -44,7 +44,7 @@ def canonical_bytes(value: Any) -> bytes:
         _check(value)
         return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
     except RecursionError:
-        raise EncodingError("value nests too deeply") from None
+        raise EncodingError("tool args are nested too deeply") from None
 
 
 def digest_hex(data: bytes) -> str:
