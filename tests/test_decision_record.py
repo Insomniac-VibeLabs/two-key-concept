@@ -30,7 +30,7 @@ def yes(url, headers, body, timeout):
 
 
 class DecisionRecord(unittest.TestCase):
-    def test_every_decision_carries_policy_and_identities(self):
+    def test_every_decision_carries_policy_and_identities_digests(self):
         os.environ["REC_AGENT_KEY"] = "agent-secret"
         self.addCleanup(os.environ.pop, "REC_AGENT_KEY", None)
         judge = AnthropicJudge("claude", "anthropic", "claude-3-haiku-20240307", credential=StaticToken("judge-key"),
@@ -57,8 +57,10 @@ class DecisionRecord(unittest.TestCase):
             self.assertEqual(sep["identities_digest"],
                              canonical_hash({"agents": sep["agents"], "judges": sep["judges"]}))
             fp_key = tk.ledger.fingerprint_key()
+            self.assertEqual(loaded["policy_digest"], canonical_hash(policy.to_record()))
             for d in decisions:
-                self.assertEqual(d["policy"], policy.to_record())
+                self.assertNotIn("policy", d)          # the full policy is in constitution_loaded only
+                self.assertEqual(d["policy_digest"], canonical_hash(loaded["quorum_policy"]))
                 self.assertNotIn("judges", d)          # identities are written once, referenced by digest
                 self.assertEqual(d["identities_digest"], sep["identities_digest"])
             (j,) = sep["judges"]

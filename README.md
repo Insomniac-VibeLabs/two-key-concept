@@ -161,8 +161,9 @@ session at the model host.
 Without a local judge, the constitution prose, the action record, and any
 attached tool arguments go to the cloud judges' vendors.
 
-Every `decision` in the ledger records the quorum policy in effect
-(opt-outs included) and `identities_digest`, the digest of the resolved
+Every `decision` in the ledger records `policy_digest`, the digest of the
+quorum policy in effect (opt-outs included, written in full once in
+`constitution_loaded`), and `identities_digest`, the digest of the resolved
 judge and agent identities written once in `constitution_loaded`: model,
 upstream, endpoint, tenant ids, and credential fingerprint, never a key.
 

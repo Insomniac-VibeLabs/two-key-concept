@@ -208,7 +208,8 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   unknown router, or a local proxy serving an alias model without a declared
   `upstream:`). The same provider is allowed; `allow_same_provider_judge`
   is a no-op. The result, with `resolved_by` for each identity, is in
-  `constitution_loaded`; each decision carries `identities_digest`.
+  `constitution_loaded`; each decision carries `identities_digest` and
+  `policy_digest` (the full quorum policy is in `constitution_loaded` only).
 - Credential fingerprints are HMAC-SHA256 of the stripped secret under a
   per-install key, `<ledger>.ledger-key/fingerprint.key` (O_EXCL, 0600).
 - Locality comes from the endpoint host and an explicit allowlist

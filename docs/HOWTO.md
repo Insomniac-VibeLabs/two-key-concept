@@ -151,8 +151,9 @@ Judge credentials are read at startup for this check, so a judge key that
 cannot be read refuses to start. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
-`identities_digest`. Each `decision` entry carries that digest and the
-quorum policy in effect.
+`identities_digest`. The entry also holds the full quorum policy
+(`quorum_policy`) and its `policy_digest`. Each `decision` entry carries
+`identities_digest` and `policy_digest`, not the full policy.
 
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).

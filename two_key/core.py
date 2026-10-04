@@ -112,13 +112,15 @@ class TwoKey:
         # Judge != monitored agent, from operator configuration only (identity.py).
         self.separation = self._check_separation(monitored_agent, allow_test_doubles)
         # The resolved identities are written once, in constitution_loaded; every decision entry
-        # carries the policy in effect and the digest of those identities (identities_digest).
+        # carries the digest of the policy in effect (policy_digest) and of those identities (identities_digest).
         sep = self.separation.to_record()
         self._identities_digest = canonical_hash({"agents": sep["agents"], "judges": sep["judges"]})
         sep = {**sep, "identities_digest": self._identities_digest,
                "credential_fingerprint": {"alg": "hmac-sha256", "key_id": fingerprint_key_id(self._fp_key),
                                           "input": "secret with surrounding whitespace stripped"}}
-        self._decision_context = {"policy": self.quorum.to_record(),
+        # The full policy is in constitution_loaded (quorum_policy); each decision carries its digest.
+        self._policy_digest = canonical_hash(self.quorum.to_record())
+        self._decision_context = {"policy_digest": self._policy_digest,
                                   "identities_digest": self._identities_digest}
         try:
             valid_ttl(ttl_seconds)       # an int in 1..MAX_TTL_SECONDS (300); NaN, inf, floats refused
@@ -141,6 +143,7 @@ class TwoKey:
             "nl_hash": self.compiled.nl_hash,
             "spec_hash": self.compiled.spec_hash,
             "quorum_policy": self.quorum.to_record(),
+            "policy_digest": self._policy_digest,
             # The gateway pins this: a token key that is not this one does not redeem.
             "capability_key_fingerprint": (None if self.issuer is None
                                            else capability_key_fingerprint(self.issuer.public_key)),
