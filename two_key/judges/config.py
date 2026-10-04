@@ -165,7 +165,7 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
     unknown = set(data) - TOP_LEVEL_KEYS
     if unknown:  # a typo such as "quorm:" must not silently drop the quorum block
         raise JudgeConfigError(f"unknown top-level key(s) {sorted(map(str, unknown))}; "
-                               f"expected {sorted(TOP_LEVEL_KEYS)}")
+                               f"allowed: {sorted(TOP_LEVEL_KEYS)}")
     judges = [build_judge(j, transport) for j in data["judges"]]
     ids = [j.judge_id for j in judges]
     if len(set(ids)) != len(ids):

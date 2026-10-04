@@ -12,6 +12,11 @@ class TopLevel(unittest.TestCase):
         with self.assertRaisesRegex(JudgeConfigError, r"unknown top-level key\(s\) \['quorm'\]"):
             load_config({"judges": J2, "quorm": {"profile": "high_assurance"}})
 
+    def test_agents_config_typo_is_refused(self):
+        from two_key.agents import AgentConfigError, load_agents
+        with self.assertRaisesRegex(AgentConfigError, r"unknown top-level key\(s\) \['agnets'\]; allowed: \['agents'\]"):
+            load_agents({"agents": [{"id": "a", "type": "ollama", "model": "llama3"}], "agnets": []})
+
     def test_known_keys_load(self):
         _, policy = load_config({"judges": J2, "quorum": {"required_yes": 1},
                                  "monitored_agent": {"model": "m", "provider": "p", "base_url": "http://localhost:1",

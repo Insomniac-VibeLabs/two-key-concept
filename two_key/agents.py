@@ -309,6 +309,8 @@ def build_agent(spec: dict, transport=None) -> MonitoredAgent:
 def load_agents(data: dict, transport=None) -> list[MonitoredAgent]:
     if not isinstance(data, dict) or not isinstance(data.get("agents"), list) or not data["agents"]:
         raise AgentConfigError("config must contain a non-empty 'agents' list")
+    if set(data) - {"agents"}:
+        raise AgentConfigError(f"unknown top-level key(s) {sorted(map(str, set(data) - {'agents'}))}; allowed: ['agents']")
     agents = [build_agent(a, transport) for a in data["agents"]]
     ids = [a.agent_id for a in agents]
     if any(not i for i in ids) or len(set(ids)) != len(ids):
