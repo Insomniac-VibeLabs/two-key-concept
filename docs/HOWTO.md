@@ -42,7 +42,9 @@ is a deny. `data_class` is the stricter of the claim and the tool's
 carries text the rules must treat as sensitive needs that class as its
 `data_class_floor`. A missing amount path, a non-numeric amount, or a
 currency other than `usd` on `pay_bill` is a deny. A value that cannot be
-read at all (for example `10**400`) is a `derive_failed` deny.
+read at all is a `derive_failed` deny: `derive_failed:amount_unreadable`
+for an amount such as `10**400`, `derive_failed:value_unreadable:<Type>` for
+any other value.
 
 A key the spec does not name does not change the form and does not reach
 the tool. The spec does not have to list every nested key. `deny_unmapped`

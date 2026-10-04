@@ -319,10 +319,11 @@ def dropped_keys(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> list[
 def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
     """Read the derived fields from ``arguments`` using ``spec`` paths.
 
-    Any value this cannot read is a ``DeriveError``, never another exception:
-    an ``OverflowError``, ``TypeError``, or ``ValueError`` (for example an
-    integer such as 10**400) or a ``RecursionError`` (a value nested too deeply)
-    becomes ``DeriveError("value_unreadable:<type>")``,
+    Any value this cannot read is a ``DeriveError``, never another exception.
+    An amount that cannot be read (for example 10**400) is
+    ``DeriveError("amount_unreadable")``. Any other ``OverflowError``,
+    ``TypeError``, ``ValueError``, or ``RecursionError`` (a value nested too
+    deeply) becomes ``DeriveError("value_unreadable:<type>")``,
     which ``TwoKey`` turns into a ``derive_failed:`` deny.
     """
     try:

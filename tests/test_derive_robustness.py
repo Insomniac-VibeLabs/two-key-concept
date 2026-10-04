@@ -42,7 +42,7 @@ class Unreadable(unittest.TestCase):
                 tk = engine(tmp, specs)
                 d = tk.authorize(PAY, {"amt": 10**400, "to": "ada"}, "x")
                 self.assertFalse(d.allowed)
-                self.assertTrue(d.reason.startswith("derive_failed:"), d.reason)
+                self.assertEqual(d.reason, "derive_failed:amount_unreadable")   # the reason CHANGES.md gives
                 self.assertEqual([e.kind for e in tk.ledger.entries][-1], "decision")
 
     def test_huge_claimed_amount_is_a_malformed_action(self):
@@ -79,6 +79,18 @@ class Unreadable(unittest.TestCase):
             self.assertIsNone(d.token)
             self.assertEqual(d.reason, "ledger_failed:OSError")
             self.assertIn("two-key: could not record deny decision", err.getvalue())
+
+    def test_ledger_error_reason_carries_its_message(self):
+        import io
+        from contextlib import redirect_stderr
+        from two_key.ledger import LedgerError
+        with tempfile.TemporaryDirectory() as tmp:
+            tk = engine(tmp)
+            with patch("two_key.core.convene", side_effect=RuntimeError("boom")), \
+                 patch.object(tk.ledger, "append", side_effect=LedgerError("ledger file changed")), \
+                 redirect_stderr(io.StringIO()):
+                d = tk.authorize(PAY, {"amt": 1, "to": "ada"}, "x")
+            self.assertEqual(d.reason, "ledger_failed:ledger file changed")
 
 
 if __name__ == "__main__":

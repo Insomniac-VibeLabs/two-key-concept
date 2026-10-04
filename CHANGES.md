@@ -234,9 +234,11 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   (`args_too_large`, `proposal_too_large`; only size and digest are
   ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`,
   checked before the size so Python 3.10 and 3.11 give the same reason), an
-  unreadable derived value (`derive_failed:value_unreadable:<Type>`), any
-  other exception in `authorize` (`internal_error:<Type>`), and a deny that
-  cannot be ledgered (`ledger_failed:<Type>`, also on stderr).
+  unreadable amount (`derive_failed:amount_unreadable`, for example
+  `10**400`) or other derived value (`derive_failed:value_unreadable:<Type>`),
+  any other exception in `authorize` (`internal_error:<Type>`), and a deny
+  that cannot be ledgered (`ledger_failed:<LedgerError message>`, or
+  `ledger_failed:<Type>` for any other exception; also on stderr).
 - Tokens: a lifetime over the TTL (`ttl_too_long`), an issue time more than
   5 s ahead (`issued_in_future`), and missing or non-finite time fields
   (`malformed_token`) are refused. The capability key is created
@@ -349,9 +351,10 @@ on stderr, not a refusal.
 | `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON, or agent proposal text over 1,048,576 characters | Send less; only size and digest are ledgered |
 | `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
 | `invalid_call:<why>` (authorize and gateway) | Arguments nested too deeply, NaN, or a non-string key | Flatten or fix the arguments |
-| `derive_failed:value_unreadable:<Type>` | A derived value cannot be read (for example `10**400`) | Send a readable value |
+| `derive_failed:amount_unreadable` | The amount cannot be read (for example `10**400`, `"1e400"`, or a non-number) | Send a readable amount |
+| `derive_failed:value_unreadable:<Type>` | Another derived value cannot be read (for example nested too deeply to walk) | Send a readable value |
 | `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |
-| `ledger_failed:<Type>` | The deny could not be written (also printed on stderr) | Check the ledger directory |
+| `ledger_failed:<message>` / `ledger_failed:<Type>` | The deny could not be written: a `LedgerError` gives its message (for example `ledger file changed by another writer; reopen the ledger`), any other exception its type (also printed on stderr) | Check the ledger directory |
 | `cloud_judge_session_required` | A judge not on loopback, and no `agent_session` | Pass the agent session (`--agent-session-env`) |
 | `cloud_judge_reused_agent_session` | A judge key equals the agent session | Give the judge its own key |
 | `judge_id_mismatch` (abstain) | A ballot named another judge | Check the judge; the ballot does not count |
@@ -362,7 +365,7 @@ on stderr, not a refusal.
 | `ttl_too_long` / `issued_in_future` / `malformed_token` | A token outlives the TTL, is dated ahead, or has missing or non-finite times | Re-authorize; check clocks |
 | `capability_key_mismatch` | The token key is not the one pinned in the ledger | Re-authorize with the current key |
 | `gateway_denied` (ledger entry) | The gateway refused an authenticated token; `reason` says why (`args_mismatch`, `tool_mismatch`, `already_redeemed`, ...) | Read `reason`; values are never ledgered, only size and digest |
-| `AgentConfigError: agent proposal has a duplicate key` | `authorize_from_agent` got a proposal with a repeated key | Fix the agent's JSON |
+| `AgentConfigError: agent proposal has a duplicate key` | `parse_proposal` or `MonitoredAgent.complete` got a proposal with a repeated key (`authorize_from_agent` denies `malformed_proposal` instead) | Fix the agent's JSON |
 
 ### Planned (not done)
 
