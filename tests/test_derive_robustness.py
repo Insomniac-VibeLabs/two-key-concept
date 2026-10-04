@@ -66,6 +66,20 @@ class Unreadable(unittest.TestCase):
             tk.ledger.verify()
             self.assertTrue(tk.authorize(PAY, {"amt": 1, "to": "ada"}, "x").allowed)
 
+    def test_deny_that_cannot_be_ledgered_is_still_a_deny_and_reported(self):
+        import io
+        from contextlib import redirect_stderr
+        with tempfile.TemporaryDirectory() as tmp:
+            tk = engine(tmp)
+            err = io.StringIO()
+            with patch("two_key.core.convene", side_effect=RuntimeError("boom")), \
+                 patch.object(tk.ledger, "append", side_effect=OSError("disk full")), redirect_stderr(err):
+                d = tk.authorize(PAY, {"amt": 1, "to": "ada"}, "x")
+            self.assertFalse(d.allowed)
+            self.assertIsNone(d.token)
+            self.assertEqual(d.reason, "ledger_failed:OSError")
+            self.assertIn("two-key: could not record deny decision", err.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

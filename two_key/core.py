@@ -11,6 +11,8 @@ could be that agent (``judge_matches_agent:``; see identity.py).
 
 from __future__ import annotations
 
+import sys
+
 from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 
@@ -312,6 +314,12 @@ class TwoKey:
                                             "origin": getattr(self, "_origin", "library"),
                                             **self._decision_context})
             self.ledger.checkpoint()
-        except LedgerError as e:
-            reason = f"ledger_failed:{e}"
-        return Decision(False, reason, None, path_a or {}, path_b or {}, self.ledger.size(), agent)
+        except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
+            print(f"two-key: could not record deny decision {reason!r}: {type(e).__name__}: {e}"[:500],
+                  file=sys.stderr)
+            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type(e).__name__}"
+        try:
+            size = self.ledger.size()
+        except Exception:
+            size = 0
+        return Decision(False, reason, None, path_a or {}, path_b or {}, size, agent)
