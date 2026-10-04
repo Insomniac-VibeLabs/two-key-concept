@@ -189,19 +189,19 @@ class TwoKey:
 
         ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
         """
-        self._origin = origin if isinstance(origin, str) and origin else "library"
+        origin = origin if isinstance(origin, str) and origin else "library"
         try:
             return self._authorize(action, arguments, proposal, agent_id=agent_id, hosting=hosting,
-                                   agent_session=agent_session)
+                                   agent_session=agent_session, origin=origin)
         except Exception as e:  # fail closed: no exception reaches the caller as anything but a deny
             agent = None
             if agent_id or hosting:
                 agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
-            return self._deny(f"internal_error:{type(e).__name__}", agent, None, None)
+            return self._deny(origin, f"internal_error:{type(e).__name__}", agent, None, None)
 
     def _authorize(self, action: dict, arguments: dict, proposal: str, *,
                    agent_id: str | None = None, hosting: str | None = None,
-                   agent_session: str | None = None) -> Decision:
+                   agent_session: str | None = None, origin: str = "library") -> Decision:
         agent = None
         if agent_id or hosting:
             # Hosting is a deployment fact, not a trust decision.
@@ -210,11 +210,11 @@ class TwoKey:
         claim = action.to_record() if isinstance(action, Action) else action
         claim_size = args_size(claim)
         if claim_size < 0 or claim_size > MAX_ACTION_BYTES:
-            return self._deny("action_too_large", agent, None, None, size_record(claim, "action"))
+            return self._deny(origin, "action_too_large", agent, None, None, size_record(claim, "action"))
         try:
             normalized = normalize_action(action)
         except ActionValidationError as e:   # the message names the field, never its value
-            return self._deny(f"malformed_action:{e}", agent, None, None)
+            return self._deny(origin, f"malformed_action:{e}", agent, None, None)
         if isinstance(arguments, Mapping):
             # Freeze the arguments to the canonical bytes a token would bind, before the size check:
             # a value that cannot be encoded (nested too deeply, NaN, a non-string key) is
@@ -222,7 +222,7 @@ class TwoKey:
             try:
                 frozen = canonical_bytes(arguments)
             except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
-                return self._deny(f"invalid_call:{e}", agent, None, None,
+                return self._deny(origin, f"invalid_call:{e}", agent, None, None,
                                   {"tool_args_omitted": True, "tool_args_error": str(e)})
             # Encoded once: these bytes settle the size cap and give the digest the token binds.
             oversized = canonical_too_large(frozen, arguments)
@@ -231,9 +231,9 @@ class TwoKey:
             oversized, frozen_digest = args_too_large(arguments), None
         # Before anything is derived, judged, or ledgered: only the size and digest are kept.
         if oversized:
-            return self._deny("args_too_large", agent, None, None, size_record(arguments, "tool_args"))
+            return self._deny(origin, "args_too_large", agent, None, None, size_record(arguments, "tool_args"))
         if args_too_large(proposal):
-            return self._deny("proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
+            return self._deny(origin, "proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
@@ -330,14 +330,14 @@ class TwoKey:
                                                             "token_hash": issued.token_hash,
                                                             "ledger_root": issued.payload["ledger_root"]})
             self.ledger.append("decision", {"allowed": allowed, "reason": reason, "agent": agent,
-                                            "origin": getattr(self, "_origin", "library"),
-                                            **self._decision_context})
+                                            "origin": origin, **self._decision_context})
             self.ledger.checkpoint()
         except LedgerError as e:
             return Decision(False, f"ledger_failed:{e}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
         return Decision(allowed, reason, token if allowed else None, path_a_rec, path_b_rec, self.ledger.size(), agent)
 
-    def authorize_from_agent(self, agent, proposal_text: str, *, agent_session: str | None = None) -> Decision:
+    def authorize_from_agent(self, agent, proposal_text: str, *, agent_session: str | None = None,
+                             origin: str = "library") -> Decision:
         """Parse an untrusted agent proposal, run both paths, and do not execute the tool.
 
         The text is measured before it is parsed. Text over ``MAX_PROPOSAL_TEXT_CHARS`` is a
@@ -346,33 +346,34 @@ class TwoKey:
         the reason carries no value or key name.
         """
         agent_id, hosting = getattr(agent, "agent_id", None), getattr(agent, "hosting", None)
-        self._origin = "library"
+        origin = origin if isinstance(origin, str) and origin else "library"
         record = None
         if agent_id or hosting:
             record = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
         try:
             if isinstance(proposal_text, str) and len(proposal_text) > MAX_PROPOSAL_TEXT_CHARS:
-                return self._deny("proposal_too_large", record, None, None,
+                return self._deny(origin, "proposal_too_large", record, None, None,
                                   size_record(proposal_text, "proposal_text"))
             try:
                 action, arguments, proposal = parse_proposal(proposal_text)
             except AgentConfigError:          # the message may quote a key name: not in the reason
-                return self._deny("malformed_proposal", record, None, None,
+                return self._deny(origin, "malformed_proposal", record, None, None,
                                   {**size_record(proposal_text, "proposal_text"),
                                    "proposal_text_type": type(proposal_text).__name__})
         except Exception as e:  # fail closed, as in authorize()
-            return self._deny(f"internal_error:{type(e).__name__}", record, None, None)
+            return self._deny(origin, f"internal_error:{type(e).__name__}", record, None, None)
         return self.authorize(action, arguments, proposal, agent_id=agent_id,
-                              hosting=hosting, agent_session=agent_session)
+                              hosting=hosting, agent_session=agent_session, origin=origin)
 
     def revoke(self, reason: str) -> None:
         self.ledger.append("revocation", {"reason": reason})
         self.ledger.checkpoint()
 
-    def _deny(self, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
+    def _deny(self, origin: str, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
+        """Ledger a deny decision. ``origin`` is passed down by the caller, never stored on ``self``."""
         try:
             self.ledger.append("decision", {"allowed": False, "reason": reason, "agent": agent,
-                                            "origin": getattr(self, "_origin", "library"),
+                                            "origin": origin,
                                             **(extra or {}), **self._decision_context})
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
