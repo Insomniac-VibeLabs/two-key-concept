@@ -18,7 +18,8 @@ from typing import Any, Mapping
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import canonical_hash
 from .agents import parse_proposal
-from .capability import CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key
+from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
+                         valid_ttl)
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation,
@@ -114,8 +115,10 @@ class TwoKey:
         # identities it was decided under, so one entry can be audited on its own. Fingerprints only.
         self._decision_context = {"policy": self.quorum.to_record(),
                                   "judges": sep["judges"], "agents": sep["agents"]}
-        if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, int) or ttl_seconds < 1:
-            raise TwoKeyConfigError("ttl_seconds must be a positive integer")
+        try:
+            valid_ttl(ttl_seconds)       # an int in 1..MAX_TTL_SECONDS (300); NaN, inf, floats refused
+        except ValueError as e:
+            raise TwoKeyConfigError(f"ttl_out_of_range: {e}") from None
         self.ttl_seconds = ttl_seconds
         # The minting key is not the principal key, and it is not given to the gateway.
         # max_ttl_seconds: verify() refuses any token that lives longer than this TwoKey's TTL.

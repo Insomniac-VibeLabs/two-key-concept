@@ -183,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
                       help="name of the environment variable holding the agent session secret")
     auth.add_argument("--agent-session", default=None, help=argparse.SUPPRESS)
     auth.add_argument("--ttl-seconds", type=int, default=120,
-                      help="token lifetime; the gateway refuses longer tokens (default 120)")
+                      help="token lifetime in seconds, 1 to 300; the gateway refuses longer tokens (default 120)")
     auth.add_argument("--emit-token", default=None, metavar="PATH",
                       help="write the token to a new 0600 file; it is never printed")
     auth.set_defaults(func=_authorize)

@@ -90,10 +90,16 @@ class GatewayAndTwoKey(unittest.TestCase):
             now = int(tk.issuer.clock())
             no_args_hash = forge(tk.issuer, {"v": 1, "jti": "x", "tool": "search", "iat": now, "exp": now + 30})
             self.assertEqual(gw.invoke(no_args_hash, "search", {}).reason, "malformed_token")
+            for iat, exp in ((str(now), "1e400"), ("-1e400", str(now + 30))):   # JSON numbers that parse to inf
+                text = canonical_bytes(BASE).decode()[:-1] + f',"exp":{exp},"iat":{iat}}}'
+                body = _b64u(text.encode())
+                huge = f"tk1.{body}.{sign(tk.issuer.private_key, body.encode('ascii'))}"
+                self.assertEqual(gw.invoke(huge, "search", {}).reason, "malformed_token")
             long = forge(tk.issuer, dict(BASE, iat=now, exp=now + 61))
             self.assertEqual(gw.invoke(long, "search", {}).reason, "ttl_too_long")
-            for bad in (0, -5, True, 2.5):
-                with self.assertRaises(TwoKeyConfigError):
+            for bad in (0, -5, True, 2.5, float("nan"), float("inf"), float("-inf"), 301, 10**12, "60", None):
+                with self.assertRaisesRegex(TwoKeyConfigError, "^ttl_out_of_range: ttl_seconds must be an "
+                                                               "integer from 1 to 300", msg=repr(bad)):
                     TwoKey(tk.ledger, key.public_key(), tk.constitution, [FixedJudge("a", "yes")], private_key=key,
                            quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True,
                            monitored_agent=TEST_AGENT, ttl_seconds=bad)
@@ -101,3 +107,17 @@ class GatewayAndTwoKey(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TtlBounds(unittest.TestCase):
+    def test_issuer_and_verifier_bounds(self):
+        from two_key.capability import MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier
+        from two_key.keys import generate_private_key as gen
+        key = gen()
+        self.assertEqual(CapabilityIssuer(key, max_ttl_seconds=MAX_TTL_SECONDS).max_ttl_seconds, 300)
+        for bad in (float("nan"), float("inf"), 301, 0, True, 1.0):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                CapabilityVerifier(key.public_key(), max_ttl_seconds=bad)
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                CapabilityIssuer(key).issue(tool="t", arguments={}, ledger_root="r", ledger_size=1,
+                                            bytecode_hash="b", nl_hash="n", ttl_seconds=bad)
