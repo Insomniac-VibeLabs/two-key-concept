@@ -250,6 +250,10 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   by group or others is refused; `--ttl-seconds` is 1-300; decisions record
   `origin: cli`.
 - The judge prompt describes any tool call with derived fields.
+- Arguments are encoded once per `authorize` and once per gateway call:
+  the canonical bytes give the size check and the token's `args_hash`
+  (they were serialized up to three times). The size cap measures compact
+  JSON (no spaces after `,` and `:`).
 - `two-key demo` opens its ledger in a subdirectory of its temporary
   directory, so the ledger key, witness, capability key, and lock files no
   longer outlive the run in the system temp directory. The tests do the

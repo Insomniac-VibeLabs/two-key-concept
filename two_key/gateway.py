@@ -22,9 +22,10 @@ except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
-                         args_hash, capability_key_fingerprint)
-from .canonical import EncodingError
-from .derive import DeriveError, args_too_large, blocked_from_rules, derive, dropped_keys, form_for, forms_match, project_arguments
+                         capability_key_fingerprint)
+from .canonical import EncodingError, canonical_bytes, digest_hex
+from .derive import (DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
+                     project_arguments)
 from .ledger import LedgerError
 
 
@@ -72,11 +73,13 @@ class ToolGateway:
         if any(name not in payload for name in _BOUND_FIELDS):
             return GatewayResult(False, "malformed_token")  # a signed token without a binding field
         # Encoded before the size check, so nesting too deep is invalid_call on every Python version.
+        # Encoded once: the same bytes give the hash and settle the size cap.
         try:
-            hashed = args_hash(arguments)
+            frozen = canonical_bytes(arguments)
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
             return GatewayResult(False, f"invalid_call:{e}")
-        if args_too_large(arguments):
+        hashed = digest_hex(frozen)
+        if canonical_too_large(frozen, arguments):
             return GatewayResult(False, "args_too_large")  # before deriving or ledgering
         if payload["tool"] != tool:
             return GatewayResult(False, "tool_mismatch")

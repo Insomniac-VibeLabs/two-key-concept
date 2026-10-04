@@ -184,7 +184,8 @@ class CapabilityIssuer(CapabilityVerifier):
     def issue(self, *, tool: str, arguments: dict, ledger_root: str, ledger_size: int,
               bytecode_hash: str, nl_hash: str, ttl_seconds: int = 120,
               spec_hash: str = "", form: dict | None = None,
-              claimed_data_class: str | None = None) -> IssuedCapability:
+              claimed_data_class: str | None = None, args_digest: str | None = None) -> IssuedCapability:
+        """Mint a token. ``args_digest`` is ``args_hash(arguments)`` when the caller already encoded them."""
         if self.private_key is None:
             raise TokenError("verifier_cannot_mint")
         valid_ttl(ttl_seconds)
@@ -195,7 +196,7 @@ class CapabilityIssuer(CapabilityVerifier):
             "v": 1,
             "jti": secrets.token_hex(16),
             "tool": tool,
-            "args_hash": args_hash(arguments),
+            "args_hash": args_digest if args_digest is not None else args_hash(arguments),
             "ledger_root": ledger_root,
             "ledger_size": ledger_size,
             "bytecode_hash": bytecode_hash,

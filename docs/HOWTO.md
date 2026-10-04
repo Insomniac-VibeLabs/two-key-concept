@@ -236,8 +236,11 @@ folding). A `malformed_action:` reason names the field, never its value or
 an unknown key's name (`malformed_action:unknown action fields (2)`,
 `malformed_action:data_class: not a known class`).
 
-Tool arguments or a proposal over 256 KiB of UTF-8 JSON are denied before
-anything reads or ledgers them (`args_too_large`, `proposal_too_large`).
+Tool arguments or a proposal over 256 KiB of compact UTF-8 JSON are denied
+before anything reads or ledgers them (`args_too_large`, `proposal_too_large`).
+The arguments are encoded once: the canonical bytes settle the cap (they are
+never shorter than the UTF-8 measure), give the hash the token binds, and are
+re-measured exactly only when they are over the cap. The gateway does the same.
 The ledger keeps only `tool_args_size`, `tool_args_digest`, and
 `tool_args_omitted: true` (or the `proposal_` equivalents). Arguments
 nested too deeply to encode are denied in `authorize` and at the gateway

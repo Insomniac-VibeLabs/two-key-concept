@@ -16,7 +16,7 @@ from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 
 from .action import Action, ActionValidationError, normalize_action
-from .canonical import EncodingError, canonical_bytes, canonical_hash
+from .canonical import EncodingError, canonical_bytes, canonical_hash, digest_hex
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
@@ -24,8 +24,8 @@ from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation, fingerprint_key_id,
                        configured_agent_identity, judge_identity)
-from .derive import (MAX_ACTION_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, derive, disagreement, disallowed_party,
-                     dropped_keys, form_for, size_record)
+from .derive import (MAX_ACTION_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
+                     derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
 from .quorum import QuorumPolicy, check_judge_set, convene
@@ -219,12 +219,17 @@ class TwoKey:
             # a value that cannot be encoded (nested too deeply, NaN, a non-string key) is
             # invalid_call on every Python version, not args_too_large where the sizer recursed out.
             try:
-                canonical_bytes(arguments)
+                frozen = canonical_bytes(arguments)
             except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
                 return self._deny(f"invalid_call:{e}", agent, None, None,
                                   {"tool_args_omitted": True, "tool_args_error": str(e)})
+            # Encoded once: these bytes settle the size cap and give the digest the token binds.
+            oversized = canonical_too_large(frozen, arguments)
+            frozen_digest = digest_hex(frozen)
+        else:
+            oversized, frozen_digest = args_too_large(arguments), None
         # Before anything is derived, judged, or ledgered: only the size and digest are kept.
-        if args_too_large(arguments):
+        if oversized:
             return self._deny("args_too_large", agent, None, None, size_record(arguments, "tool_args"))
         if args_too_large(proposal):
             return self._deny("proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
@@ -313,7 +318,7 @@ class TwoKey:
                     allowed, reason = False, "no_issuer_key"
                 else:
                     issued = self.issuer.issue(
-                        tool=normalized.tool, arguments=arguments,
+                        tool=normalized.tool, arguments=arguments, args_digest=frozen_digest,
                         ledger_root=self.ledger.merkle_root(), ledger_size=self.ledger.size(),
                         bytecode_hash=self.compiled.bytecode_hash, nl_hash=self.compiled.nl_hash,
                         spec_hash=self.compiled.spec_hash,

@@ -29,7 +29,7 @@ from typing import Any, Mapping
 from .action import DATA_CLASSES, MAX_AMOUNT_USD
 
 
-# Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their JSON.
+# Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their compact JSON.
 # Checked before anything is derived, judged, hashed for a token, or ledgered.
 MAX_ARGS_BYTES = 256 * 1024
 # The structured action claim is small; its cap is lower. Measured before normalize_action.
@@ -38,7 +38,8 @@ MAX_ACTION_BYTES = 64 * 1024
 
 def _json_bytes(value: Any) -> bytes | None:
     try:
-        return json.dumps(value, ensure_ascii=False, default=str).encode("utf-8", "surrogatepass")
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"),
+                          default=str).encode("utf-8", "surrogatepass")
     except (RecursionError, ValueError, TypeError):
         try:
             return repr(value).encode("utf-8", "surrogatepass")
@@ -55,6 +56,16 @@ def args_size(value: Any) -> int:
 def args_too_large(value: Any) -> bool:
     size = args_size(value)
     return size < 0 or size > MAX_ARGS_BYTES
+
+
+def canonical_too_large(canonical: bytes, value: Any) -> bool:
+    """``args_too_large(value)``, measured once in the common case.
+
+    ``canonical`` is ``canonical_bytes(value)``: compact JSON with non-ASCII escaped, so it is never
+    shorter than the UTF-8 compact JSON this cap measures. At or under the cap it settles the
+    question without a second encoding; only a longer one is measured exactly.
+    """
+    return len(canonical) > MAX_ARGS_BYTES and args_too_large(value)
 
 
 def size_record(value: Any, name: str) -> dict:

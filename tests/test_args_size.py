@@ -40,7 +40,7 @@ def engine(tmp):
 class Size(unittest.TestCase):
     def test_measure_is_utf8_bytes(self):
         self.assertEqual(MAX_ARGS_BYTES, 262144)
-        self.assertEqual(args_size({"q": "\U0001F600"}), len('{"q": "\U0001F600"}'.encode()))
+        self.assertEqual(args_size({"q": "\U0001F600"}), len('{"q":"\U0001F600"}'.encode()))  # compact JSON
         self.assertTrue(args_too_large({"q": "\U0001F600" * (MAX_ARGS_BYTES // 4)}))  # under the cap in chars
         self.assertFalse(args_too_large({"q": "x" * (MAX_ARGS_BYTES - 20)}))
 
