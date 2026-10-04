@@ -250,6 +250,10 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   by group or others is refused; `--ttl-seconds` is 1-300; decisions record
   `origin: cli`.
 - The judge prompt describes any tool call with derived fields.
+- The gateway ledgers every refusal of an authenticated token as
+  `gateway_denied` (`reason`, `jti`, `tool` if it is a short identifier,
+  else `tool_size`/`tool_digest`, and `tool_args_size`/`tool_args_digest`).
+  A token that does not verify writes nothing.
 - Arguments are encoded once per `authorize` and once per gateway call:
   the canonical bytes give the size check and the token's `args_hash`
   (they were serialized up to three times). The size cap measures compact
@@ -357,6 +361,7 @@ on stderr, not a refusal.
 | `insufficient_yes:<y><<k>` with two judges | `required_yes` now defaults to 2 when there are two or more judges | Set `required_yes: 1` if one yes is enough |
 | `ttl_too_long` / `issued_in_future` / `malformed_token` | A token outlives the TTL, is dated ahead, or has missing or non-finite times | Re-authorize; check clocks |
 | `capability_key_mismatch` | The token key is not the one pinned in the ledger | Re-authorize with the current key |
+| `gateway_denied` (ledger entry) | The gateway refused an authenticated token; `reason` says why (`args_mismatch`, `tool_mismatch`, `already_redeemed`, ...) | Read `reason`; values are never ledgered, only size and digest |
 | `AgentConfigError: agent proposal has a duplicate key` | `authorize_from_agent` got a proposal with a repeated key | Fix the agent's JSON |
 
 ### Planned (not done)

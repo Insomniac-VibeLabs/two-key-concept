@@ -7,11 +7,14 @@ ledger's ``constitution_loaded`` entry (``capability_key_mismatch``). A redempti
 retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
+A refusal of an authenticated token is ledgered as ``gateway_denied`` (reason,
+jti, tool, argument size and digest); a token that does not verify writes nothing.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -23,10 +26,20 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
+from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import EncodingError, canonical_bytes, digest_hex
 from .derive import (DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
-                     project_arguments)
+                     project_arguments, size_record)
 from .ledger import LedgerError
+
+
+_MAX_REASON_CHARS = 200
+_MAX_JTI_CHARS = 64
+
+
+def _short(value) -> str | None:
+    """A jti for the ledger: a short string, else nothing (the token is signed, but keep entries small)."""
+    return value if isinstance(value, str) and len(value) <= _MAX_JTI_CHARS else None
 
 
 _BOUND_FIELDS = ("jti", "tool", "args_hash", "bytecode_hash", "nl_hash", "ledger_root", "ledger_size")
@@ -66,10 +79,51 @@ class ToolGateway:
         self._locks_guard = threading.Lock()
 
     def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
+        """Redeem ``token`` for ``tool(arguments)``.
+
+        A token that does not verify (bad signature, expired, malformed) is refused without a
+        ledger entry, so an unauthenticated caller cannot write to the ledger. Any later refusal of
+        an authenticated token is ledgered as ``gateway_denied`` with the reason, the jti, the tool
+        name (only if it is a short identifier), and the size and digest of the arguments, never
+        their values.
+        """
         try:
             payload = self.issuer.verify(token)
         except TokenError as e:
             return GatewayResult(False, str(e))
+        result, frozen = self._invoke_verified(payload, tool, arguments)
+        if result.allowed or result.reason.startswith(("ledger_failed:", "tool_error:")):
+            return result      # a tool error is already ledgered (redemption_aborted); a ledger failure cannot be
+        return self._record_deny(result, payload, tool, arguments, frozen)
+
+    def _record_deny(self, result: GatewayResult, payload: dict, tool, arguments, frozen: bytes | None) -> GatewayResult:
+        body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": _short(payload.get("jti"))}
+        if isinstance(tool, str) and len(tool) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool):
+            body["tool"] = tool
+        else:
+            body.update({"tool": None, **size_record(tool, "tool")})
+        if frozen is not None:
+            body.update({"tool_args_size": len(frozen), "tool_args_digest": "sha256:" + digest_hex(frozen),
+                         "tool_args_omitted": True})
+        else:
+            body.update(size_record(arguments, "tool_args"))
+        try:
+            self.ledger.append("gateway_denied", body)
+            self.ledger.checkpoint()
+        except Exception as e:  # still a deny; say so, because the ledger now lacks it
+            print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
+                  f"{type(e).__name__}"[:500], file=sys.stderr)
+            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type(e).__name__}"
+            return GatewayResult(False, reason, result.output)
+        return result
+
+    def _invoke_verified(self, payload: dict, tool: str, arguments: dict) -> tuple[GatewayResult, bytes | None]:
+        """Run the checks and the tool; also return the encoded arguments, if they could be encoded."""
+        encoded: dict = {}
+        result = self._redeem(payload, tool, arguments, encoded)
+        return result, encoded.get("frozen")
+
+    def _redeem(self, payload: dict, tool: str, arguments: dict, encoded: dict) -> GatewayResult:
         if any(name not in payload for name in _BOUND_FIELDS):
             return GatewayResult(False, "malformed_token")  # a signed token without a binding field
         # Encoded before the size check, so nesting too deep is invalid_call on every Python version.
@@ -78,6 +132,7 @@ class ToolGateway:
             frozen = canonical_bytes(arguments)
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
             return GatewayResult(False, f"invalid_call:{e}")
+        encoded["frozen"] = frozen
         hashed = digest_hex(frozen)
         if canonical_too_large(frozen, arguments):
             return GatewayResult(False, "args_too_large")  # before deriving or ledgering

@@ -206,6 +206,9 @@ sequenceDiagram
     TwoKey-->>Caller: single-use token
     Caller->>Gateway: token, tool, arguments
     Note over Gateway: verifies with the capability public key only
+    opt authenticated token refused
+      Gateway->>Ledger: gateway_denied (reason, jti, tool, args size and digest)
+    end
     Gateway->>Ledger: redemption_started
     Gateway->>Tool: registered function
     Gateway->>Ledger: redemption, or redemption_aborted on a tool exception
