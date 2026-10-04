@@ -259,6 +259,12 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   `constitution_loaded`. It is part of `policy_digest`. A misspelled key is
   refused.
 - HOWTO has a "Known trade-offs by configuration" section.
+- A host that is not a recognized vendor, router, or inference host is
+  treated as a proxy for the same-model check, like a local one. A `maker/`
+  model prefix no longer identifies it. With the agent's model and no
+  non-overlapping `upstream:`, it is refused ("through a local or
+  unrecognized proxy or daemon ... no declared upstream",
+  `same_model_unknown_upstream`).
 - One copy: tool args, the action claim, and the proposal are each copied
   once into built-in types (`canonical.to_plain`), in `authorize` and at the
   gateway. Any `collections.abc.Mapping` becomes a dict, a tuple becomes a

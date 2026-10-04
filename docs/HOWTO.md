@@ -147,8 +147,11 @@ agent:
   endpoint (a LiteLLM-style proxy or a local daemon, with or without a key)
   that declares no `upstream:`. Such an endpoint can forward the agent's
   model to the agent's provider and account, so its upstream and tenant are
-  unknown. A local daemon serving its own weights declares its own address
-  (`upstream: localhost:11434`);
+  unknown. Any host that is not a recognized vendor, router, or inference
+  host counts the same way, whatever the model's `maker/` prefix says (for
+  example `litellm`, `host.docker.internal`, `proxy.corp.example`, 100.64.x,
+  or 169.254.x). A local daemon serving its own weights declares its own
+  address (`upstream: localhost:11434`);
 - the same normalized model reaching the same upstream: declared upstreams
   count as endpoints, and an Ollama cloud model (`:cloud`, `-cloud`) reaches
   `ollama.com` even through a local daemon. This is

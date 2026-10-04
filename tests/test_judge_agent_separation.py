@@ -222,7 +222,7 @@ class SameProvider(Env):
                                      agent).separation.ok)
         agent = dict(AGENT, model="llama3.1:8b", base_url="https://api.together.xyz/v1")
         # B5: a local daemon with the same model must say where it gets the model (here, its own weights).
-        self.refused([OllamaJudge("q", "ollama", "llama3.1:8b")], "through a local proxy or daemon", agent=agent)
+        self.refused([OllamaJudge("q", "ollama", "llama3.1:8b")], "through a local or unrecognized proxy or daemon", agent=agent)
         local_weights = OllamaJudge("q", "ollama", "llama3.1:8b")
         local_weights.upstream = ["localhost:11434"]
         self.assertTrue(self.started([local_weights], agent).separation.ok)

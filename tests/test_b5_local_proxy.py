@@ -29,7 +29,7 @@ OPENAI_AGENT = {"id": "agent", "model": "gpt-4o", "provider": "openai", "base_ur
 OLLAMA_AGENT = {"id": "agent", "model": "gpt-oss:120b-cloud", "provider": "ollama",
                 "base_url": "https://ollama.com", "credential_env": "B5_AGENT_KEY"}
 FP = b"k" * 32
-UNKNOWN = "through a local proxy or daemon"
+UNKNOWN = "through a local or unrecognized proxy or daemon"
 SAME_UPSTREAM = "through the same upstream"
 
 
@@ -171,6 +171,52 @@ class B5(unittest.TestCase):
         self.assertEqual(rec["routes"], ["localhost:11434", "ollama.com"])
 
 
+class UnrecognizedHost(unittest.TestCase):
+    """A maker/ prefix does not identify a host. A keyless judge on a non-vendor host serving the agent's
+    model is a proxy whose upstream and tenant are unknown, unless it declares a non-overlapping upstream."""
+    HOSTS = ("http://litellm:4000", "http://litellm.internal:4000", "http://host.docker.internal:4000",
+             "https://proxy.corp.example", "http://100.64.1.2:4000", "http://169.254.10.20:4000")
+
+    def setUp(self):
+        os.environ["B5_AGENT_KEY"] = "agent-key-K"
+        self.addCleanup(os.environ.pop, "B5_AGENT_KEY", None)
+        self.agent = AgentDeclaration.from_mapping(OPENAI_AGENT).resolve(fp_key=FP)
+
+    def verdict(self, j):
+        return compare(self.agent, judge_identity(j, FP))
+
+    def check(self, base_url):
+        reason = self.verdict(judge("openai/gpt-4o", base_url))
+        self.assertIsNotNone(reason, base_url)
+        self.assertRegex(reason, "through a local or unrecognized proxy or daemon .*no declared upstream")
+        self.assertRegex(self.verdict(judge("openai/gpt-4o", base_url, upstream="api.openai.com")), SAME_UPSTREAM)
+        self.assertIsNone(self.verdict(judge("openai/gpt-4o", base_url, upstream="api.groq.com")))
+        self.assertIsNone(self.verdict(judge("openai/gpt-4o-mini", base_url)))     # a different model
+
+    def test_litellm(self):
+        self.check(self.HOSTS[0])
+
+    def test_litellm_internal(self):
+        self.check(self.HOSTS[1])
+
+    def test_host_docker_internal(self):
+        self.check(self.HOSTS[2])
+
+    def test_proxy_corp_example(self):
+        self.check(self.HOSTS[3])
+
+    def test_cgnat_100_64(self):
+        self.check(self.HOSTS[4])
+
+    def test_link_local_169_254(self):
+        self.check(self.HOSTS[5])
+
+    def test_recognized_vendor_hosts_are_not_proxies(self):
+        for url in ("https://api.together.xyz/v1", "https://openrouter.ai/api/v1"):
+            with self.subTest(url=url):
+                self.assertIsNone(self.verdict(judge("openai/gpt-4o", url, key="judge-key")))
+
+
 class EndToEnd(unittest.TestCase):
     def test_twokey_refuses_a_keyless_local_proxy_with_the_agents_model(self):
         os.environ["B5_AGENT_KEY"] = "agent-key-K"
@@ -180,7 +226,7 @@ class EndToEnd(unittest.TestCase):
                                 {"search": {"irreversible": False, "data_class_floor": "public"}})
         proxy = OpenAICompatibleJudge("proxy", "litellm", "gpt-4o", "http://localhost:4000/v1")
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*through a local proxy or daemon"):
+            with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*through a local or unrecognized proxy or daemon"):
                 TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                        [proxy], private_key=key, quorum=QuorumPolicy(required_yes=1), monitored_agent=OPENAI_AGENT)
 

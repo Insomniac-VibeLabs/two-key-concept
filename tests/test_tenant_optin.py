@@ -70,7 +70,7 @@ class Compare(unittest.TestCase):
     def test_other_refusals_are_untouched(self):
         # A local proxy with no declared upstream: its upstream and tenant are unknown.
         self.assertRegex(self.verdict(AGENT, judge(base_url="http://localhost:4000", tenant={"project": "p2"})),
-                         "through a local proxy or daemon")
+                         "through a local or unrecognized proxy or daemon")
         # The same key.
         self.assertRegex(self.verdict(AGENT, judge(key="agent-key-K", tenant={"project": "p2"})),
                          "same credential fingerprint")

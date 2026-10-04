@@ -609,6 +609,7 @@ class ResolvedIdentity:
     local: bool = False               # the endpoint is this machine or a private address (a proxy or daemon)
     routes: frozenset[str] = field(default_factory=frozenset)   # endpoint + declared upstreams (+ ollama.com)
     tenant_declared: bool = False     # the operator declared a non-empty tenant: mapping
+    proxy: bool = False               # local, or a host that is no recognized vendor, router, or inference host
 
     @property
     def unresolved(self) -> bool:
@@ -621,6 +622,7 @@ class ResolvedIdentity:
                 "tenant": sorted(self.tenants) or None, "resolved_by": self.resolved_by,
                 "upstream_declared": sorted(self.declared_upstreams) or None, "local_endpoint": self.local,
                 "routes": sorted(self.routes) or None, "tenant_declared": self.tenant_declared,
+                "proxy_endpoint": self.proxy,
                 "provider_label": self.provider_label, "resolved": not self.unresolved}
 
 
@@ -633,6 +635,11 @@ def _identity(role: str, ident: str, model: str, base_url: str, credentials: Ite
         upstreams, by = frozenset(upstreams | upstream), "declared_upstream"
     host = (urlparse(base_url or "").hostname or "").lower().rstrip(".")
     local = urlparse(base_url or "").scheme != IN_PROCESS and (local_alias(host) or host_is_local(host))
+    # A host that is no recognized vendor, router, or inference host (litellm, host.docker.internal,
+    # proxy.corp.example, 100.64.x, 169.254.x) says nothing about who serves the model, whatever the
+    # model id's maker prefix claims: for the same-model check it is a proxy, like a local one.
+    proxy = local or (urlparse(base_url or "").scheme != IN_PROCESS and host not in _DIRECT_HOSTS
+                      and host not in _INFERENCE_HOSTS and _router(host) is None)
     # Where the model is really served, for the same-model comparison: the endpoint itself, every
     # declared upstream, and ollama.com for an Ollama cloud model (the local daemon forwards it there).
     routes = {normalize_upstream(base_url)} | set(upstream)
@@ -641,7 +648,7 @@ def _identity(role: str, ident: str, model: str, base_url: str, credentials: Ite
     return ResolvedIdentity(role, ident, model, normalize_model(model), endpoint_key(base_url), upstreams,
                             router, frozenset(credentials), provider_label,
                             resolve_tenants(base_url, tenant, model=model, upstreams=upstream), by,
-                            upstream, local, frozenset(routes - {""}), bool(tenant))
+                            upstream, local, frozenset(routes - {""}), bool(tenant), proxy)
 
 
 def _secret_from(credential: Any) -> str:
@@ -823,12 +830,13 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity, *,
     if agent.model == judge.model:
         if agent.endpoint == judge.endpoint and not optin:
             return f"{who}: same model {judge.model!r} on the same endpoint {judge.endpoint}"
-        # A loopback or private endpoint (a LiteLLM-style proxy, a local Ollama daemon) can forward the
-        # same model to the other side's provider and account without a key of its own. Its upstream
-        # and tenant are unknown unless the operator declares an upstream.
+        # A loopback or private endpoint (a LiteLLM-style proxy, a local Ollama daemon), or any host
+        # that is no recognized vendor (a maker/ prefix does not identify it), can forward the same model
+        # to the other side's provider and account without a key of its own. Its upstream and tenant are
+        # unknown unless the operator declares an upstream (compared as a route below).
         for side, label in ((judge, "judge"), (agent, "agent")):
-            if side.local and not side.declared_upstreams:
-                return (f"{who}: same model {judge.model!r} through a local proxy or daemon ({label} at "
+            if side.proxy and not side.declared_upstreams:
+                return (f"{who}: same model {judge.model!r} through a local or unrecognized proxy or daemon ({label} at "
                         f"{side.endpoint}) with no declared upstream; upstream and tenant unknown "
                         "(declare upstream: on it)")
         # Declared upstreams count as endpoints: the same model reaching the same upstream is the same

@@ -142,7 +142,7 @@ the same model on the same endpoint (every alias of this machine is one
 endpoint), the same model reaching the same upstream (a declared upstream,
 the endpoint itself, or `ollama.com` for a `-cloud` model, even when the
 two sides declare different tenants), or the same
-model through a loopback or private proxy or daemon that declares no
+model through a loopback, private, or unrecognized proxy or daemon that declares no
 `upstream:` (it could forward to the agent's own account without a key).
 An identity it cannot resolve also refuses, including a local proxy serving
 an alias model unless you declare its `upstream:`. The same provider with a different model is allowed and
