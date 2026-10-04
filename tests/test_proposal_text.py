@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from two_key.agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, MonitoredAgent, parse_proposal
 from two_key.constitution import sign_constitution, verify_signed
@@ -82,6 +83,23 @@ class ProposalText(unittest.TestCase):
                 d = self.tk.authorize_from_agent(self.agent, text)
                 self.assertEqual(d.reason, "malformed_proposal")
                 self.assertNotIn(SECRET_KEY, json.dumps([e.body for e in self.tk.ledger.entries]))
+
+    def test_reply_too_deep_to_parse_is_malformed_proposal(self):
+        # Deep enough that json recurses out on every supported Python version.
+        for text in ('{"tool": "search", "arguments": {"q": ' + "[" * 200_000 + "]" * 200_000 + '}, "proposal": "x"}',
+                     "[" * 200_000 + "]" * 200_000):
+            with self.subTest(size=len(text)):
+                d = self.tk.authorize_from_agent(self.agent, text)
+                self.assertEqual((d.allowed, d.reason), (False, "malformed_proposal"))
+                self.assertIn("proposal_text_digest", self.last_decision())
+
+    def test_recursion_error_while_parsing_is_malformed_proposal_not_internal_error(self):
+        with mock.patch("two_key.core.parse_proposal", side_effect=RecursionError):
+            d = self.tk.authorize_from_agent(self.agent, '{"tool": "search", "arguments": {}, "proposal": "x"}')
+        self.assertEqual((d.allowed, d.reason), (False, "malformed_proposal"))
+        body = self.last_decision()
+        self.assertEqual(body["reason"], "malformed_proposal")
+        self.assertIn("proposal_text_digest", body)
 
     def test_good_text_still_runs_both_paths(self):
         text = json.dumps({"tool": "search", "arguments": {"q": "x"}, "proposal": "look it up",

@@ -388,7 +388,7 @@ class TwoKey:
                                   size_record(proposal_text, "proposal_text"))
             try:
                 action, arguments, proposal = parse_proposal(proposal_text)
-            except AgentConfigError:          # the message may quote a key name: not in the reason
+            except (AgentConfigError, RecursionError):   # the message may quote a key name: not in the reason
                 return self._deny(origin, "malformed_proposal", record, None, None,
                                   {**size_record(proposal_text, "proposal_text"),
                                    "proposal_text_type": type(proposal_text).__name__})

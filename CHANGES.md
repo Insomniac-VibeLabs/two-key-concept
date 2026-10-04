@@ -398,7 +398,7 @@ on stderr, not a refusal.
 | `malformed_action:tool: longer than 128 characters` / `tool: not an identifier ...` | The tool name is too long or has characters outside `a-z 0-9 _ . : / -` | Rename the tool |
 | `malformed_action:unknown action fields (<n>)` / `<field>: ...` | An unknown or invalid action field (the reason names the field, not the value) | Fix the claim |
 | `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON, or agent proposal text over 1,048,576 characters | Send less; only size and digest are ledgered |
-| `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
+| `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, nested too deeply to parse (a `RecursionError` on any Python version), or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
 | `invalid_call:<why>` (authorize and gateway) | Arguments nested more than 62 levels, NaN, or a non-string key | Flatten or fix the arguments |
 | `malformed_action:action claim is nested too deeply` | The action claim (usually `raw`) nests more than 62 levels | Flatten `raw` |
 | `body_omitted: true` on a ledger entry | The entry's body could not be encoded; only its short fields, size, and digest were kept | Read `body_error`; report it |
