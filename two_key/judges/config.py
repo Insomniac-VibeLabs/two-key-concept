@@ -3,7 +3,7 @@
 Format (see examples/judges.yaml):
 
     quorum:
-      required_yes: 2          # k-of-n
+      required_yes: 2          # k-of-n; omit for min(2, number of judges)
       min_responding: 2        # spec 5.4 "K"
       min_distinct_providers: 1
       # profile: high_assurance  # opt-in: 2 vendors, 1 local judge, require_local_yes
@@ -189,9 +189,10 @@ def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
         if profile == "high_assurance":
             policy = QuorumPolicy.high_assurance(**q)
         else:
-            policy = QuorumPolicy(**q) if q else QuorumPolicy(required_yes=min(2, len(judges)))
+            policy = QuorumPolicy(**q)
     except QuorumConfigError as e:
         raise JudgeConfigError(str(e)) from e
+    policy = policy.resolved(len(judges))  # required_yes omitted: min(2, number of judges)
     if policy.required_yes > len(judges):
         raise JudgeConfigError(f"required_yes={policy.required_yes} exceeds number of judges {len(judges)}")
     if policy.timeout_seconds is None:

@@ -101,7 +101,7 @@ class TwoKey:
         if any(not isinstance(i, str) or not i for i in judge_ids) or len(set(judge_ids)) != len(judge_ids):
             # Ballots are matched to judges by id; a shared id lets one judge's ballot stand in for another's.
             raise TwoKeyConfigError("duplicate_judge_id: judge ids must be unique, non-empty strings")
-        self.quorum = quorum or QuorumPolicy(required_yes=min(2, len(self.judges)))
+        self.quorum = (quorum or QuorumPolicy()).resolved(len(self.judges))
         if self.quorum.timeout_seconds is None:
             # Fail closed on a hung judge: every round ends by the deadline, and a late judge abstains.
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "

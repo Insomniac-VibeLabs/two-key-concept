@@ -82,7 +82,7 @@ class QuorumConfigError(ValueError):
 
 @dataclass(frozen=True)
 class QuorumPolicy:
-    required_yes: int = 2            # k in k-of-n
+    required_yes: int | None = None  # k in k-of-n; None = min(2, number of judges), resolved at start-up
     min_responding: int | None = None  # K in spec 5.4; defaults to required_yes
     min_distinct_providers: int = 1  # responding providers; 1 means this check is not a floor
     timeout_seconds: float | None = 45.0  # overall deadline; None (no deadline) is refused by TwoKey
@@ -105,10 +105,11 @@ class QuorumPolicy:
 
 
     def __post_init__(self):
-        if isinstance(self.required_yes, bool) or not isinstance(self.required_yes, int) or self.required_yes < 1:
+        if self.required_yes is not None and (isinstance(self.required_yes, bool)
+                                              or not isinstance(self.required_yes, int) or self.required_yes < 1):
             raise QuorumConfigError("required_yes must be an integer >= 1")
         mr = self.effective_min_responding
-        if not isinstance(mr, int) or mr < 1:
+        if mr is not None and (isinstance(mr, bool) or not isinstance(mr, int) or mr < 1):
             raise QuorumConfigError("min_responding must be an integer >= 1")
         if not isinstance(self.min_distinct_providers, int) or self.min_distinct_providers < 1:
             raise QuorumConfigError("min_distinct_providers must be an integer >= 1")
@@ -178,8 +179,14 @@ class QuorumPolicy:
                 "allow_same_provider_judge": self.allow_same_provider_judge}
 
     @property
-    def effective_min_responding(self) -> int:
+    def effective_min_responding(self) -> int | None:
         return self.required_yes if self.min_responding is None else self.min_responding
+
+    def resolved(self, n_judges: int) -> "QuorumPolicy":
+        """``required_yes=None`` becomes min(2, n_judges) (at least 1). Other fields are unchanged."""
+        if self.required_yes is not None:
+            return self
+        return replace(self, required_yes=max(1, min(2, n_judges)))
 
 
 @dataclass(frozen=True)
@@ -351,7 +358,7 @@ def convene(
 
     ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (Two-Key always passes it).
     """
-    policy = policy or QuorumPolicy()
+    policy = (policy or QuorumPolicy()).resolved(len(judges))
     k_floor = policy.effective_min_responding
     judge_action = action
     if tool_args:
