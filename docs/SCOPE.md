@@ -1,7 +1,7 @@
 # Scope
 
-`two-key-concept` is the first working cut. Package version 0.1.12. Tag `v0.1.12`
-is this tree on `main`. `v0.1.6` stays on the previous tree.
+`two-key-concept` is the first working cut. Package version 0.2.0 (branch `working`, not tagged yet). Tag `v0.1.12`
+is on `main`. `v0.1.6` stays on the previous tree.
 
 It keeps:
 
