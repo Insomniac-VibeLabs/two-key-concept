@@ -301,6 +301,18 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
    new ledger directory.
 9. Tests that use `testing.TEST_AGENT` must use only test-double judges;
    with a real judge, declare a real agent.
+10. `Decision.to_record()` no longer includes `token`; it has `token_jti`
+    and `token_digest`. Read the bearer token from `decision.token`.
+11. `QuorumPolicy().required_yes` is `None` until `TwoKey` resolves it
+    against the judge list (`min(2, judges)`). Code that read the default
+    as an integer must handle `None` or set `required_yes` explicitly.
+12. A judge on a LAN or private address with `local_weights: true` is now
+    cloud for the session check (only loopback is not), so `authorize`
+    needs an `agent_session` (`cloud_judge_session_required`). It still
+    counts as a local judge for the quorum floors.
+13. Tokens minted by 0.1.12 will most likely be refused
+    (`capability_key_mismatch`): 0.1.12 did not pin the capability key in
+    `constitution_loaded`. Tokens live at most 300 seconds; re-authorize.
 
 #### Troubleshooting: start-up refusals
 
