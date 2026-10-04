@@ -20,7 +20,11 @@ from .keys import generate_private_key, load_private_key, save_private_key, save
 def _init_key(args) -> int:
     key = generate_private_key()
     dest = Path(args.dir)
-    save_private_key(dest / "principal.pem", key)
+    try:
+        save_private_key(dest / "principal.pem", key)
+    except FileExistsError:
+        print(f"refusing to overwrite {dest / 'principal.pem'}", file=sys.stderr)
+        return 1
     save_public_key(dest / "principal.pub.pem", key.public_key())
     print(f"wrote {dest / 'principal.pem'}")
     return 0

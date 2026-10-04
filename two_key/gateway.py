@@ -1,7 +1,9 @@
 """Redeem a capability token. No scanning, antivirus, or DLP hooks.
 
 The gateway keeps a ``CapabilityVerifier``. It does not keep the minting
-key. A redemption intent is checkpointed before the tool runs. A later
+key. It refuses a verifier whose key is the principal key, and it redeems a
+token only if the verifier's key fingerprint is the one pinned in the
+ledger's ``constitution_loaded`` entry (``capability_key_mismatch``). A redemption intent is checkpointed before the tool runs. A later
 retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
@@ -19,7 +21,8 @@ try:
 except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
-from .capability import DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, args_hash
+from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
+                         args_hash, capability_key_fingerprint)
 from .derive import DeriveError, blocked_from_rules, derive, form_for, forms_match, project_arguments
 from .ledger import LedgerError
 
@@ -51,6 +54,10 @@ class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None):
         self.ledger = ledger
         self.issuer = _as_verifier(issuer)
+        principal = getattr(ledger, "public_key", None)
+        if principal is not None and _raw(self.issuer.public_key) == _raw(principal):
+            raise TokenError("capability_key_is_principal_key")
+        self._fingerprint = capability_key_fingerprint(self.issuer.public_key)
         self.compiled = compiled
         self.tools = tools or {}
         self._locks: dict[str, threading.Lock] = {}
@@ -91,6 +98,8 @@ class ToolGateway:
             return GatewayResult(False, "ledger_size_invalid")
         if self.ledger.merkle_root(size) != payload["ledger_root"]:
             return GatewayResult(False, "ledger_root_mismatch")
+        if self._pinned_at(size) != self._fingerprint:
+            return GatewayResult(False, "capability_key_mismatch")
         if self.ledger.kinds_after(size, {"constitution_loaded", "revocation"}):
             return GatewayResult(False, "revoked_or_reloaded")
         fn = self.tools.get(tool)
@@ -121,6 +130,13 @@ class ToolGateway:
             except LedgerError as e:
                 return GatewayResult(False, f"ledger_failed:{e}", output)
         return GatewayResult(True, "redeemed", output)
+
+    def _pinned_at(self, size: int) -> str | None:
+        """The capability key fingerprint in the last ``constitution_loaded`` entry before ``size``."""
+        for entry in reversed(self.ledger.entries[:size]):
+            if entry.kind == "constitution_loaded":
+                return entry.body.get("capability_key_fingerprint")
+        return None
 
     def _hold(self, jti: str):
         gateway = self

@@ -17,7 +17,7 @@ from typing import Any, Mapping
 from .action import Action, ActionValidationError, normalize_action
 from .canonical import canonical_hash
 from .agents import parse_proposal
-from .capability import CapabilityIssuer, open_capability_key
+from .capability import CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
 from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation,
@@ -95,8 +95,13 @@ class TwoKey:
         self.ttl_seconds = ttl_seconds
         # The minting key is not the principal key, and it is not given to the gateway.
         # max_ttl_seconds: verify() refuses any token that lives longer than this TwoKey's TTL.
-        self.issuer = (CapabilityIssuer(open_capability_key(ledger), clock=clock, max_ttl_seconds=ttl_seconds)
-                       if private_key else None)
+        self.issuer = None
+        if private_key:
+            try:
+                cap_key = open_capability_key(ledger, public_key)
+            except CapabilityKeyError as e:
+                raise TwoKeyConfigError(str(e)) from e
+            self.issuer = CapabilityIssuer(cap_key, clock=clock, max_ttl_seconds=ttl_seconds)
         self._clock = clock
         self.ledger.append("constitution_loaded", {
             "digest": constitution.digest,
@@ -104,6 +109,9 @@ class TwoKey:
             "nl_hash": self.compiled.nl_hash,
             "spec_hash": self.compiled.spec_hash,
             "quorum_policy": self.quorum.to_record(),
+            # The gateway pins this: a token key that is not this one does not redeem.
+            "capability_key_fingerprint": (None if self.issuer is None
+                                           else capability_key_fingerprint(self.issuer.public_key)),
             "judge_agent_separation": sep,
         })
         self.ledger.checkpoint()
