@@ -107,21 +107,39 @@ def hosting_of(base_url: str, declared: str | None, *, local_default: bool = Fal
     return "local" if host in LOOPBACK else "cloud"
 
 
-def parse_proposal(text: str) -> tuple[dict, dict, str]:
+class _DuplicateKey(ValueError):
+    pass
+
+
+def _no_duplicate_keys(pairs: list) -> dict:
+    """object_pairs_hook: a repeated key could make the checked value differ from the one a tool reads."""
+    obj = {}
+    for k, v in pairs:
+        if k in obj:
+            raise _DuplicateKey(k)
+        obj[k] = v
+    return obj
+
+
+def _loads_strict(text: str, what: str):
     try:
-        obj = json.loads(text.strip())
+        return json.loads(text, object_pairs_hook=_no_duplicate_keys)
+    except _DuplicateKey as e:
+        raise AgentConfigError(f"{what} has a duplicate key {str(e)[:80]!r}") from None
     except json.JSONDecodeError as e:
-        raise AgentConfigError(f"agent proposal is not JSON: {e.msg}") from None
+        raise AgentConfigError(f"{what} is not JSON: {e.msg}") from None
+
+
+def parse_proposal(text: str) -> tuple[dict, dict, str]:
+    """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins."""
+    obj = _loads_strict(text.strip(), "agent proposal")
     if not isinstance(obj, dict) or set(obj) - _ALLOWED or not _REQUIRED <= set(obj):
         raise AgentConfigError("agent proposal must contain tool, arguments, and proposal, and no other keys")
     if not isinstance(obj["tool"], str) or not obj["tool"].strip():
         raise AgentConfigError("tool must be a non-empty string")
     args = obj["arguments"]
     if isinstance(args, str):
-        try:
-            args = json.loads(args)
-        except json.JSONDecodeError as e:
-            raise AgentConfigError(f"arguments string is not JSON: {e.msg}") from None
+        args = _loads_strict(args, "arguments string")
     if not isinstance(args, dict):
         raise AgentConfigError("arguments must be an object")
     obj = dict(obj)
