@@ -12,7 +12,6 @@ could be that agent (``judge_matches_agent:``; see identity.py).
 from __future__ import annotations
 
 import sys
-
 from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 

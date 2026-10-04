@@ -188,6 +188,18 @@ Tag `v0.1.12` on `main`. No behavior change in this version. The `working`
 line through 0.1.11 is this tree. `v0.1.6` stays on the previous tree.
 Not published to PyPI.
 
+## working — 2026-10-03
 
+On branch `working`. Not a release tag. `main` stays at `v0.1.12`.
+Not published to PyPI.
 
+### Planned (not done)
 
+- Spec field types become generic. Today a tool spec knows two special
+  field kinds, `amount` (USD or cents) and `counterparties`, plus unread
+  `payload` paths. The plan is a typed field per argument path, each kind
+  with its own limits: string, int, decimal, enum, identifier/principal,
+  path, URL, email, and opaque bytes. `amount` and `counterparty` stop
+  being special cases and become ordinary typed fields that rules can
+  name. Until then the action record keeps `amount_usd` and `counterparty`
+  as fields, with neutral defaults for tools that have neither.
