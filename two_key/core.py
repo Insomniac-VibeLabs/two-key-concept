@@ -1,6 +1,7 @@
 """Two-Key concept: a tool call runs only if Path A and Path B both allow.
 
-``authorize_from_agent`` always runs both paths and does not execute tools.
+``authorize_from_agent`` runs both paths once the call is well-formed and within limits,
+and does not execute tools. A malformed or oversized call is an early deny before either path.
 Hosting (local or cloud) is recorded and never treated as trust.
 
 ``TwoKey`` refuses to start (``TwoKeyConfigError``) with no judge, with no
@@ -184,7 +185,7 @@ class TwoKey:
     def authorize(self, action: dict, arguments: dict, proposal: str, *,
                   agent_id: str | None = None, hosting: str | None = None,
                   agent_session: str | None = None, origin: str = "library") -> Decision:
-        """Run both paths. Any exception is a deny that is written to the ledger (``internal_error:``).
+        """Run both paths once the call is well-formed and within limits. Any exception is a deny that is written to the ledger (``internal_error:``).
 
         ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
         """
@@ -282,7 +283,7 @@ class TwoKey:
             "nl_hash": self.compiled.nl_hash,
             "bytecode_hash": self.compiled.bytecode_hash,
         }
-        # Both paths always answer. A Path A deny does not skip Path B.
+        # From here both paths answer. A Path A deny does not skip Path B.
         # After a derive deny, judges do not receive the argument bytes unless
         # the quorum policy opts in. The normalized record still goes to Path B.
         judge_args: Mapping | None = arguments

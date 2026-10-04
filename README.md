@@ -65,15 +65,19 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    key. It does not hold the minting key, and it does not inspect file
    contents, mail, or tool output for DLP or malware.
 
-Both paths always answer. A Path A deny does not skip Path B, so the ledger
-has both results. `authorize_from_agent` runs both paths and does not
-execute the tool. An agent is untrusted whether it is hosted locally or in
+Both paths answer once the call is well-formed and within limits. A Path A deny does
+not skip Path B, so the ledger has both results. A malformed or oversized
+call (`malformed_proposal`, `proposal_too_large`, `action_too_large`,
+`malformed_action:`, `args_too_large`, `invalid_call:`) is denied before
+either path runs, and only its size and digest are ledgered.
+`authorize_from_agent` does not execute the tool. An agent is untrusted whether it is hosted locally or in
 the cloud.
 
 ## Architecture
 
 A monitored agent and a Path B judge do not call each other, and neither
-calls the gateway. The caller runs the agent. Two-Key then runs both paths.
+calls the gateway. The caller runs the agent. Two-Key then runs both paths
+once the call is well-formed and within limits.
 Only the gateway runs a tool.
 
 ```mermaid
@@ -184,6 +188,11 @@ sequenceDiagram
   Caller->>Agent: instruction and constitution prose
   Agent-->>Caller: JSON proposal, no tool call
   Caller->>TwoKey: proposal and agent_session
+  alt malformed or over a size limit
+    Note over TwoKey: malformed_proposal, proposal_too_large, action_too_large, malformed_action, args_too_large, invalid_call
+    TwoKey->>Ledger: decision with size and digest only
+    TwoKey-->>Caller: deny, neither path runs
+  end
   TwoKey->>PathA: structured fields
   PathA-->>TwoKey: allow or deny
   TwoKey->>PathB: action record and binding hashes

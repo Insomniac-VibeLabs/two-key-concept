@@ -59,7 +59,7 @@ Entry 2 in Insomniac-VibeLabs/two-key:
   text (transcript) or tool outputs. "record_and_proposal" restores the
   earlier behaviour. After a derive deny, ``tool_args`` is omitted unless
   ``tool_args_on_derive_deny`` is set. Path B still runs.
-- Both paths always run. A Path A deny does not skip Path B.
+- Both paths run once the call is well-formed and within limits. A Path A deny does not skip Path B.
   ``require_path_a_first`` is stored on the policy and copied into
   ``to_record``. ``TwoKey.authorize`` does not read it. There is no
   ``short_circuit_path_b`` setting in this package.

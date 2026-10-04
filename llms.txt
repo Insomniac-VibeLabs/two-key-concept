@@ -20,7 +20,8 @@ before README.md and docs/HOWTO.md. Tests: python -m unittest discover -s tests
 (193 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
-Both paths always run. The default needs one judge and has no diversity
+Both paths run once the call is well-formed and within limits (an oversized or
+malformed call is an early deny before either path). The default needs one judge and has no diversity
 floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
 (profile: high_assurance) sets 2 vendors, 1 local judge, and a local yes.
 TwoKey needs monitored_agent, declared by the operator. It refuses a judge

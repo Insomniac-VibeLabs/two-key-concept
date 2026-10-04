@@ -49,7 +49,8 @@ the code wins, then this file should be corrected.
   arguments. The proposal is withheld unless that judge sets
   `receives_proposal` or the quorum policy is `judge_inputs: record_and_proposal`.
   The default is record-only.
-- Both paths always run. `require_path_a_first` is stored on the policy and
+- Both paths run once the call is well-formed and within limits; a malformed or oversized
+  call is denied before either path (size and digest only). `require_path_a_first` is stored on the policy and
   copied into `to_record`. `TwoKey.authorize` does not read it. There is no
   `short_circuit_path_b` setting on `TwoKey`.
 - Gateway to the tool. The token is checked against the caller's argument
@@ -191,7 +192,7 @@ claims to close.
 
 ## What to re-check when the code changes
 
-- `two_key/core.py`: both paths run, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
+- `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), vendor names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.

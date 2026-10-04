@@ -3,7 +3,7 @@
 A configured agent may be local (Ollama, a loopback OpenAI-compatible server)
 or a vendor model (xAI, OpenAI, Anthropic, Gemini, or any other host). A
 vendor-hosted agent can exceed the constitution, so its proposal is untrusted
-data. ``authorize_from_agent`` always runs Path A and Path B. This module
+data. ``authorize_from_agent`` runs Path A and Path B once the call is well-formed and within limits. This module
 never calls the tool gateway and never sees tool credentials.
 
 The request shapes match the judge connectors. No vendor SDK and no streaming.
