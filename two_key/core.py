@@ -16,7 +16,7 @@ from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
 
 from .action import Action, ActionValidationError, normalize_action
-from .canonical import canonical_hash
+from .canonical import EncodingError, canonical_bytes, canonical_hash
 from .agents import parse_proposal
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
@@ -206,6 +206,14 @@ class TwoKey:
             return self._deny("args_too_large", agent, None, None, size_record(arguments, "tool_args"))
         if args_too_large(proposal):
             return self._deny("proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
+        if isinstance(arguments, Mapping):
+            # Freeze the arguments to the canonical bytes a token would bind. A value that cannot be
+            # encoded (nested too deeply, NaN, a non-string key) is a deny here, not an error later.
+            try:
+                canonical_bytes(arguments)
+            except EncodingError as e:
+                slug = "_".join(str(e).split()[:4]).lower()
+                return self._deny(f"args_unreadable:{slug}", agent, None, None, size_record(arguments, "tool_args"))
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)

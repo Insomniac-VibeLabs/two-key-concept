@@ -308,14 +308,16 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
 
     Any value this cannot read is a ``DeriveError``, never another exception:
     an ``OverflowError``, ``TypeError``, or ``ValueError`` (for example an
-    integer such as 10**400) becomes ``DeriveError("value_unreadable:<type>")``,
+    integer such as 10**400) or a ``RecursionError`` (a value nested too deeply)
+    becomes ``DeriveError("value_unreadable:<type>")``,
     which ``TwoKey`` turns into a ``derive_failed:`` deny.
     """
     try:
         return _derive(spec, arguments)
     except DeriveError:
         raise
-    except (OverflowError, TypeError, ValueError) as exc:
+    except (OverflowError, TypeError, ValueError, RecursionError) as exc:
+        # RecursionError: a value nested too deeply to read is a deny, never a crash.
         raise DeriveError(f"value_unreadable:{type(exc).__name__}") from None
 
 

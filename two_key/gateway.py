@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          args_hash, capability_key_fingerprint)
+from .canonical import EncodingError
 from .derive import DeriveError, args_too_large, blocked_from_rules, derive, dropped_keys, form_for, forms_match, project_arguments
 from .ledger import LedgerError
 
@@ -74,7 +75,11 @@ class ToolGateway:
             return GatewayResult(False, "args_too_large")  # before hashing, deriving, or ledgering
         if payload["tool"] != tool:
             return GatewayResult(False, "tool_mismatch")
-        if payload["args_hash"] != args_hash(arguments):
+        try:
+            hashed = args_hash(arguments)
+        except EncodingError:
+            return GatewayResult(False, "args_unreadable")  # nested too deeply, NaN, or a non-string key
+        if payload["args_hash"] != hashed:
             return GatewayResult(False, "args_mismatch")
         if payload["bytecode_hash"] != self.compiled.bytecode_hash or payload["nl_hash"] != self.compiled.nl_hash:
             return GatewayResult(False, "constitution_mismatch")

@@ -1,7 +1,8 @@
 """Canonical encoding for the concept ledger, tokens, and judge bindings.
 
 JSON with sorted keys and no insignificant whitespace. Non-finite numbers
-are rejected so two encoders cannot disagree on NaN.
+are rejected so two encoders cannot disagree on NaN. A value nested too
+deeply to walk (``RecursionError``) is an ``EncodingError``, not a crash.
 """
 
 from __future__ import annotations
@@ -39,8 +40,11 @@ def _check(value: Any) -> None:
 
 
 def canonical_bytes(value: Any) -> bytes:
-    _check(value)
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+    try:
+        _check(value)
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+    except RecursionError:
+        raise EncodingError("value nests too deeply") from None
 
 
 def digest_hex(data: bytes) -> str:
