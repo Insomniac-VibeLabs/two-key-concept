@@ -13,8 +13,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from two_key.agents import MonitoredAgent, parse_proposal
-from two_key.constitution import sign_constitution, verify_signed
+from two_key.agents import AgentConfigError, MonitoredAgent, parse_proposal
+from two_key.constitution import ConstitutionSignatureError, sign_constitution, verify_signed
 from two_key.core import TwoKey
 from two_key.gateway import ToolGateway
 from two_key.judges.config import JudgeConfigError, build_credential
@@ -129,7 +129,7 @@ class ConceptTests(unittest.TestCase):
         key = generate_private_key()
         env = sign_constitution(PROSE, RULES, key, SPECS)
         env["signature"] = "aa"
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(ConstitutionSignatureError, "^constitution signature failed"):
             verify_signed(env, key.public_key())
 
     def test_schema_400_falls_back_once(self):
@@ -153,7 +153,7 @@ class ConceptTests(unittest.TestCase):
         self.assertEqual(rec.calls[1]["response_format"]["type"], "json_object")
 
     def test_proposal_parser_rejects_extra_keys(self):
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(AgentConfigError, "no other keys"):
             parse_proposal(json.dumps({"tool": "search", "arguments": {}, "proposal": "x", "exec": True}))
 
 
@@ -387,9 +387,9 @@ class ConceptTests(unittest.TestCase):
         judge = {"id": "l", "type": "ollama", "model": "qwen2.5:7b"}
         _, policy = load_config({"judges": [judge]})
         self.assertEqual((policy.required_yes, policy.min_vendors, policy.require_local_yes), (1, 1, False))
-        with self.assertRaises(JudgeConfigError):
+        with self.assertRaisesRegex(JudgeConfigError, "insufficient_vendors:1<2"):
             load_config({"judges": [judge], "quorum": {"profile": "high_assurance", "required_yes": 1}})
-        with self.assertRaises(JudgeConfigError):
+        with self.assertRaisesRegex(JudgeConfigError, "quorum profile must be one of"):
             load_config({"judges": [judge], "quorum": {"profile": "paranoid"}})
 
     def test_section4_does_not_skip_path_b(self):

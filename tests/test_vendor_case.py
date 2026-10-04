@@ -13,7 +13,7 @@ class VendorCase(unittest.TestCase):
         for a, b in (("OpenAI", "openai"), ("openai", "OPENAI "), ("Anthropic", "ａｎｔｈｒｏｐｉｃ")):
             judges = [FixedJudge("a", "yes", vendor=a), FixedJudge("b", "yes", vendor=b)]
             self.assertEqual(heterogeneity_shortfall(judges, POLICY), "insufficient_vendors:1<2", (a, b))
-            with self.assertRaises(QuorumConfigError):
+            with self.assertRaisesRegex(QuorumConfigError, "insufficient_vendors:1<2"):
                 check_judge_set(judges, POLICY)
 
     def test_provider_fallback_is_folded_too(self):

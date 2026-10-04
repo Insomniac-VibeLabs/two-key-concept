@@ -35,7 +35,7 @@ class Loaders(unittest.TestCase):
                 load_yaml(text)
 
     def test_yaml_is_still_safe(self):
-        with self.assertRaises(StrictParseError):
+        with self.assertRaisesRegex(StrictParseError, "^not valid YAML: could not determine a constructor"):
             load_yaml("!!python/object/apply:os.system ['true']")
 
     def test_yaml_merge_keys_and_lists_still_load(self):
@@ -98,12 +98,12 @@ class Callers(unittest.TestCase):
             parse_ballot_strict(text)
 
     def test_ballot_nan_confidence_is_malformed(self):
-        with self.assertRaises(MalformedBallot):
+        with self.assertRaisesRegex(MalformedBallot, "non-standard JSON constant NaN"):
             parse_ballot_strict('{"consistent": true, "confidence": NaN, "rationale": "ok"}')
 
     def test_cli_args_duplicate(self):
         from two_key.cli import main
-        with self.assertRaises(SystemExit):
+        with self.assertRaisesRegex(SystemExit, "--args: duplicate key 'to'"):
             main(["authorize", "--key", "/nonexistent", "--judges", "/nonexistent", "--ledger", str(self.dir / "l"),
                   "--constitution", "/nonexistent", "--tool", "t", "--args", '{"to": "a", "to": "b"}',
                   "--proposal", "{}"])

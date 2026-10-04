@@ -45,7 +45,7 @@ class Locality(unittest.TestCase):
         floor = QuorumPolicy.high_assurance(required_yes=2)
         remote = [OllamaJudge("c", "ollama", "m", base_url="https://ollama.com", local_weights=True, vendor="x"),
                   FixedJudge("b", "yes", provider="p", vendor="y")]
-        with self.assertRaises(QuorumConfigError):
+        with self.assertRaisesRegex(QuorumConfigError, "insufficient_local_judges:0<1"):
             check_judge_set(remote, floor)
 
     def test_declared_local_cloud_judge_still_checks_the_agent_credential(self):
@@ -68,7 +68,7 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
         from two_key.quorum import convene
         js = [FixedJudge("a", "yes", provider="p1", vendor="v1"), FixedJudge("b", "yes", provider="p2", vendor="v2")]
         p = QuorumPolicy(required_yes=2, require_local_yes=True)
-        with self.assertRaises(QuorumConfigError):
+        with self.assertRaisesRegex(QuorumConfigError, "require_local_yes_without_local_judge"):
             check_judge_set(js, p)
         q = convene(js, "c", A, "", p)
         self.assertFalse(q.passed)
@@ -77,10 +77,10 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
             key = generate_private_key()
             env = sign_constitution("c", [{"id": "t", "allow_only_tools": ["search"]}], key,
                                     {"search": {"irreversible": False, "data_class_floor": "public"}})
-            with self.assertRaises(QuorumConfigError):
+            with self.assertRaisesRegex(QuorumConfigError, "require_local_yes_without_local_judge"):
                 TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), js,
                        private_key=key, quorum=p, allow_test_doubles=True, monitored_agent=TEST_AGENT)
-        with self.assertRaises(JudgeConfigError):
+        with self.assertRaisesRegex(JudgeConfigError, "require_local_yes_without_local_judge"):
             load_config({"judges": [{"id": "x", "type": "openai_compatible", "base_url": "https://api.x.ai/v1",
                                      "model": "m", "auth": {"type": "env", "var": "X"}}],
                          "quorum": {"required_yes": 1, "require_local_yes": True}})

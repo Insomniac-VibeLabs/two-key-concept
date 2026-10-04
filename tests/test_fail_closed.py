@@ -121,14 +121,14 @@ class StartupRefusals(unittest.TestCase):
             with self.assertRaises(TwoKeyConfigError) as raised:
                 engine(tmp, [])
             self.assertTrue(str(raised.exception).startswith("no_judges"))
-        with self.assertRaises(JudgeConfigError):
+        with self.assertRaisesRegex(JudgeConfigError, "non-empty 'judges' list"):
             load_config({"judges": []})
 
     def test_no_hard_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(TwoKeyConfigError):
+            with self.assertRaisesRegex(TwoKeyConfigError, "^Path B needs a hard deadline"):
                 engine(tmp, [FixedJudge("a", "yes")], QuorumPolicy(required_yes=1, timeout_seconds=None))
-        with self.assertRaises(JudgeConfigError):
+        with self.assertRaisesRegex(JudgeConfigError, "timeout_seconds must be a positive number \(a hard deadline\)"):
             load_config({"judges": [{"id": "l", "type": "ollama", "model": "m"}],
                          "quorum": {"required_yes": 1, "timeout_seconds": None}})
 

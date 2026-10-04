@@ -41,7 +41,7 @@ class Lifetime(unittest.TestCase):
         return self.issuer.verifier().verify(forge(self.issuer, dict(BASE, **fields)))
 
     def test_issuer_refuses_a_ttl_above_its_max(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "exceeds this issuer's max_ttl_seconds"):
             self.issuer.issue(tool="search", arguments={}, ledger_root="r", ledger_size=0, bytecode_hash="b",
                               nl_hash="n", ttl_seconds=121)
         ok = self.issuer.issue(tool="search", arguments={}, ledger_root="r", ledger_size=0, bytecode_hash="b",
@@ -69,7 +69,7 @@ class Lifetime(unittest.TestCase):
 
     def test_bad_max_ttl(self):
         for bad in (0, -1, True, 1.5):
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "max_ttl_seconds must be an integer from 1 to 300"):
                 CapabilityVerifier(self.issuer.public_key, max_ttl_seconds=bad)
 
 
@@ -116,8 +116,8 @@ class TtlBounds(unittest.TestCase):
         key = gen()
         self.assertEqual(CapabilityIssuer(key, max_ttl_seconds=MAX_TTL_SECONDS).max_ttl_seconds, 300)
         for bad in (float("nan"), float("inf"), 301, 0, True, 1.0):
-            with self.assertRaises(ValueError, msg=repr(bad)):
+            with self.assertRaisesRegex(ValueError, "max_ttl_seconds must be an integer from 1 to 300", msg=repr(bad)):
                 CapabilityVerifier(key.public_key(), max_ttl_seconds=bad)
-            with self.assertRaises(ValueError, msg=repr(bad)):
+            with self.assertRaisesRegex(ValueError, "ttl_seconds must be an integer from 1 to 300", msg=repr(bad)):
                 CapabilityIssuer(key).issue(tool="t", arguments={}, ledger_root="r", ledger_size=1,
                                             bytecode_hash="b", nl_hash="n", ttl_seconds=bad)
