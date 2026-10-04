@@ -301,6 +301,13 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
         if not isinstance(b, Ballot) or b.vote not in ("yes", "no", "abstain"):
             b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
                        None, "", error="judge returned an invalid ballot object")
+        elif b.judge_id != getattr(j, "judge_id", None):
+            # A ballot naming another judge (for example the local one) is not that judge's vote.
+            b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
+                       None, "", error="judge_id_mismatch")
+        else:
+            # Identity comes from the judge object, never from what the ballot says about itself.
+            b = replace(b, judge_id=j.judge_id, provider=getattr(j, "provider", b.provider))
     except Exception as e:  # a failing judge is an abstention, never a yes
         b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
                    None, "", error=f"{type(e).__name__}: {e}")
@@ -399,10 +406,10 @@ def convene(
     # Availability floor K: below it, deny WITHOUT counting (§4 (iii)).
     if len(responding) < k_floor:
         return result(False, f"insufficient_responses:{len(responding)}<{k_floor}", counted=False)
+    # Ballots are paired with judges by position (_collect keeps the order), not by the id a ballot reports.
+    pairs = list(zip(judges, ballots))
     if policy.heterogeneity_scope == "responding":
-        by_id = {getattr(j, "judge_id", None): j for j in judges}
-        short = heterogeneity_shortfall([by_id.get(b.judge_id) for b in responding if b.judge_id in by_id],
-                                        policy)
+        short = heterogeneity_shortfall([j for j, b in pairs if b.responded], policy)
         if short:
             return result(False, f"responding_not_heterogeneous:{short}", counted=False)
     providers = {b.provider for b in responding}
@@ -412,7 +419,6 @@ def convene(
     if yes < policy.required_yes:
         return result(False, f"insufficient_yes:{yes}<{policy.required_yes}")
     if policy.require_local_yes:
-        local_ids = {getattr(j, "judge_id", None) for j in judges if _local(j)}
-        if not any(b.vote == "yes" and b.judge_id in local_ids for b in responding):
+        if not any(b.vote == "yes" and _local(j) for j, b in pairs):
             return result(False, "local_judge_required")
     return result(True, "quorum_pass")
