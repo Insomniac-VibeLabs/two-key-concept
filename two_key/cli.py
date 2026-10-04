@@ -41,7 +41,7 @@ def _demo(_args) -> int:
     from .gateway import ToolGateway
     from .ledger import Ledger
     from .quorum import QuorumPolicy
-    from .testing import FixedJudge
+    from .testing import TEST_AGENT, FixedJudge
 
     key = generate_private_key()
     prose = "Never wire money. Never spend more than 200 dollars. Drafts are allowed."
@@ -61,7 +61,7 @@ def _demo(_args) -> int:
         judges = [FixedJudge("a", "yes", provider="local-a", vendor="local", local_weights=True),
                   FixedJudge("b", "yes", provider="cloud-b", vendor="other")]
         tk = TwoKey(ledger, key.public_key(), __import__("two_key.constitution", fromlist=["verify_signed"]).verify_signed(envelope, key.public_key()),
-                    judges, private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+                    judges, private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
         denied = tk.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "public", "irreversible": True},
                               {}, "please wire the funds")
         allowed = tk.authorize({"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False},
@@ -82,14 +82,17 @@ def _demo(_args) -> int:
 def _authorize(args) -> int:
     from .constitution import load_envelope
     from .core import TwoKey
+    from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
     from .keys import load_private_key
     from .ledger import Ledger
     key = load_private_key(args.key)
     judges, policy = load_config_file(Path(args.judges))
+    # The monitored agent is declared by the operator in the judges file, never by the agent.
+    agent = load_monitored_agent_file(Path(args.judges))
     ledger = Ledger(args.ledger, key)
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
-                     private_key=key, quorum=policy)
+                     private_key=key, quorum=policy, monitored_agent=agent)
     arguments = json.loads(args.args)
     if not isinstance(arguments, dict):
         raise SystemExit("args must be a JSON object")

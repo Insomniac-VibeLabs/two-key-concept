@@ -23,7 +23,7 @@ from two_key.ledger import LedgerError, merkle_root
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumConfigError, QuorumPolicy
-from two_key.testing import FixedJudge
+from two_key.testing import TEST_AGENT, FixedJudge
 
 
 RULES = [
@@ -51,7 +51,7 @@ def _engine(tmp, votes=("yes", "yes"), quorum=None):
               for i, vote in enumerate(votes)]
     tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
                 private_key=key, quorum=quorum or QuorumPolicy(required_yes=len(votes)),
-                allow_test_doubles=True)
+                allow_test_doubles=True, monitored_agent=TEST_AGENT)
     return key, tk
 
 
@@ -269,7 +269,8 @@ class ConceptTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main(["authorize", "--allow-test-doubles"])
             buf = io.StringIO()
-            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))):
+            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))), \
+                 patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT):
                 with redirect_stdout(buf):
                     with self.assertRaises(ValueError) as raised:
                         main(["authorize", "--key", str(Path(tmp, "principal.pem")),
@@ -300,6 +301,7 @@ class ConceptTests(unittest.TestCase):
             judges = [FixedJudge("a", "yes", provider="p0")]
             buf = io.StringIO()
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
+                 patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT), \
                  patch("two_key.ledger.Ledger", return_value=object()), \
                  patch("two_key.core.TwoKey.load", return_value=_Stopped()), \
                  redirect_stdout(buf):
@@ -313,6 +315,7 @@ class ConceptTests(unittest.TestCase):
             self.assertEqual(captured["action"]["data_class"], "classified")
             self.assertIs(captured["action"]["irreversible"], True)
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
+                 patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT), \
                  patch("two_key.ledger.Ledger", return_value=object()), \
                  patch("two_key.core.TwoKey.load", return_value=_Stopped()), \
                  redirect_stdout(buf):
@@ -365,9 +368,9 @@ class ConceptTests(unittest.TestCase):
             constitution = verify_signed(env, key.public_key())
             with self.assertRaises(QuorumConfigError):
                 TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
-                       quorum=QuorumPolicy.high_assurance(required_yes=2), allow_test_doubles=True)
+                       quorum=QuorumPolicy.high_assurance(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
             tk = TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
-                        quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+                        quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
             decision = tk.authorize(
                 {"tool": "search", "amount_usd": 0, "data_class": "public", "irreversible": False},
                 {"q": "weather"}, "search")

@@ -96,6 +96,9 @@ class QuorumPolicy:
     require_path_a_first: bool = False          # stored, not a skip
     require_local_yes: bool = False             # a local judge in the set must itself vote yes
                                                 # (a config error if no judge is local)
+    # Judge != monitored agent (identity.py): a judge on the agent's upstream host or endpoint with a
+    # different model is refused unless this is set. Using it is written to the ledger.
+    allow_same_provider_judge: bool = False
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
     tool_args_on_derive_deny: bool = False
@@ -130,6 +133,8 @@ class QuorumPolicy:
             raise QuorumConfigError("require_local_yes must be a boolean")
         if not isinstance(self.tool_args_on_derive_deny, bool):
             raise QuorumConfigError("tool_args_on_derive_deny must be a boolean")
+        if not isinstance(self.allow_same_provider_judge, bool):
+            raise QuorumConfigError("allow_same_provider_judge must be a boolean")
 
     @classmethod
     def high_assurance(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
@@ -169,7 +174,8 @@ class QuorumPolicy:
                 "heterogeneity_scope": self.heterogeneity_scope, "judge_inputs": self.judge_inputs,
                 "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first,
                 "require_local_yes": self.require_local_yes,
-                "tool_args_on_derive_deny": self.tool_args_on_derive_deny}
+                "tool_args_on_derive_deny": self.tool_args_on_derive_deny,
+                "allow_same_provider_judge": self.allow_same_provider_judge}
 
     @property
     def effective_min_responding(self) -> int:

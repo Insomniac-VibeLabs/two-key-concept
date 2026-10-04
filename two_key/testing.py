@@ -40,6 +40,12 @@ class HeuristicJudge(Judge):
                       "; ".join(why) or "no material conflict (heuristic test double)")
 
 
+# A declared monitored agent for tests and demos. In-process, so TwoKey accepts it only with
+# allow_test_doubles=True. Real deployments declare monitored_agent in judges.yaml.
+TEST_AGENT = {"id": "test-agent", "model": "test-agent", "provider": "test-double",
+              "base_url": "in-process://test-agent", "credential": "none"}
+
+
 class FixedJudge(Judge):
     """Always returns the given vote. Useful for quorum tests."""
 

@@ -2,6 +2,11 @@
 
 ``authorize_from_agent`` always runs both paths and does not execute tools.
 Hosting (local or cloud) is recorded and never treated as trust.
+
+``TwoKey`` refuses to start (``TwoKeyConfigError``) with no judge, with no
+Path B deadline, with duplicate judge ids, without an operator declaration
+of the monitored agent (``monitored_agent_required:``), or when a judge
+could be that agent (``judge_matches_agent:``; see identity.py).
 """
 
 from __future__ import annotations
@@ -15,6 +20,8 @@ from .agents import parse_proposal
 from .capability import CapabilityIssuer, open_capability_key
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
+from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation,
+                       configured_agent_identity, judge_identity)
 from .derive import DeriveError, blocked_from_rules, derive, disagreement, disallowed_party, form_for
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
@@ -49,7 +56,7 @@ class Decision:
 class TwoKey:
     def __init__(self, ledger, public_key, constitution: Constitution, judges: list, *,
                  private_key=None, quorum: QuorumPolicy | None = None, ttl_seconds: int = 120,
-                 allow_test_doubles: bool = False, clock=None):
+                 allow_test_doubles: bool = False, clock=None, monitored_agent: Any = None):
         if not allow_test_doubles and any(getattr(j, "is_test_double", False) for j in judges):
             raise ValueError("test-double judges refused; pass allow_test_doubles=True only for offline tests")
         if not constitution.specs_enforced:
@@ -76,6 +83,8 @@ class TwoKey:
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
                                     "number, not None")
         check_judge_set(self.judges, self.quorum)
+        # Judge != monitored agent, from operator configuration only (identity.py).
+        self.separation = self._check_separation(monitored_agent, allow_test_doubles)
         self.ttl_seconds = ttl_seconds
         # The minting key is not the principal key, and it is not given to the gateway.
         self.issuer = CapabilityIssuer(open_capability_key(ledger), clock=clock) if private_key else None
@@ -85,8 +94,32 @@ class TwoKey:
             "bytecode_hash": self.compiled.bytecode_hash,
             "nl_hash": self.compiled.nl_hash,
             "spec_hash": self.compiled.spec_hash,
+            "judge_agent_separation": self.separation.to_record(),
         })
         self.ledger.checkpoint()
+
+    def _check_separation(self, monitored_agent: Any, allow_test_doubles: bool) -> SeparationReport:
+        """Refuse to start if any judge could be the monitored agent. See identity.py."""
+        if monitored_agent is None:
+            raise TwoKeyConfigError("monitored_agent_required: declare the monitored agent (monitored_agent= "
+                                    "with model, provider, base_url, and credential_env or credential: none) "
+                                    "whenever judges are configured")
+        decls = monitored_agent if isinstance(monitored_agent, (list, tuple)) else [monitored_agent]
+        try:
+            agents = []
+            for d in decls:
+                if isinstance(d, AgentDeclaration) or isinstance(d, Mapping):
+                    if not isinstance(d, AgentDeclaration):
+                        d = AgentDeclaration.from_mapping(d)
+                    agents.append(d.resolve(allow_in_process=allow_test_doubles))
+                elif all(hasattr(d, k) for k in ("agent_id", "model", "base_url", "credential")):
+                    agents.append(configured_agent_identity(d))  # a MonitoredAgent from agents.yaml
+                else:
+                    raise IdentityError("monitored_agent must be a mapping, an AgentDeclaration, or a MonitoredAgent")
+            judges = [judge_identity(j) for j in self.judges]
+            return check_separation(agents, judges, self.quorum.allow_same_provider_judge)
+        except IdentityError as e:
+            raise TwoKeyConfigError(str(e)) from e
 
     @classmethod
     def load(cls, ledger, public_key, envelope: dict, judges: list, **kw) -> "TwoKey":

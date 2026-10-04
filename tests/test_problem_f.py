@@ -16,7 +16,7 @@ from two_key.gateway import ToolGateway
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
-from two_key.testing import FixedJudge
+from two_key.testing import TEST_AGENT, FixedJudge
 
 
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
@@ -57,7 +57,7 @@ def _engine(tmp, specs=SPECS, rules=RULES):
               FixedJudge("j1", "yes", provider="p1", vendor="v1")]
     constitution = verify_signed(env, key.public_key())
     tk = TwoKey(ledger, key.public_key(), constitution, judges, private_key=key,
-                quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+                quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
     return key, tk
 
 
@@ -190,7 +190,7 @@ class ProblemFTests(unittest.TestCase):
             other["email_draft"] = dict(SPECS["email_draft"], data_class_floor="personal")
             envelope = sign_constitution(PROSE, RULES, key, other)
             other_tk = TwoKey(tk.ledger, key.public_key(), verify_signed(envelope, key.public_key()),
-                              tk.judges, private_key=key, quorum=tk.quorum, allow_test_doubles=True)
+                              tk.judges, private_key=key, quorum=tk.quorum, allow_test_doubles=True, monitored_agent=TEST_AGENT)
             gateway = ToolGateway(tk.ledger, tk.issuer, other_tk.compiled,
                                   tools={"email_draft": lambda a: a})
             result = gateway.invoke(decision.token, "email_draft", args)
@@ -456,7 +456,7 @@ class ProblemFTests(unittest.TestCase):
                 judges = [Rec("j0", "yes", provider="p0", vendor="v0", local_weights=True),
                           Rec("j1", "yes", provider="p1", vendor="v1")]
                 tk = TwoKey(ledger, key.public_key(), verify_signed(envelope, key.public_key()), judges,
-                            private_key=key, quorum=policy, allow_test_doubles=True)
+                            private_key=key, quorum=policy, allow_test_doubles=True, monitored_agent=TEST_AGENT)
                 denied = tk.authorize(
                     {"tool": "pay_bill", "data_class": "financial", "irreversible": True},
                     {"currency": "usd", "to": "power-co.example", "secret": "hide-me"},

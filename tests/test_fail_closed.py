@@ -14,7 +14,7 @@ from two_key.judges.ollama import OllamaJudge
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
-from two_key.testing import FixedJudge, RaisingJudge
+from two_key.testing import TEST_AGENT, FixedJudge, RaisingJudge
 
 RULES = [{"id": "tools", "allow_only_tools": ["search"]}]
 SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
@@ -54,7 +54,7 @@ def engine(tmp, judges, quorum=None, **kw):
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
     return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
-                  private_key=key, quorum=quorum, allow_test_doubles=True, **kw)
+                  private_key=key, quorum=quorum, allow_test_doubles=True, monitored_agent=TEST_AGENT, **kw)
 
 
 class OneJudgeFailureIsADeny(unittest.TestCase):

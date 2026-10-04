@@ -8,7 +8,7 @@ from two_key.judges.ollama import OllamaJudge
 from two_key.judges.openai_compat import OpenAICompatibleJudge
 from two_key.netloc import host_is_local, host_is_loopback
 from two_key.quorum import QuorumConfigError, QuorumPolicy, check_judge_set
-from two_key.testing import FixedJudge
+from two_key.testing import TEST_AGENT, FixedJudge
 
 A = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
 
@@ -79,7 +79,7 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
                                     {"search": {"irreversible": False, "data_class_floor": "public"}})
             with self.assertRaises(QuorumConfigError):
                 TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), js,
-                       private_key=key, quorum=p, allow_test_doubles=True)
+                       private_key=key, quorum=p, allow_test_doubles=True, monitored_agent=TEST_AGENT)
         with self.assertRaises(JudgeConfigError):
             load_config({"judges": [{"id": "x", "type": "openai_compatible", "base_url": "https://api.x.ai/v1",
                                      "model": "m", "auth": {"type": "env", "var": "X"}}],

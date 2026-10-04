@@ -11,7 +11,7 @@ from two_key.judges.config import JudgeConfigError, load_config
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy, convene
-from two_key.testing import FixedJudge
+from two_key.testing import TEST_AGENT, FixedJudge
 
 A = normalize_action({"tool": "pay"})
 
@@ -38,7 +38,7 @@ class DuplicateJudgeIds(unittest.TestCase):
             for judges in (dup(), [FixedJudge("", "yes")]):
                 with self.assertRaises(TwoKeyConfigError) as raised:
                     TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
-                           private_key=key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True)
+                           private_key=key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True, monitored_agent=TEST_AGENT)
                 self.assertTrue(str(raised.exception).startswith("duplicate_judge_id:"))
 
     def test_config_loader_refuses(self):

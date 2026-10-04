@@ -205,18 +205,20 @@ class LLMJudge(Judge):
             headers = self._auth_headers()
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(f"credential: {e}")
+        sessions = {agent_session} if isinstance(agent_session, str) else set(agent_session or ())
+        sessions.discard("")
+        if self.is_cloud() and not sessions:
+            return self.abstain("cloud_judge_session_required")
+        # Second layer behind the start-up check (identity.py), for every judge, local or cloud:
+        # a judge must not call its model with the monitored agent's own credential.
+        tokens = []
+        auth = headers.get("Authorization", "")
+        if auth.lower().startswith("bearer "):
+            tokens.append(auth.split(" ", 1)[1].strip())
+        tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
+        if any(token and token in sessions for token in tokens):
+            return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():
-            sessions = {agent_session} if isinstance(agent_session, str) else set(agent_session or ())
-            sessions.discard("")
-            if not sessions:
-                return self.abstain("cloud_judge_session_required")
-            tokens = []
-            auth = headers.get("Authorization", "")
-            if auth.lower().startswith("bearer "):
-                tokens.append(auth.split(" ", 1)[1].strip())
-            tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
-            if any(token and token in sessions for token in tokens):
-                return self.abstain("cloud_judge_reused_agent_session")
             # Two-Key's own call id. It is not a session at the provider.
             headers["X-Two-Key-Judge-Session"] = str(uuid.uuid4())
         system = SYSTEM_PROMPT + (ECHO_INSTRUCTION if echo else "")

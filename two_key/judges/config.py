@@ -16,6 +16,13 @@ Format (see examples/judges.yaml):
       ballot_binding: stamp            # stamp | echo
       require_path_a_first: false      # stored, not a skip
       tool_args_on_derive_deny: false # true sends argument bytes after a derive deny
+      allow_same_provider_judge: false # true accepts a judge on the agent's host with another model (logged)
+    monitored_agent:             # required; read by identity.load_monitored_agent_file
+      id: my-agent
+      model: REPLACE_WITH_MODEL
+      provider: openai          # a label; recorded, never compared
+      base_url: https://api.openai.com/v1
+      credential_env: OPENAI_AGENT_API_KEY   # or credential: none for a keyless loopback agent
     judges:
       - id: grok
         type: openai_compatible   # openai_compatible | anthropic | gemini | ollama
@@ -63,7 +70,8 @@ JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", 
               "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
                "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
-               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile"}
+               "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
+               "allow_same_provider_judge"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 vendors, 1 local, local yes).
 QUORUM_PROFILES = {"default", "high_assurance"}
 
@@ -138,6 +146,7 @@ def build_judge(spec: dict, transport=None) -> Judge:
 
 
 def load_config(data: dict, transport=None) -> tuple[list[Judge], QuorumPolicy]:
+    """Judges and quorum policy. The ``monitored_agent`` block is read by identity.load_monitored_agent."""
     if not isinstance(data, dict) or not isinstance(data.get("judges"), list) or not data["judges"]:
         raise JudgeConfigError("config must contain a non-empty 'judges' list")
     judges = [build_judge(j, transport) for j in data["judges"]]
