@@ -32,7 +32,7 @@ class Counting(FixedJudge):
 def engine(tmp):
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
-    return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()),
+    return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                   [Counting("a", "yes", provider="p1")], private_key=key, quorum=QuorumPolicy(required_yes=1),
                   allow_test_doubles=True, monitored_agent=TEST_AGENT)
 

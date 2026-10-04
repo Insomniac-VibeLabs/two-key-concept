@@ -79,7 +79,7 @@ class GatewayAndTwoKey(unittest.TestCase):
             key = generate_private_key()
             env = sign_constitution("c", [{"id": "t", "allow_only_tools": ["search"]}], key,
                                     {"search": {"irreversible": False, "data_class_floor": "public"}})
-            tk = TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()),
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                         [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
                         allow_test_doubles=True, monitored_agent=TEST_AGENT, ttl_seconds=60)
             self.assertEqual(tk.issuer.max_ttl_seconds, 60)

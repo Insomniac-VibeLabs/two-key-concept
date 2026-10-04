@@ -60,7 +60,7 @@ def engine(tmp, judges, quorum=None, **kw):
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
     agent = TEST_AGENT if all(getattr(j, "is_test_double", False) for j in judges) else LOCAL_AGENT
-    return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
+    return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), judges,
                   private_key=key, quorum=quorum, allow_test_doubles=True, monitored_agent=agent, **kw)
 
 

@@ -52,7 +52,7 @@ SPECS = {
 def _engine(tmp, specs=SPECS, rules=RULES):
     key = generate_private_key()
     env = sign_constitution(PROSE, rules, key, specs)
-    ledger = Ledger(Path(tmp), key)
+    ledger = Ledger(Path(tmp, "ledger"), key)
     judges = [FixedJudge("j0", "yes", provider="p0", vendor="v0", local_weights=True),
               FixedJudge("j1", "yes", provider="p1", vendor="v1")]
     constitution = verify_signed(env, key.public_key())
@@ -457,7 +457,7 @@ class ProblemFTests(unittest.TestCase):
                     return super().score(constitution_text, action, proposal)
 
             with tempfile.TemporaryDirectory() as tmp:
-                ledger = Ledger(Path(tmp), key)
+                ledger = Ledger(Path(tmp, "ledger"), key)
                 judges = [Rec("j0", "yes", provider="p0", vendor="v0", local_weights=True),
                           Rec("j1", "yes", provider="p1", vendor="v1")]
                 tk = TwoKey(ledger, key.public_key(), verify_signed(envelope, key.public_key()), judges,

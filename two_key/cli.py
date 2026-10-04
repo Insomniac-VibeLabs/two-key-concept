@@ -69,7 +69,9 @@ def _demo(_args) -> int:
     }
     envelope = sign_constitution(prose, rules, key, specs)
     with tempfile.TemporaryDirectory() as tmp:
-        ledger = Ledger(tmp, key)
+        # The ledger is a subdirectory so its key, witness, capability, and lock directories
+        # (siblings of the ledger) are removed with the temporary directory too.
+        ledger = Ledger(Path(tmp) / "ledger", key)
         judges = [FixedJudge("a", "yes", provider="local-a", vendor="local", local_weights=True),
                   FixedJudge("b", "yes", provider="cloud-b", vendor="other")]
         tk = TwoKey(ledger, key.public_key(), __import__("two_key.constitution", fromlist=["verify_signed"]).verify_signed(envelope, key.public_key()),

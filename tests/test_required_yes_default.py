@@ -37,7 +37,7 @@ class RequiredYesDefault(unittest.TestCase):
         key = generate_private_key()
         env = sign_constitution("Searching is fine.", RULES, key, SPECS)
         with tempfile.TemporaryDirectory() as tmp:
-            tk = TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()),
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                         [FixedJudge("a", "yes", provider="p")], private_key=key,
                         quorum=QuorumPolicy(timeout_seconds=30), allow_test_doubles=True, monitored_agent=TEST_AGENT)
             self.assertEqual(tk.quorum.required_yes, 1)

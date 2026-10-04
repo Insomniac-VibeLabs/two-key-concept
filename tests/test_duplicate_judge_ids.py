@@ -37,7 +37,7 @@ class DuplicateJudgeIds(unittest.TestCase):
                                     {"search": {"irreversible": False, "data_class_floor": "public"}})
             for judges in (dup(), [FixedJudge("", "yes")]):
                 with self.assertRaises(TwoKeyConfigError) as raised:
-                    TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
+                    TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), judges,
                            private_key=key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=True, monitored_agent=TEST_AGENT)
                 self.assertTrue(str(raised.exception).startswith("duplicate_judge_id:"))
 

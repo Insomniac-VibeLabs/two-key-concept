@@ -44,7 +44,7 @@ def oai(jid, model, base_url, key):
 def start(tmp, judges, agent=AGENT, quorum=None, allow_test_doubles=True):
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
-    return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
+    return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), judges,
                   private_key=key, quorum=quorum or QuorumPolicy(required_yes=1),
                   allow_test_doubles=allow_test_doubles, monitored_agent=agent)
 

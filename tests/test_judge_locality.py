@@ -78,7 +78,7 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
             env = sign_constitution("c", [{"id": "t", "allow_only_tools": ["search"]}], key,
                                     {"search": {"irreversible": False, "data_class_floor": "public"}})
             with self.assertRaises(QuorumConfigError):
-                TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), js,
+                TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), js,
                        private_key=key, quorum=p, allow_test_doubles=True, monitored_agent=TEST_AGENT)
         with self.assertRaises(JudgeConfigError):
             load_config({"judges": [{"id": "x", "type": "openai_compatible", "base_url": "https://api.x.ai/v1",

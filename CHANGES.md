@@ -249,6 +249,10 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   by group or others is refused; `--ttl-seconds` is 1-300; decisions record
   `origin: cli`.
 - The judge prompt describes any tool call with derived fields.
+- `two-key demo` opens its ledger in a subdirectory of its temporary
+  directory, so the ledger key, witness, capability key, and lock files no
+  longer outlive the run in the system temp directory. The tests do the
+  same.
 - `authorize_from_agent` measures the proposal text before parsing it:
   over 1,048,576 characters is `proposal_too_large`, and text that is not
   a string (including `None`) or does not parse is `malformed_proposal`.

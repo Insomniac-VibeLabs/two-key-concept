@@ -24,7 +24,7 @@ PAY = {"tool": "pay", "data_class": "public", "irreversible": False}
 def engine(tmp, specs=SPECS):
     key = generate_private_key()
     env = sign_constitution("Pay ada small amounts.", RULES, key, specs)
-    return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()),
+    return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                   [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
                   allow_test_doubles=True, monitored_agent=TEST_AGENT)
 

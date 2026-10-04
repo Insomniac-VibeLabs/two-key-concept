@@ -46,7 +46,7 @@ PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
 def _engine(tmp, votes=("yes", "yes"), quorum=None):
     key = generate_private_key()
     env = sign_constitution(PROSE, RULES, key, SPECS)
-    ledger = Ledger(Path(tmp), key)
+    ledger = Ledger(Path(tmp, "ledger"), key)
     judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", vendor=f"v{i}", local_weights=(i == 0))
               for i, vote in enumerate(votes)]
     tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
@@ -96,9 +96,9 @@ class ConceptTests(unittest.TestCase):
             mismatch = gw.invoke(decision.token, "email_draft", {"to": "eve"})
             self.assertTrue(first.allowed)
             self.assertEqual(calls, [{"to": "ada"}])
-            self.assertFalse(any(p.name.startswith(".redeem-") for p in Path(tmp).iterdir()))
-            self.assertTrue((Path(tmp).parent / f"{Path(tmp).name}.redeem-locks").is_dir())
-            self.assertTrue((Path(tmp).parent / f"{Path(tmp).name}.lock").is_file())
+            self.assertFalse(any(p.name.startswith(".redeem-") for p in Path(tmp, "ledger").iterdir()))
+            self.assertTrue((Path(tmp) / "ledger.redeem-locks").is_dir())
+            self.assertTrue((Path(tmp) / "ledger.lock").is_file())
             self.assertEqual(replay.reason, "already_redeemed")
             self.assertFalse(mismatch.allowed)
 
@@ -207,18 +207,18 @@ class ConceptTests(unittest.TestCase):
     def test_ledger_ciphertext_and_witness(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp)
-            raw = Path(tmp, "entries.jsonl").read_text()
+            raw = Path(tmp, "ledger", "entries.jsonl").read_text()
             self.assertNotIn("constitution_loaded", raw)
             self.assertIn("two-key-concept-ledger-enc/1", raw)
-            self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp).iterdir()))
+            self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp, "ledger").iterdir()))
             self.assertTrue(tk.ledger.witness_path.exists())
-            self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp)) + "/"))
+            self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp, "ledger")) + "/"))
             key = tk.ledger.private_key
-            Ledger(tmp, key).verify()
+            Ledger(Path(tmp, "ledger"), key).verify()
             with self.assertRaises(LedgerError):
-                Ledger(tmp, key, ledger_key_path=Path(tmp, "missing.key"))
+                Ledger(Path(tmp, "ledger"), key, ledger_key_path=Path(tmp, "missing.key"))
             with self.assertRaises(LedgerError):
-                Ledger(tmp, generate_private_key())
+                Ledger(Path(tmp, "ledger"), generate_private_key())
 
     def test_missing_witness_refuses_checkpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -364,7 +364,7 @@ class ConceptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             env = sign_constitution(PROSE, RULES, key, SPECS)
-            ledger = Ledger(Path(tmp), key)
+            ledger = Ledger(Path(tmp, "ledger"), key)
             constitution = verify_signed(env, key.public_key())
             with self.assertRaises(QuorumConfigError):
                 TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
@@ -412,7 +412,7 @@ class ConceptTests(unittest.TestCase):
             self.assertNotEqual(fingerprint(tk.issuer.public_key), fingerprint(tk.public_key))
             cap = tk.ledger.capability_key_path()
             self.assertTrue(cap.is_file())
-            self.assertFalse(str(cap).startswith(str(Path(tmp)) + os.sep))
+            self.assertFalse(str(cap).startswith(str(Path(tmp, "ledger")) + os.sep))
             decision = tk.authorize(
                 {"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False,
                  "counterparty": "ada"},

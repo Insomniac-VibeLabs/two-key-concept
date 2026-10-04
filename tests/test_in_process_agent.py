@@ -21,10 +21,20 @@ SPECS = {"search": {"irreversible": False, "data_class_floor": "public"}}
 def start(judges, allow_test_doubles=True):
     key = generate_private_key()
     env = sign_constitution("Searching is fine.", RULES, key, SPECS)
-    tmp = tempfile.mkdtemp()
-    return TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), judges,
+    holder = tempfile.TemporaryDirectory()
+    _TEMP_DIRS.append(holder)          # removed in tearDownModule, with every side directory inside it
+    tmp = holder.name
+    return TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), judges,
                   private_key=key, quorum=QuorumPolicy(required_yes=1), allow_test_doubles=allow_test_doubles,
                   monitored_agent=TEST_AGENT)
+
+
+_TEMP_DIRS: list = []
+
+
+def tearDownModule():
+    while _TEMP_DIRS:
+        _TEMP_DIRS.pop().cleanup()
 
 
 class InProcessAgent(unittest.TestCase):

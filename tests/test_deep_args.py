@@ -35,7 +35,7 @@ class DeepArgs(unittest.TestCase):
         env = sign_constitution("Paying bob is fine.", RULES, key, SPECS)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.tk = TwoKey(Ledger(Path(self.tmp.name), key), key.public_key(), verify_signed(env, key.public_key()),
+        self.tk = TwoKey(Ledger(Path(self.tmp.name, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                          [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
                          allow_test_doubles=True, monitored_agent=TEST_AGENT)
 

@@ -39,7 +39,7 @@ class DecisionRecord(unittest.TestCase):
             key = generate_private_key()
             env = sign_constitution("Searching is fine.", RULES, key, SPECS)
             policy = QuorumPolicy(required_yes=1, tool_args_on_derive_deny=True)
-            tk = TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()), [judge],
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()), [judge],
                         private_key=key, quorum=policy, monitored_agent=AGENT)
             allowed = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, {}, "s",
                                    agent_session="agent-secret")

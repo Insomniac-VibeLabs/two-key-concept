@@ -74,7 +74,7 @@ class DroppedKeys(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             env = sign_constitution("p", RULES, key, spec([{"json_path": "memo"}]))
-            tk = TwoKey(Ledger(Path(tmp), key), key.public_key(), verify_signed(env, key.public_key()),
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
                         [FixedJudge("a", "yes")], private_key=key, quorum=QuorumPolicy(required_yes=1),
                         allow_test_doubles=True, monitored_agent=TEST_AGENT)
             args = {"meta": {"amt": 5}, "cur": "usd", "to": {"name": "ada"}, "memo": "m", "hidden": "SECRET-VALUE"}
