@@ -232,7 +232,8 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   never a value or an unknown key name.
 - Denies instead of errors: arguments or a proposal over 256 KiB
   (`args_too_large`, `proposal_too_large`; only size and digest are
-  ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`), an
+  ledgered), arguments nested too deeply (`invalid_call:tool args are nested too deeply`,
+  checked before the size so Python 3.10 and 3.11 give the same reason), an
   unreadable derived value (`derive_failed:value_unreadable:<Type>`), any
   other exception in `authorize` (`internal_error:<Type>`), and a deny that
   cannot be ledgered (`ledger_failed:<Type>`, also on stderr).

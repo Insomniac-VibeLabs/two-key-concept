@@ -71,14 +71,15 @@ class ToolGateway:
             return GatewayResult(False, str(e))
         if any(name not in payload for name in _BOUND_FIELDS):
             return GatewayResult(False, "malformed_token")  # a signed token without a binding field
-        if args_too_large(arguments):
-            return GatewayResult(False, "args_too_large")  # before hashing, deriving, or ledgering
-        if payload["tool"] != tool:
-            return GatewayResult(False, "tool_mismatch")
+        # Encoded before the size check, so nesting too deep is invalid_call on every Python version.
         try:
             hashed = args_hash(arguments)
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
             return GatewayResult(False, f"invalid_call:{e}")
+        if args_too_large(arguments):
+            return GatewayResult(False, "args_too_large")  # before deriving or ledgering
+        if payload["tool"] != tool:
+            return GatewayResult(False, "tool_mismatch")
         if payload["args_hash"] != hashed:
             return GatewayResult(False, "args_mismatch")
         if payload["bytecode_hash"] != self.compiled.bytecode_hash or payload["nl_hash"] != self.compiled.nl_hash:

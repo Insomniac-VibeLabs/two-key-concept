@@ -242,7 +242,8 @@ The ledger keeps only `tool_args_size`, `tool_args_digest`, and
 `tool_args_omitted: true` (or the `proposal_` equivalents). Arguments
 nested too deeply to encode are denied in `authorize` and at the gateway
 with `invalid_call:tool args are nested too deeply`; the ledger keeps
-`tool_args_omitted: true` and `tool_args_error`. A value too deep to
+`tool_args_omitted: true` and `tool_args_error`. Encoding runs before the
+size check, so the reason is the same on Python 3.10, 3.11, and 3.12. A value too deep to
 derive is `derive_failed:value_unreadable:RecursionError`.
 
 The token lifetime (`TwoKey(ttl_seconds=...)`, `--ttl-seconds`) is an

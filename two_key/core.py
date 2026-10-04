@@ -214,19 +214,20 @@ class TwoKey:
             normalized = normalize_action(action)
         except ActionValidationError as e:   # the message names the field, never its value
             return self._deny(f"malformed_action:{e}", agent, None, None)
-        # Before anything is derived, judged, or ledgered: only the size and digest are kept.
-        if args_too_large(arguments):
-            return self._deny("args_too_large", agent, None, None, size_record(arguments, "tool_args"))
-        if args_too_large(proposal):
-            return self._deny("proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         if isinstance(arguments, Mapping):
-            # Freeze the arguments to the canonical bytes a token would bind. A value that cannot be
-            # encoded (nested too deeply, NaN, a non-string key) is a deny here, not an error later.
+            # Freeze the arguments to the canonical bytes a token would bind, before the size check:
+            # a value that cannot be encoded (nested too deeply, NaN, a non-string key) is
+            # invalid_call on every Python version, not args_too_large where the sizer recursed out.
             try:
                 canonical_bytes(arguments)
             except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
                 return self._deny(f"invalid_call:{e}", agent, None, None,
                                   {"tool_args_omitted": True, "tool_args_error": str(e)})
+        # Before anything is derived, judged, or ledgered: only the size and digest are kept.
+        if args_too_large(arguments):
+            return self._deny("args_too_large", agent, None, None, size_record(arguments, "tool_args"))
+        if args_too_large(proposal):
+            return self._deny("proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         spec = None
         if self.compiled.specs_enforced:
             spec = self.compiled.tool_specs.get(normalized.tool)
