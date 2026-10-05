@@ -1,4 +1,3 @@
-<meta name="google-site-verification" content="xvg6Z7o8G_VwjlC7yeN8eHnMaz96qBf8MrinPBkQM0U" />
 
 # Two-Key concept
 
