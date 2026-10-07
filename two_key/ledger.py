@@ -127,12 +127,27 @@ def _open(data_key: bytes, record: str) -> str:
 _KEEP_CHARS = 200
 
 
+# Always retained on body_omitted decision/audit entries (compact hashes; never the full body).
+_DIGEST_KEEP = frozenset({"policy_digest", "identities_digest"})
+
+
 def omitted_body(body: dict, error: Exception) -> dict:
     """What ``append_bounded`` records for a body that cannot be encoded: its short scalar fields, and the
-    size and SHA-256 of its JSON (non-JSON values written as ``<TypeName>``), never the other values."""
-    kept = {k: v for k, v in body.items()
-            if type(k) is str and len(k) <= 64 and k not in ("body_size", "body_digest", "body_omitted")
-            and (v is None or type(v) in (bool, int) or (type(v) is str and len(v) <= _KEEP_CHARS))}
+    size and SHA-256 of its JSON (non-JSON values written as ``<TypeName>``), never the other values.
+
+    ``policy_digest`` and ``identities_digest`` are always retained when present (even if longer than
+    the ordinary string cap) so auditors can still bind a truncated decision to the loaded policy
+    and identities. ``body_omitted: true`` flags that other fields were dropped.
+    """
+    kept = {}
+    for k, v in body.items():
+        if type(k) is not str or len(k) > 64 or k in ("body_size", "body_digest", "body_omitted"):
+            continue
+        if k in _DIGEST_KEEP and type(v) is str and len(v) <= 128:
+            kept[k] = v
+            continue
+        if v is None or type(v) in (bool, int) or (type(v) is str and len(v) <= _KEEP_CHARS):
+            kept[k] = v
     try:
         data = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                           default=lambda o: f"<{type(o).__name__}>").encode("utf-8", "surrogatepass")

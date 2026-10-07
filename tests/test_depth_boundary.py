@@ -185,6 +185,16 @@ class AppendBounded(unittest.TestCase):
         self.assertEqual(set(entry.body) - {"body_size", "body_digest", "body_omitted", "body_error"}, {"n"})
         self.assertEqual(entry.body["body_error"], "unsupported type object")
 
+    def test_body_omitted_retains_policy_and_identity_digests(self):
+        """Auditors can still bind a truncated decision to the loaded policy/identities (#11)."""
+        body = {"allowed": False, "reason": "x", "policy_digest": "a" * 64,
+                "identities_digest": "b" * 64, "secret": deep(MAX_DEPTH)}
+        entry = self.ledger.append_bounded("decision", body)
+        self.assertTrue(entry.body["body_omitted"])
+        self.assertEqual(entry.body["policy_digest"], "a" * 64)
+        self.assertEqual(entry.body["identities_digest"], "b" * 64)
+        self.assertNotIn("secret", entry.body)
+
     def test_a_body_that_encodes_is_unchanged(self):
         self.assertEqual(self.ledger.append_bounded("x", {"a": [1, 2]}).body, {"a": [1, 2]})
 
