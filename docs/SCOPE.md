@@ -13,6 +13,11 @@ It keeps:
 - a capability key outside the ledger directory. The gateway verifies with the public half only
 - a single-use token and a gateway that alone is meant to run the tool
 
+Modules that carry these rules include `two_key/identity.py` (judge ≠ agent),
+`two_key/strict.py` (duplicate-key JSON/YAML), `two_key/audit.py` (decision
+digest checks), and the per-install fingerprint key beside the ledger
+(`*.ledger-key/fingerprint.key`).
+
 It does not keep scanning, antivirus, DLP, PKI, permissioned-chain
 anchoring, seed phrases, or hybrid ML-DSA. Those are in
 [two-key](https://github.com/Insomniac-VibeLabs/two-key).

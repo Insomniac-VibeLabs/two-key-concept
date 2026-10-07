@@ -540,7 +540,6 @@ Open items that no setting changes:
   the audit self-check, and five bare `assertRaises`.
 - Comments that still cite design notes not in the repository.
 - Names that differ from two-key for the same concept.
-- Stale docs: the test count in llms.txt, and the file list in SCOPE.md.
 
 ## Stop
 
