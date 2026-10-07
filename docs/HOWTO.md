@@ -59,8 +59,7 @@ path covers the value and its children. `shape` is optional: `string`,
 `number`, or `list` (a list of strings). `max_length` bounds a string or
 a list. A nested value, a boolean, or a too-long value is
 `payload_shape`. Shape does not read the contents. Classification of what
-the text means is left to Path B, or to DLP in the full `two-key`
-repository.
+the text means is left to Path B, or to DLP outside this package.
 
 A counterparty path must include `allow`, a non-empty list of strings. A
 party that is not on that list is `counterparty_not_allowed`. The tool
@@ -157,7 +156,7 @@ agent:
   `ollama.com` even through a local daemon. This is
   `same_model_same_upstream`, and declared tenants do not lift it. Two
   accounts on one upstream serving one model are still that model from that
-  provider, as in two-key. Upstreams are compared as lower-case `host` or
+  provider. Upstreams are compared as lower-case `host` or
   `host:port` with the default port removed;
 - or either side is unresolved: an unrecognized host or router whose model
   names no maker, or a loopback or private endpoint (a local proxy such as
@@ -552,8 +551,7 @@ names the setting or declaration that controls it.
   `ttl_out_of_range:`.
 - On Python 3.12, an agent reply nested past 62 levels parses and is
   `invalid_call`. On 3.10 and 3.11 it is `malformed_proposal`. Both deny.
-- `agent_session` is the frozen session. The agent's key is not added to it
-  (unlike two-key 3af9f0a).
+- `agent_session` is the frozen session. The agent's key is not added to it.
 - The ledger's own records are read with the standard JSON parser, not the
   strict one, because they are signed and hash-chained.
 - `audit.check_decision_digests` on a ledger from before 0.2.0 reports the
@@ -563,7 +561,6 @@ Open items that no setting changes:
 - Test gaps: the ledger's O_EXCL path, the case-folded control-path check,
   the audit self-check, and five bare `assertRaises`.
 - Comments that still cite design notes not in the repository.
-- Names that differ from two-key for the same concept.
 
 ## Stop
 
