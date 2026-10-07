@@ -4,28 +4,51 @@
 # Anthropic caches the constitution, not the action record. No secrets in this file.
 # Path B judges: pick whichever AIs you want, local or vendor.
 # No secrets go in this file. API keys are read from environment variables
-# (or the OS keyring) at call time.
+# (or the OS keyring) at startup, for the judge-is-not-the-agent check, and
+# again at call time. A judge key that cannot be read refuses to start.
 # Replace every REPLACE_WITH_MODEL with a model name your account can use.
 # The local judge is already set to the recommended model, qwen2.5:7b
 # (Qwen2.5-7B-Instruct). The weights are not in this repository.
 # A ballot key, if used, is ballot_key_env: the name of an environment variable. Do not write the secret here.
 # The loader refuses both placeholders.
-# receives_proposal: true sends that judge the proposal. Recommended: a different model than the monitored agent.
-# A cloud judge requires agent_session_env on TwoKey: the environment variable holding the monitored agent's credential. Two-Key reads it at startup.
+# receives_proposal: true sends that judge the proposal.
+# A judge that is not on a loopback host denies the round unless authorize is
+# given the agent session (two-key authorize --agent-session-env NAME). A judge
+# whose key equals that session abstains (cloud_judge_reused_agent_session).
+
+# Only the top-level keys judges, quorum, and monitored_agent are accepted,
+# and a key repeated in one mapping is refused.
+
+# The monitored agent, declared by you, never by the agent. Required. At
+# startup Two-Key refuses (judge_matches_agent:) only when a judge is the
+# same agent: the same credential, a shared tenant id, or the same model on
+# the same endpoint host:port. An identity it cannot resolve also refuses
+# (for example a local proxy serving an alias model; declare upstream:).
+# The same provider with a different model is allowed.
+# This example agent is ChatGPT, which is not one of the judges below.
+monitored_agent:
+  id: chatgpt
+  model: REPLACE_WITH_MODEL
+  provider: openai                   # a label; recorded, never compared
+  base_url: https://api.openai.com/v1
+  credential_env: OPENAI_AGENT_API_KEY   # the env var name, not the key
+  # credential: none                 # instead, only for a keyless loopback/private agent
+  # tenant: {organization: org-123}  # optional mapping: organization, project, account, deployment; also on a judge
+  # upstream: api.openai.com         # optional, for a local proxy: where it routes (attested, recorded, not verified)
 
 quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"
   min_responding: 2          # refuse to decide if fewer valid ballots arrive
   min_distinct_providers: 1  # 1 = this provider count is not itself a floor
-  timeout_seconds: 45        # judges run in parallel; any judge not done by then abstains
-  # Diversity floors are on unless you set them lower.
-  # Default: min_vendors 2, min_local_judges 1, require_local_yes true.
-  # This file's judge list has several vendors and one local Ollama judge,
-  # so the defaults pass. Opt out with, for example:
-  # min_vendors: 1
-  # min_local_judges: 0
-  # require_local_yes: false
-  # QuorumPolicy.section4() also sets require_path_a_first. TwoKey.authorize
+  timeout_seconds: 45        # required hard deadline; judges run in parallel; any judge not done by then abstains (null is refused)
+  # The default needs one judge and has no diversity floors:
+  # min_vendors 1, min_local_judges 0, require_local_yes false.
+  # profile: high_assurance  # opt-in: min_vendors 2, min_local_judges 1, require_local_yes true.
+  #                          # Recommended for destructive, irreversible, financial, or external-send tools.
+  #                          # This file's judges (several vendors, one local Ollama judge) meet it.
+  # require_local_yes: true needs at least one local judge, or Two-Key does not start.
+  # allow_same_provider_judge: deprecated and ignored; the same provider is allowed by default
+  # QuorumPolicy.section4() is high_assurance plus require_path_a_first. TwoKey.authorize
   # still runs both paths; it does not read that flag.
   # heterogeneity_scope: selection   # selection | responding
   # judge_inputs: record_only        # record_only | record_and_proposal
@@ -60,15 +83,18 @@ judges:
   # https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
   # Setup: docs/HOWTO.md#recommended-local-judge-qwen25-7b-instruct
   - id: local-qwen
-    type: ollama                     # local weights via Ollama, no key needed
+    type: ollama                     # Ollama on this machine, no key needed
     provider: local
     vendor: alibaba
     base_url: http://localhost:11434
     model: qwen2.5:7b
-    # local_weights: true            # the default for ollama; counts toward min_local_judges
+    # local_weights defaults to true only for a loopback or private base_url host. A judge is local
+    # (counts toward min_local_judges) only if the flag is true AND the host is loopback or private.
     # weights_sha256: <hash of the GGUF>   # optional, recorded in ballots, not verified
 
-# Optional per-judge keys: vendor (defaults to provider), local_weights, weights_sha256, echo_binding.
+# Optional per-judge keys: vendor (defaults to provider; compared case-insensitively), local_weights,
+# weights_sha256, echo_binding, tenant (a mapping, as above), upstream (for a local proxy).
+# Judge ids must be unique.
 
 # Other working auth modes:
 #   auth: {type: keyring, service: two-key, username: openai}

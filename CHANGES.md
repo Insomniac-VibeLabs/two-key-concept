@@ -188,6 +188,265 @@ Tag `v0.1.12` on `main`. No behavior change in this version. The `working`
 line through 0.1.11 is this tree. `v0.1.6` stays on the previous tree.
 Not published to PyPI.
 
+## 0.2.0 — 2026-10-03
 
+On branch `working`. Not tagged yet; `main` stays at `v0.1.12`. Not
+published to PyPI. This version changes configuration and refuses some
+setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 
+### Changed
 
+- Path B needs one judge by default and has no diversity floors.
+  `QuorumPolicy.high_assurance()` (`profile: high_assurance`) turns on two
+  vendors, one local judge, and a local yes; use it for destructive,
+  irreversible, financial, or external-send tools. `required_yes` defaults
+  to `min(2, number of judges)`.
+- No judge may be the monitored agent. The operator declares the agent
+  (`monitored_agent:` or `TwoKey(monitored_agent=...)`). Refused at start:
+  the same credential fingerprint, a shared tenant id, the same normalized
+  model on the same endpoint `host:port` (local aliases such as `0.0.0.0`,
+  `127.1`, `localhost.localdomain`, and this machine's own addresses are one
+  endpoint), the same model through a loopback or private proxy or daemon
+  with no declared `upstream:`, the same model reaching the same upstream
+  (`same_model_same_upstream`: declared upstreams and `ollama.com` for a
+  cloud model count as endpoints, and different declared tenants do not
+  lift it, as in two-key), or an unresolved identity (an
+  unknown router, or a local proxy serving an alias model without a declared
+  `upstream:`). Declared tenants are scoped by provider family, not by a
+  proxy's address, and upstreams are normalized (`host[:port]`, default port
+  removed). The same provider is allowed; `allow_same_provider_judge`
+  is a no-op. The result, with `resolved_by` for each identity, is in
+  `constitution_loaded`; each decision carries `identities_digest` and
+  `policy_digest` (the full quorum policy is in `constitution_loaded` only).
+  `two_key.audit.check_decision_digests(ledger)` recomputes both and lists
+  any decision that does not match.
+- Credential fingerprints are HMAC-SHA256 of the stripped secret under a
+  per-install key, `<ledger>.ledger-key/fingerprint.key` (O_EXCL, 0600).
+- Locality comes from the endpoint host and an explicit allowlist
+  (loopback, RFC 1918, fc00::/7), never from a declared flag or
+  `is_private`. A `:cloud` / `-cloud` model (an Ollama cloud model) is cloud
+  and never local for every judge class (OllamaJudge, OpenAI-compatible,
+  and the rest), and a monitored agent with one is hosted `cloud`.
+- Start-up refuses: no judge, `timeout_seconds: null`, duplicate or empty
+  judge ids, `require_local_yes` with no local judge, an unreadable judge
+  credential, unknown top-level config keys, overlapping payload and field
+  paths (compared case-insensitively), a TTL outside 1-300 seconds, and the in-process test agent unless
+  every judge is a test double.
+- Every JSON and YAML input refuses a repeated key and JSON NaN/Infinity.
+- Ballots pair with judges by position; a ballot naming another judge
+  abstains (`judge_id_mismatch`). Vendor and provider names compare
+  case-insensitively (NFKC, trimmed) in the diversity and distinct-provider
+  counts.
+- The raw action claim is capped at 64 KiB before it is read
+  (`action_too_large`, size and digest only). A tool name is an identifier
+  of at most 128 characters. `malformed_action:` reasons name the field,
+  never a value or an unknown key name.
+- Denies instead of errors: arguments or a proposal over 256 KiB
+  (`args_too_large`, `proposal_too_large`; only size and digest are
+  ledgered), arguments nested more than 62 levels (`invalid_call:tool args are nested too deeply`,
+  checked before the size so every Python version gives the same reason), an
+  unreadable amount (`derive_failed:amount_unreadable`, for example
+  `10**400`) or other derived value (`derive_failed:value_unreadable:<Type>`),
+  any other exception in `authorize` (`internal_error:<Type>`), and a deny
+  that cannot be ledgered (`ledger_failed:<LedgerError message>`, or
+  `ledger_failed:<Type>` for any other exception; also on stderr).
+- Logged opt-in `quorum: allow_same_model_distinct_tenant: true` (default
+  off). It allows the agent's model on the same endpoint or upstream only
+  when both sides declare a tenant, the scoped tenant ids are non-empty and
+  disjoint, and both have keys with different fingerprints. It prints a
+  stderr warning and records `same_model_tenant_optin` and
+  `same_model_tenant_optin_pairs` (both tenant labels) in
+  `constitution_loaded`. It is part of `policy_digest`. A misspelled key is
+  refused.
+- HOWTO has a "Known trade-offs by configuration" section.
+- A host that is not a recognized vendor, router, or inference host is
+  treated as a proxy for the same-model check, like a local one. A `maker/`
+  model prefix no longer identifies it. With the agent's model and no
+  non-overlapping `upstream:`, it is refused ("through a local or
+  unrecognized proxy or daemon ... no declared upstream",
+  `same_model_unknown_upstream`).
+- One copy: tool args, the action claim, and the proposal are each copied
+  once into built-in types (`canonical.to_plain`), in `authorize` and at the
+  gateway. Any `collections.abc.Mapping` becomes a dict, a tuple becomes a
+  list, and a `str`, `int` or `float` subclass becomes its base value. The
+  size cap, the token's `args_hash`, the judges, the ledger and the tool all
+  read that copy. A custom Mapping is no longer measured by its `str()`.
+  Before this, a 5 MB Mapping in `raw` could get a token. The sizer no longer
+  falls back to `str()` or `repr()`: a value it cannot encode as JSON counts
+  as too large. Copying stops after `cap // 2` values, so a Mapping that
+  never stops iterating is `args_too_large` / `action_too_large`
+  (`*_size: -1`) rather than a hang.
+- Depth: the canonical encoder refuses containers nested more than 64
+  levels (`canonical.MAX_DEPTH`), counted without recursion. Tool args, the
+  action claim, and a structured (non-text) proposal are held to 62
+  (`MAX_INPUT_DEPTH`). That leaves room for the two levels an input gains
+  inside a ledger entry or a judge's record (`raw.tool_args`), so an accepted
+  input always encodes again. One level more is a ledgered deny:
+  `invalid_call:tool args are nested too deeply`,
+  `malformed_action:action claim is nested too deeply`, or
+  `malformed_proposal`. It is never `internal_error`. A ledger body that
+  still cannot be encoded is recorded by `Ledger.append_bounded` with only
+  its short scalar fields, `body_size`, `body_digest`, `body_omitted`, and
+  `body_error`. The entry is not lost.
+- Tokens: a lifetime over the TTL (`ttl_too_long`), an issue time more than
+  5 s ahead (`issued_in_future`), and missing or non-finite time fields
+  (`malformed_token`) are refused. The capability key is created
+  exclusively, never regenerated after issuance, and its fingerprint is
+  pinned and checked by the gateway. A ledger that has issued tokens but
+  has no pinned fingerprint is refused at start-up
+  (`capability_key_unpinned:`).
+- CLI: the bearer token is never printed (`token_jti`, `token_digest`);
+  `--emit-token PATH` writes it 0600 and refuses to overwrite;
+  `--agent-session-env NAME` replaces `--agent-session`; a `--key` readable
+  by group or others is refused; `--ttl-seconds` is 1-300; decisions record
+  `origin: cli`.
+- The judge prompt describes any tool call with derived fields.
+- The gateway ledgers every refusal of an authenticated token as
+  `gateway_denied` (`reason`, `jti`, `tool` if it is a short identifier,
+  else `tool_size`/`tool_digest`, and `tool_args_size`/`tool_args_digest`).
+  A token that does not verify writes nothing.
+- Arguments are encoded once per `authorize` and once per gateway call:
+  the canonical bytes give the size check and the token's `args_hash`
+  (they were serialized up to three times). The size cap measures compact
+  JSON (no spaces after `,` and `:`).
+- `two-key demo` opens its ledger in a subdirectory of its temporary
+  directory, so the ledger key, witness, capability key, and lock files no
+  longer outlive the run in the system temp directory. The tests do the
+  same.
+- B1: `agent_id` and `hosting` on `authorize` / `authorize_from_agent` are
+  operator/library metadata. Non-`str` is `invalid_agent_metadata`; after
+  strip, over 256 characters is `agent_metadata_too_large` (ledger
+  `field`/`size`/`digest` only). `append_bounded` with `body_omitted` on a
+  path about to issue a token becomes `ledger_body_too_large` instead of an
+  allow. Shared helper: `two_key.agent_meta`.
+- `authorize_from_agent` measures the proposal text before parsing it:
+  over 1,048,576 characters is `proposal_too_large`, and text that is not
+  a string (including `None`) or does not parse is `malformed_proposal`.
+  Both are ledgered denies with size and digest only, instead of an
+  exception.
+- The ledger key is created with O_EXCL and O_NOFOLLOW at mode 0600 in a
+  0700 directory, and is refused on open if it is group- or
+  world-readable, a symlink, or not 32 bytes (`ledger_key_insecure:`,
+  `ledger_key_unreadable:`). The wrapped data key (`keywrap.json`) is
+  written to an O_EXCL temporary file under the ledger lock and moved into
+  place with `os.replace`.
+
+### Upgrading from 0.1.12
+
+1. Add a `monitored_agent:` block to judges.yaml (or pass
+   `TwoKey(monitored_agent=...)`): `model`, `provider`, `base_url`, and
+   `credential_env` (or `credential: none` for a keyless local agent). Set
+   that environment variable where Two-Key starts.
+2. Make every judge key readable at start-up, and keep it different from
+   the agent's key.
+3. Set `timeout_seconds` to a number. Give every judge a unique `id`.
+4. If you relied on the old default floors, add `profile: high_assurance`
+   to the quorum block. If you want one yes from two judges, set
+   `required_yes: 1`.
+5. Write `tenant` as a mapping (`tenant: {organization: org-123}`), and add
+   `upstream:` to any judge or agent behind a local proxy that serves an
+   alias model, and to any local proxy or daemon that serves the same model
+   as the other side (a daemon with its own weights declares its own
+   address, for example `upstream: localhost:11434`).
+6. Remove `allow_same_provider_judge`, unknown top-level keys, and any key
+   repeated in one mapping.
+7. CLI: replace `--agent-session VALUE` with `--agent-session-env NAME`,
+   read the token from `--emit-token PATH`, and `chmod 600` the `--key`
+   file. Keep `--ttl-seconds` at 300 or less.
+8. A 0.1.12 ledger that has issued tokens has no pinned capability key and
+   is refused (`capability_key_unpinned:`). Keep it for audit and start a
+   new ledger directory.
+9. Tests that use `testing.TEST_AGENT` must use only test-double judges;
+   with a real judge, declare a real agent.
+10. `Decision.to_record()` no longer includes `token`; it has `token_jti`
+    and `token_digest`. Read the bearer token from `decision.token`.
+11. `QuorumPolicy().required_yes` is `None` until `TwoKey` resolves it
+    against the judge list (`min(2, judges)`). Code that read the default
+    as an integer must handle `None` or set `required_yes` explicitly.
+12. A judge on a LAN or private address with `local_weights: true` is now
+    cloud for the session check (only loopback is not), so `authorize`
+    needs an `agent_session` (`cloud_judge_session_required`). It still
+    counts as a local judge for the quorum floors.
+13. Tokens minted by 0.1.12 will most likely be refused
+    (`capability_key_mismatch`): 0.1.12 did not pin the capability key in
+    `constitution_loaded`. Tokens live at most 300 seconds; re-authorize.
+
+#### Troubleshooting: start-up refusals
+
+| Message starts with | Cause | Fix |
+|---|---|---|
+| `monitored_agent_required:` | No agent declared | Add `monitored_agent:` (step 1) |
+| `monitored_agent ...: declare <field>` / `unknown key(s)` / `declare exactly one of credential_env or credential: none` | Incomplete or misspelled declaration | Give `model`, `provider`, `base_url`, and one credential key; allowed keys are `id`, `model`, `provider`, `base_url`, `credential_env`, `credential`, `tenant`, `upstream` |
+| `monitored_agent ...: credential_env X is not set` | The agent key variable is unset | Export it where Two-Key starts |
+| `monitored_agent ...: credential: none is only for a loopback or private-address agent` | `credential: none` on a remote host | Use `credential_env` |
+| `judge_matches_agent: ... same credential fingerprint` | A judge uses the agent's key (whitespace ignored) | Give the judge its own key |
+| `judge_matches_agent: ... same model '<m>' on the same endpoint <host:port>` | The judge is the agent's model at the agent's endpoint | Use another model, or the same model through another endpoint and key |
+| `judge_matches_agent: ... same tenant <id>` | Same Azure resource or deployment, Vertex project, Bedrock account and region, or declared org/project | Use a judge in another tenant |
+| `judge_matches_agent: ... through a local proxy or daemon (...) with no declared upstream` | The same model as the agent through a loopback or private endpoint that declares no `upstream:` | Use another model, or declare `upstream:` on the proxy or daemon (a different provider, or its own address for local weights) |
+| `judge_matches_agent: ... through the same upstream <host>` | The same model reaching the agent's endpoint or declared upstream (or `ollama.com` for a cloud model) | Use another model or a non-overlapping upstream (another provider); different tenants on one upstream are still refused |
+| `judge_matches_agent: ... upstream unresolved` | Unknown router or host, or a local proxy serving an alias | Use a `maker/model` id, or declare `upstream:` (attested, not verified) |
+| `... tenant must be a mapping` / `unknown tenant key(s)` | Old string or list `tenant` | `tenant: {organization: ..., project: ..., account: ..., deployment: ...}` |
+| `... upstream entries must be non-empty strings` | Empty or non-string `upstream` | A host string or a list of them |
+| `in_process_agent_refused:` | `TEST_AGENT` (or `in-process://`) with a real judge, or without `allow_test_doubles` | Declare the real agent |
+| `judge '<id>': credential could not be read at start-up` | Judge key variable, keyring, or callback unavailable | Make it readable at start-up |
+| `no_judges:` | Empty judge list | Configure at least one judge |
+| `Path B needs a hard deadline` / `timeout_seconds must be a positive number` | `timeout_seconds: null` | Set a number of seconds |
+| `duplicate_judge_id:` | Two judges share an id, or an id is empty | Make ids unique |
+| `judge set is not heterogeneous enough: require_local_yes_without_local_judge` | `require_local_yes` with no local judge | Add a loopback/private judge with local weights, or drop the flag |
+| `judge set is not heterogeneous enough: insufficient_vendors` / `insufficient_local_judges` | `high_assurance` floors not met (vendors now compare case-insensitively) | Add a vendor or a local judge, or leave the default profile |
+| `unknown top-level key(s)` | A typo such as `quorm`, or a key other than `judges`, `quorum`, `monitored_agent` (agents.yaml: `agents`) | Fix the key |
+| `duplicate key '<k>'` | A key repeated in one JSON/YAML mapping (config, rules, constitution, `--args`) | Keep one |
+| `non-standard JSON constant` | `NaN` or `Infinity` in JSON | Use a finite number |
+| `payload path ... overlaps the field path` | A payload path equals, contains, or sits under an amount, currency, or counterparty path, ignoring case (`TO.name` vs `to.name`) | Split the paths |
+| `ttl_out_of_range:` | `ttl_seconds` not an integer from 1 to 300 | Use 1-300 |
+| `capability_key_missing:` / `capability_key_changed:` | The token key was removed or replaced after tokens were issued | Restore `<ledger>.capability/capability.pem`, or start a new ledger |
+| `capability_key_unpinned:` | The ledger has issued tokens but its last `constitution_loaded` entry pins no token key (a 0.1.12 ledger, or an edited one) | Keep the old ledger for audit and start a new one |
+| `capability_key_is_principal_key` | The token key equals the principal key | Remove the copied key; Two-Key creates its own |
+| `fingerprint_key_insecure:` / `fingerprint_key_unreadable:` / `fingerprint_key_unavailable:` | `<ledger>.ledger-key/fingerprint.key` is group/world-readable, a symlink, the wrong size, or cannot be created | `chmod 600` it, restore it, or make the directory writable |
+| `ledger_key_insecure:` / `ledger_key_unreadable:` / `ledger_key_unavailable:` | `<ledger>.ledger-key/ledger.key` is group/world-readable, a symlink, the wrong size, or cannot be created | `chmod 600` it, restore it, or make the directory writable |
+| `key_file_insecure:` / `key_file_unreadable:` | `--key` readable by group or others, a symlink, or missing | `chmod 600` the key |
+| `--agent-session took the secret on the command line` | Old CLI flag | `--agent-session-env NAME` |
+| `refusing to overwrite` | `init-key` or `--emit-token` target exists | Pick a new path |
+| `environment variable NAME is not set` | `--agent-session-env` names an unset variable | Export it |
+
+`allow_same_provider_judge is deprecated and has no effect` is a warning
+on stderr, not a refusal.
+
+#### Troubleshooting: denies
+
+| Deny or abstain reason | Cause | Fix |
+|---|---|---|
+| `action_too_large` | The action claim is over 64 KiB of UTF-8 JSON | Send a normal claim; only size and digest are ledgered |
+| `malformed_action:tool: longer than 128 characters` / `tool: not an identifier ...` | The tool name is too long or has characters outside `a-z 0-9 _ . : / -` | Rename the tool |
+| `malformed_action:unknown action fields (<n>)` / `<field>: ...` | An unknown or invalid action field (the reason names the field, not the value) | Fix the claim |
+| `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON, or agent proposal text over 1,048,576 characters | Send less; only size and digest are ledgered |
+| `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, nested too deeply to parse (a `RecursionError` on any Python version), or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
+| `invalid_call:<why>` (authorize and gateway) | Arguments nested more than 62 levels, NaN, or a non-string key | Flatten or fix the arguments |
+| `malformed_action:action claim is nested too deeply` | The action claim (usually `raw`) nests more than 62 levels | Flatten `raw` |
+| `body_omitted: true` on a ledger entry | The entry's body could not be encoded; only its short fields, size, and digest were kept | Read `body_error`; report it |
+| `derive_failed:amount_unreadable` | The amount cannot be read (for example `10**400`, `"1e400"`, or a non-number) | Send a readable amount |
+| `derive_failed:value_unreadable:<Type>` | Another derived value cannot be read (for example nested too deeply to walk) | Send a readable value |
+| `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |
+| `ledger_failed:<message>` / `ledger_failed:<Type>` | The deny could not be written: a `LedgerError` gives its message (for example `ledger file changed by another writer; reopen the ledger`), any other exception its type (also printed on stderr) | Check the ledger directory |
+| `cloud_judge_session_required` | A judge not on loopback, and no `agent_session` | Pass the agent session (`--agent-session-env`) |
+| `cloud_judge_reused_agent_session` | A judge key equals the agent session | Give the judge its own key |
+| `judge_id_mismatch` (abstain) | A ballot named another judge | Check the judge; the ballot does not count |
+| ballot `duplicate key` / `non-standard JSON constant` (abstain) | The judge repeated a key or sent NaN | Not a yes; check the model |
+| `duplicate_judge_id` | Judges with the same id reached `convene` | Make ids unique |
+| `judge_set_not_heterogeneous:...` | A floor is not met at decision time | As for the start-up message |
+| `insufficient_yes:<y><<k>` with two judges | `required_yes` now defaults to 2 when there are two or more judges | Set `required_yes: 1` if one yes is enough |
+| `ttl_too_long` / `issued_in_future` / `malformed_token` | A token outlives the TTL, is dated ahead, or has missing or non-finite times | Re-authorize; check clocks |
+| `capability_key_mismatch` | The token key is not the one pinned in the ledger | Re-authorize with the current key |
+| `gateway_denied` (ledger entry) | The gateway refused an authenticated token; `reason` says why (`args_mismatch`, `tool_mismatch`, `already_redeemed`, ...) | Read `reason`; values are never ledgered, only size and digest |
+| `AgentConfigError: agent proposal has a duplicate key` | `parse_proposal` or `MonitoredAgent.complete` got a proposal with a repeated key (`authorize_from_agent` denies `malformed_proposal` instead) | Fix the agent's JSON |
+
+### Planned (not done)
+
+- Spec field types become generic. Today a tool spec knows two special
+  field kinds, `amount` (USD or cents) and `counterparties`, plus unread
+  `payload` paths. The plan is a typed field per argument path, each kind
+  with its own limits: string, int, decimal, enum, identifier/principal,
+  path, URL, email, and opaque bytes. `amount` and `counterparty` stop
+  being special cases and become ordinary typed fields that rules can
+  name. Until then the action record keeps `amount_usd` and `counterparty`
+  as fields, with neutral defaults for tools that have neither.

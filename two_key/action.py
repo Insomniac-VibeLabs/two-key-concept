@@ -22,6 +22,7 @@ Insomniac-VibeLabs/two-key, not in this repository.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
@@ -31,6 +32,9 @@ DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
 DEFAULT_IRREVERSIBLE = True
 DEFAULT_DATA_CLASS = "classified"
 MAX_AMOUNT_USD = 1e12  # sanity bound; larger values are rejected as malformed
+# A tool name is an identifier: lower case after case folding, at most MAX_TOOL_NAME_CHARS.
+MAX_TOOL_NAME_CHARS = 128
+TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9_.:/-]{0,%d}" % (MAX_TOOL_NAME_CHARS - 1))
 
 KNOWN_FIELDS = {
     "tool", "amount_usd", "currency", "counterparty", "data_class",
@@ -53,7 +57,10 @@ def _number(value: Any, name: str, *, lo: float = 0.0, hi: float = MAX_AMOUNT_US
     # bool is a subclass of int; reject it explicitly. Numeric strings are rejected.
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ActionValidationError(f"{name}: expected a number, got {type(value).__name__}")
-    f = float(value)
+    try:
+        f = float(value)
+    except OverflowError:  # an int such as 10**400
+        raise ActionValidationError(f"{name}: exceeds maximum {hi}") from None
     if math.isnan(f) or math.isinf(f):
         raise ActionValidationError(f"{name}: must be finite")
     if f < lo:
@@ -99,15 +106,21 @@ def normalize_action(proposed: Action | Mapping[str, Any]) -> Action:
     else:
         raise ActionValidationError("action must be an Action or a mapping")
 
+    # Reasons name the field only. A value or an unknown key name is never copied into a reason
+    # (reasons go to the ledger, stderr, and Decision.reason).
     unknown = set(src) - KNOWN_FIELDS
     if unknown:
-        raise ActionValidationError(f"unknown action fields: {sorted(unknown)}")
+        raise ActionValidationError(f"unknown action fields ({len(unknown)})")
 
     if "tool" not in src:
         raise ActionValidationError("tool: required")
     tool = canon_str(src["tool"], "tool")
     if not tool:
         raise ActionValidationError("tool: must be non-empty")
+    if len(tool) > MAX_TOOL_NAME_CHARS:
+        raise ActionValidationError(f"tool: longer than {MAX_TOOL_NAME_CHARS} characters")
+    if not TOOL_NAME.fullmatch(tool):
+        raise ActionValidationError("tool: not an identifier (a-z, 0-9, and _ . : / -)")
 
     amount = _number(src.get("amount_usd", 0.0), "amount_usd")
     duration = _number(src.get("duration_hours", 0.0), "duration_hours", hi=1e6)
@@ -118,7 +131,7 @@ def normalize_action(proposed: Action | Mapping[str, Any]) -> Action:
 
     data_class = canon_str(src.get("data_class", DEFAULT_DATA_CLASS), "data_class")
     if data_class not in DATA_CLASSES:
-        raise ActionValidationError(f"data_class: {data_class!r} not in {list(DATA_CLASSES)}")
+        raise ActionValidationError("data_class: not a known class")
 
     irreversible = src.get("irreversible", DEFAULT_IRREVERSIBLE)
     if not isinstance(irreversible, bool):

@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,7 +30,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from .canonical import canonical_bytes, canonical_hash
+from .canonical import EncodingError, canonical_bytes, canonical_hash
 from .keys import (
     generate_private_key, load_private_key, public_from_raw, public_key,
     public_raw, save_private_key, save_public_key, sign, verify,
@@ -39,6 +40,42 @@ WRAP_FORMAT = "two-key-concept-ledger-wrap/1"
 RECORD_FORMAT = "two-key-concept-ledger-enc/1"
 _WRAP_INFO = b"two-key-concept-ledger-wrap/1"
 _RECORD_AAD = b"two-key-concept-ledger-enc/1"
+
+
+LEDGER_KEY_BYTES = 32
+
+
+def _write_new_secret(path, data: bytes) -> None:
+    """Create ``path`` with O_CREAT | O_EXCL | O_NOFOLLOW at mode 0600 and write ``data``.
+
+    An existing file or a planted symlink raises FileExistsError instead of being
+    overwritten, and there is no window in which the bytes are readable before a chmod.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def _read_secret(path, size: int, label: str) -> bytes:
+    """Read a ``size``-byte key with O_NOFOLLOW; refuse a non-regular file, group/other access, or a wrong length."""
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as e:
+        raise LedgerError(f"{label}_unreadable: {path}: {e.strerror}") from None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise LedgerError(f"{label}_unreadable: {path} is not a regular file")
+        if st.st_mode & 0o077:
+            raise LedgerError(f"{label}_insecure: {path} is readable by group or others; chmod 600 it")
+        data = os.read(fd, size + 1)
+    finally:
+        os.close(fd)
+    if len(data) != size:
+        raise LedgerError(f"{label}_unreadable: {path} is not a {size}-byte key")
+    return data
 
 
 class LedgerError(RuntimeError):
@@ -85,6 +122,25 @@ def _open(data_key: bytes, record: str) -> str:
         raise
     except Exception as e:
         raise LedgerError("ledger record rejected (wrong key or tampered ciphertext)") from e
+
+
+_KEEP_CHARS = 200
+
+
+def omitted_body(body: dict, error: Exception) -> dict:
+    """What ``append_bounded`` records for a body that cannot be encoded: its short scalar fields, and the
+    size and SHA-256 of its JSON (non-JSON values written as ``<TypeName>``), never the other values."""
+    kept = {k: v for k, v in body.items()
+            if type(k) is str and len(k) <= 64 and k not in ("body_size", "body_digest", "body_omitted")
+            and (v is None or type(v) in (bool, int) or (type(v) is str and len(v) <= _KEEP_CHARS))}
+    try:
+        data = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                          default=lambda o: f"<{type(o).__name__}>").encode("utf-8", "surrogatepass")
+    except (RecursionError, ValueError, TypeError):
+        data = None
+    return {**kept, "body_size": -1 if data is None else len(data),
+            "body_digest": None if data is None else "sha256:" + hashlib.sha256(data).hexdigest(),
+            "body_omitted": True, "body_error": str(error)[:_KEEP_CHARS]}
 
 
 @dataclass(frozen=True)
@@ -194,36 +250,70 @@ class Ledger:
     def head_path(self) -> Path:
         return self.path / "head.json"
 
+    def fingerprint_key_path(self) -> Path:
+        """Per-install HMAC key for credential fingerprints, beside the ledger key, outside the ledger."""
+        return self.ledger_key_path.parent / "fingerprint.key"
+
+    def fingerprint_key(self) -> bytes:
+        """The HMAC key for credential fingerprints (identity.py): 32 bytes, O_EXCL, 0600, created once."""
+        from .identity import IdentityError, load_fingerprint_key
+        try:
+            return load_fingerprint_key(self.fingerprint_key_path())
+        except IdentityError as e:
+            raise LedgerError(str(e)) from None
+
     @property
     def wrap_path(self) -> Path:
         return self.path / "keywrap.json"
 
     def _open_ledger_key(self) -> bytes:
-        if not self.ledger_key_path.exists():
+        path = self.ledger_key_path
+        if not os.path.lexists(path):
             if self.wrap_path.exists():
                 raise LedgerError("ledger key missing; refusing to open ciphertext with the principal key")
-            self.ledger_key_path.parent.mkdir(parents=True, exist_ok=True)
-            key = os.urandom(32)
-            self.ledger_key_path.write_bytes(key)
-            os.chmod(self.ledger_key_path, 0o600)
-            return key
-        key = self.ledger_key_path.read_bytes()
-        if len(key) != 32:
-            raise LedgerError("ledger key must be 32 bytes")
-        return key
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(path.parent, 0o700)
+            try:
+                _write_new_secret(path, os.urandom(LEDGER_KEY_BYTES))
+            except FileExistsError:
+                pass                       # another process created it first: read theirs
+            except OSError as e:
+                raise LedgerError(f"ledger_key_unavailable: cannot create {path}: {e.strerror}") from None
+        return _read_secret(path, LEDGER_KEY_BYTES, "ledger_key")
 
     def _open_data_key(self) -> bytes:
         kek = _kek(self._ledger_key)
-        if not self.wrap_path.exists():
-            data_key = os.urandom(32)
-            nonce = os.urandom(12)
-            blob = {"format": WRAP_FORMAT, "nonce": nonce.hex(),
-                    "wrapped": AESGCM(kek).encrypt(nonce, data_key, _WRAP_INFO).hex()}
-            self.wrap_path.write_text(json.dumps(blob, indent=2) + "\n", encoding="utf-8")
-            os.chmod(self.wrap_path, 0o600)
-            return data_key
-        blob = json.loads(self.wrap_path.read_text(encoding="utf-8"))
-        if blob.get("format") != WRAP_FORMAT:
+        if not os.path.lexists(self.wrap_path):
+            with self._exclusive(check_stale=False):
+                if not os.path.lexists(self.wrap_path):
+                    data_key = os.urandom(32)
+                    nonce = os.urandom(12)
+                    blob = {"format": WRAP_FORMAT, "nonce": nonce.hex(),
+                            "wrapped": AESGCM(kek).encrypt(nonce, data_key, _WRAP_INFO).hex()}
+                    tmp = self.wrap_path.with_name(f".keywrap.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+                    try:
+                        _write_new_secret(tmp, (json.dumps(blob, indent=2) + "\n").encode("utf-8"))
+                        os.replace(tmp, self.wrap_path)
+                    finally:
+                        if os.path.lexists(tmp):
+                            os.unlink(tmp)
+                    return data_key
+        try:
+            fd = os.open(self.wrap_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError as e:
+            raise LedgerError(f"ledger key file unreadable: {e.strerror}") from None
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise LedgerError("ledger key file is not a regular file")
+            with os.fdopen(fd, "rb", closefd=False) as fh:
+                raw = fh.read(64 * 1024)
+        finally:
+            os.close(fd)
+        try:
+            blob = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            raise LedgerError("ledger key file is not a concept wrapped data key") from None
+        if not isinstance(blob, dict) or blob.get("format") != WRAP_FORMAT:
             raise LedgerError("ledger key file is not a concept wrapped data key")
         try:
             return AESGCM(kek).decrypt(bytes.fromhex(blob["nonce"]), bytes.fromhex(blob["wrapped"]), _WRAP_INFO)
@@ -268,6 +358,15 @@ class Ledger:
 
     def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
         return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
+
+    def append_bounded(self, kind: str, body: dict) -> Entry:
+        """``append``, except that a body the canonical encoder refuses (nested too deeply, a type JSON has
+        no form for) is still recorded. Only its short scalar fields (reason, jti, tool, allowed) are kept,
+        plus the body's size and digest and the encoding error, so the entry is never silently lost."""
+        try:
+            return self.append(kind, body)
+        except EncodingError as e:
+            return self.append(kind, omitted_body(body, e))
 
     def append(self, kind: str, body: dict) -> Entry:
         if not isinstance(body, dict):

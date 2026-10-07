@@ -16,7 +16,14 @@ from two_key.gateway import ToolGateway
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumPolicy
-from two_key.testing import FixedJudge
+from two_key.testing import TEST_AGENT, FixedJudge
+
+try:
+    import yaml  # noqa: F401  (PyYAML is the optional [yaml] extra)
+    HAVE_YAML = True
+except ImportError:
+    HAVE_YAML = False
+NEEDS_YAML = unittest.skipUnless(HAVE_YAML, "PyYAML is not installed (pip install two-key[yaml])")
 
 
 PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
@@ -52,12 +59,12 @@ SPECS = {
 def _engine(tmp, specs=SPECS, rules=RULES):
     key = generate_private_key()
     env = sign_constitution(PROSE, rules, key, specs)
-    ledger = Ledger(Path(tmp), key)
+    ledger = Ledger(Path(tmp, "ledger"), key)
     judges = [FixedJudge("j0", "yes", provider="p0", vendor="v0", local_weights=True),
               FixedJudge("j1", "yes", provider="p1", vendor="v1")]
     constitution = verify_signed(env, key.public_key())
     tk = TwoKey(ledger, key.public_key(), constitution, judges, private_key=key,
-                quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+                quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
     return key, tk
 
 
@@ -190,7 +197,7 @@ class ProblemFTests(unittest.TestCase):
             other["email_draft"] = dict(SPECS["email_draft"], data_class_floor="personal")
             envelope = sign_constitution(PROSE, RULES, key, other)
             other_tk = TwoKey(tk.ledger, key.public_key(), verify_signed(envelope, key.public_key()),
-                              tk.judges, private_key=key, quorum=tk.quorum, allow_test_doubles=True)
+                              tk.judges, private_key=key, quorum=tk.quorum, allow_test_doubles=True, monitored_agent=TEST_AGENT)
             gateway = ToolGateway(tk.ledger, tk.issuer, other_tk.compiled,
                                   tools={"email_draft": lambda a: a})
             result = gateway.invoke(decision.token, "email_draft", args)
@@ -201,6 +208,7 @@ class ProblemFTests(unittest.TestCase):
         with self.assertRaises(ConstitutionError):
             sign_constitution(PROSE, RULES, key, {})
 
+    @NEEDS_YAML
     def test_example_rules_file_enforces_specs(self):
         root = Path(__file__).resolve().parents[1]
         _prose, rules, specs = load_unsigned(root / "examples" / "constitution.md",
@@ -372,9 +380,14 @@ class ProblemFTests(unittest.TestCase):
                 {"invoice": {"total": 10, "note": "x"}, "currency": "usd", "to": "power-co.example"},
                 "pay")
             self.assertEqual(nested.reason, "derive_failed:unmapped_field")
+        # A payload path that is an ancestor of the amount path is refused (it would carry the amount
+        # unread). Name the sibling key instead.
+        with self.assertRaisesRegex(ConstitutionError, "overlaps the field path"):
+            sign_constitution(PROSE, RULES, generate_private_key(),
+                              dict(specs, pay_bill=dict(specs["pay_bill"], payload=[{"json_path": "invoice"}])))
         specs["pay_bill"] = dict(
             specs["pay_bill"],
-            payload=[{"json_path": "invoice"}],
+            payload=[{"json_path": "invoice.note"}],
         )
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp, specs=specs)
@@ -452,11 +465,11 @@ class ProblemFTests(unittest.TestCase):
                     return super().score(constitution_text, action, proposal)
 
             with tempfile.TemporaryDirectory() as tmp:
-                ledger = Ledger(Path(tmp), key)
+                ledger = Ledger(Path(tmp, "ledger"), key)
                 judges = [Rec("j0", "yes", provider="p0", vendor="v0", local_weights=True),
                           Rec("j1", "yes", provider="p1", vendor="v1")]
                 tk = TwoKey(ledger, key.public_key(), verify_signed(envelope, key.public_key()), judges,
-                            private_key=key, quorum=policy, allow_test_doubles=True)
+                            private_key=key, quorum=policy, allow_test_doubles=True, monitored_agent=TEST_AGENT)
                 denied = tk.authorize(
                     {"tool": "pay_bill", "data_class": "financial", "irreversible": True},
                     {"currency": "usd", "to": "power-co.example", "secret": "hide-me"},

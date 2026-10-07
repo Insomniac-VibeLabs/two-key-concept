@@ -6,23 +6,35 @@ Not the full Insomniac-VibeLabs/two-key repository.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.1.12
+Package version: 0.2.0 (branch working; not tagged yet).
 Tag: v0.1.12 on main. v0.1.6 stays on the previous tree.
-Not on PyPI. Install from git ref `v0.1.12`.
+Not on PyPI. Install from git ref `working` until v0.2.0 is tagged.
+0.2.0 changes configuration: CHANGES.md "Upgrading from 0.1.12".
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
 Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
-before README.md and docs/HOWTO.md. Tests: python -m unittest discover -s tests
-(48 tests, no network).
+before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
+(316 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
-Both paths always run. Diversity floors default on (2 vendors, 1 local judge,
-and a local yes). Opt out with QuorumPolicy.without_diversity_floors.
+Both paths run once the call is well-formed and within limits (an oversized or
+malformed call is an early deny before either path). The default needs one judge and has no diversity
+floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
+(profile: high_assurance) sets 2 vendors, 1 local judge, and a local yes.
+TwoKey needs monitored_agent, declared by the operator. It refuses a judge
+that is the same agent: same credential fingerprint (HMAC, per-install key),
+shared tenant id, same model on the same endpoint or upstream (even with
+different tenants, unless the logged opt-in allow_same_model_distinct_tenant
+is set and tenants and keys differ), same model through a local or unrecognized host, proxy, or daemon
+without a non-overlapping declared upstream, or an unresolved identity.
+The same provider is allowed. Local means loopback, RFC 1918, or fc00::/7.
+JSON and YAML inputs refuse duplicate keys. Arguments or proposals over
+256 KiB are denied. Ballots are paired with judges by position.
 require_path_a_first is not a skip. There is no scanner, no PKI, and no anchor.
-The token TTL default is 120 seconds. It is signed by the capability key, not
+The token TTL default is 120 seconds, at most 300. It is signed by the capability key, not
 the principal key. The gateway verifies only. It binds the tool, the argument
 hash, the ledger root and size, the constitution hashes, spec_hash, and the
 derived form. tool_specs is required. A disagreeing claim is a deny.

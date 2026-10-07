@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import os
+import stat
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
@@ -24,18 +26,59 @@ def fingerprint(public: Ed25519PublicKey) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def save_private_key(path: Path | str, private_key: Ed25519PrivateKey) -> None:
+def save_private_key(path: Path | str, private_key: Ed25519PrivateKey, *, private_dir: bool = False) -> None:
+    """Create a new key file, mode 0600 from the first byte. Never overwrite one.
+
+    The file is opened with O_CREAT | O_EXCL (and O_NOFOLLOW where available), so an
+    existing file or a planted symlink is an error rather than a silent overwrite, and
+    there is no window in which the key is readable before a chmod. A directory this
+    creates is mode 0700. ``private_dir=True`` also sets an existing directory to 0700;
+    use it for directories Two-Key owns, such as ``<ledger>.capability``.
+    """
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(private_key.private_bytes(
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if private_dir:
+        os.chmod(path.parent, 0o700)
+    data = private_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption()))
-    path.chmod(0o600)
+        serialization.NoEncryption())
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
 
 
 def load_private_key(path: Path | str) -> Ed25519PrivateKey:
     data = Path(path).read_bytes()
+    key = serialization.load_pem_private_key(data, password=None)
+    if not isinstance(key, Ed25519PrivateKey):
+        raise ValueError("principal key must be Ed25519")
+    return key
+
+
+def load_private_key_file(path: Path | str) -> Ed25519PrivateKey:
+    """The safe loader for a key file named by an operator, as on the command line.
+
+    It refuses a symlink (O_NOFOLLOW), anything that is not a regular file, and a file
+    that the group or others can read or write (``key_file_insecure``). The check is on
+    the open descriptor, so the file cannot be swapped between the check and the read.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as e:
+        raise ValueError(f"key_file_unreadable: {path}: {e.strerror}") from None
+    with os.fdopen(fd, "rb") as fh:
+        st = os.fstat(fh.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise ValueError(f"key_file_insecure: {path} is not a regular file")
+        if st.st_mode & 0o077:
+            raise ValueError(f"key_file_insecure: {path} is mode {stat.S_IMODE(st.st_mode):04o}; "
+                             f"run chmod 600 {path}")
+        data = fh.read()
     key = serialization.load_pem_private_key(data, password=None)
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("principal key must be Ed25519")

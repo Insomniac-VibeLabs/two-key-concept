@@ -7,7 +7,8 @@ disagrees is a deny. This module does not read English and it does not
 classify free text.
 
 Keys the spec does not name do not reach the tool. ``deny_unmapped`` defaults
-off: those keys are dropped at the gateway. When a spec sets it, an unnamed
+off: those keys are dropped at the gateway. Their names (never their values)
+are written to the ledger (``dropped_keys``). When a spec sets it, an unnamed
 key is a deny instead. A declared path covers that value and everything
 under it. A counterparty path copies only values on its allow list, and the
 tool receives the canonical value. A payload path is not interpreted.
@@ -18,12 +19,59 @@ value, including its children, is copied unread.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .action import DATA_CLASSES, MAX_AMOUNT_USD
+
+
+# Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their compact JSON.
+# Checked before anything is derived, judged, hashed for a token, or ledgered.
+MAX_ARGS_BYTES = 256 * 1024
+# The structured action claim is small; its cap is lower. Measured before normalize_action.
+MAX_ACTION_BYTES = 64 * 1024
+
+
+def _json_bytes(value: Any) -> bytes | None:
+    """Compact UTF-8 JSON of a plain value (``canonical.to_plain``). Anything JSON has no form for is not
+    measured through ``str()`` or ``repr()``, which a custom type controls: it is ``None``, too large."""
+    try:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8", "surrogatepass")
+    except (RecursionError, ValueError, TypeError):
+        return None  # cannot be measured: treated as too large
+
+
+def args_size(value: Any) -> int:
+    """UTF-8 bytes of ``value`` as JSON (``repr`` if that fails). -1 if it cannot be measured."""
+    data = _json_bytes(value)
+    return -1 if data is None else len(data)
+
+
+def args_too_large(value: Any) -> bool:
+    size = args_size(value)
+    return size < 0 or size > MAX_ARGS_BYTES
+
+
+def canonical_too_large(canonical: bytes, value: Any) -> bool:
+    """``args_too_large(value)``, measured once in the common case.
+
+    ``canonical`` is ``canonical_bytes(value)``: compact JSON with non-ASCII escaped, so it is never
+    shorter than the UTF-8 compact JSON this cap measures. At or under the cap it settles the
+    question without a second encoding; only a longer one is measured exactly.
+    """
+    return len(canonical) > MAX_ARGS_BYTES and args_too_large(value)
+
+
+def size_record(value: Any, name: str) -> dict:
+    """What the ledger keeps for an oversized value: its size and digest, never the bytes."""
+    data = _json_bytes(value)
+    return {f"{name}_size": -1 if data is None else len(data),
+            f"{name}_digest": None if data is None else "sha256:" + hashlib.sha256(data).hexdigest(),
+            f"{name}_omitted": True}
 
 
 class DeriveError(ValueError):
@@ -46,8 +94,11 @@ class Derived:
 def _cents(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise DeriveError("amount_unreadable")
-    number = float(value)
-    if math.isnan(number) or math.isinf(number) or number < 0:
+    try:
+        number = float(value)  # an int such as 10**400 raises OverflowError here
+    except (OverflowError, ValueError):
+        raise DeriveError("amount_unreadable") from None
+    if math.isnan(number) or math.isinf(number) or number < 0 or math.isinf(number * 100):
         raise DeriveError("amount_unreadable")
     cents = round(number * 100)
     if abs(number * 100 - cents) > 1e-6:
@@ -233,8 +284,56 @@ def _unmapped(arguments: Mapping[str, Any], declared: tuple[str, ...]) -> bool:
     return walk(arguments, "")
 
 
+MAX_DROPPED_NAMES = 64
+MAX_DROPPED_NAME_CHARS = 128
+
+
+def dropped_keys(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> list[str]:
+    """Dotted names of argument keys the tool will not receive. Names only, never values.
+
+    A declared path covers itself and its children. The list is sorted, capped at
+    ``MAX_DROPPED_NAMES`` names of at most ``MAX_DROPPED_NAME_CHARS`` characters each.
+    """
+    if not isinstance(arguments, Mapping):
+        return []
+    declared = set(_declared_paths(spec))
+    found: list[str] = []
+
+    def walk(node: Mapping[str, Any], prefix: str) -> None:
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if path in declared:
+                continue
+            if isinstance(key, str) and any(item.startswith(path + ".") for item in declared) \
+                    and isinstance(value, Mapping):
+                walk(value, path)
+                continue
+            found.append(path[:MAX_DROPPED_NAME_CHARS])
+
+    walk(arguments, "")
+    return sorted(set(found))[:MAX_DROPPED_NAMES]
+
+
 def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
-    """Read amount and counterparties from ``arguments`` using ``spec`` paths."""
+    """Read the derived fields from ``arguments`` using ``spec`` paths.
+
+    Any value this cannot read is a ``DeriveError``, never another exception.
+    An amount that cannot be read (for example 10**400) is
+    ``DeriveError("amount_unreadable")``. Any other ``OverflowError``,
+    ``TypeError``, ``ValueError``, or ``RecursionError`` (a value nested too
+    deeply) becomes ``DeriveError("value_unreadable:<type>")``,
+    which ``TwoKey`` turns into a ``derive_failed:`` deny.
+    """
+    try:
+        return _derive(spec, arguments)
+    except DeriveError:
+        raise
+    except (OverflowError, TypeError, ValueError, RecursionError) as exc:
+        # RecursionError: a value nested too deeply to read is a deny, never a crash.
+        raise DeriveError(f"value_unreadable:{type(exc).__name__}") from None
+
+
+def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
     if not isinstance(arguments, Mapping):
         raise DeriveError("arguments_not_object")
     amount_spec = spec.get("amount")
@@ -246,7 +345,7 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         if amount_spec["unit"] == "cents":
             if isinstance(raw, bool) or not isinstance(raw, (int, float)):
                 raise DeriveError("amount_unreadable")
-            if isinstance(raw, float) and not raw.is_integer():
+            if isinstance(raw, float) and (math.isnan(raw) or math.isinf(raw) or not raw.is_integer()):
                 raise DeriveError("amount_unreadable")
             cents = int(raw)
             if cents < 0 or cents > int(MAX_AMOUNT_USD * 100):

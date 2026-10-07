@@ -13,8 +13,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from two_key.agents import MonitoredAgent, parse_proposal
-from two_key.constitution import sign_constitution, verify_signed
+from two_key.agents import AgentConfigError, MonitoredAgent, parse_proposal
+from two_key.constitution import ConstitutionSignatureError, sign_constitution, verify_signed
 from two_key.core import TwoKey
 from two_key.gateway import ToolGateway
 from two_key.judges.config import JudgeConfigError, build_credential
@@ -23,7 +23,7 @@ from two_key.ledger import LedgerError, merkle_root
 from two_key.keys import generate_private_key
 from two_key.ledger import Ledger
 from two_key.quorum import QuorumConfigError, QuorumPolicy
-from two_key.testing import FixedJudge
+from two_key.testing import TEST_AGENT, FixedJudge
 
 
 RULES = [
@@ -46,12 +46,12 @@ PROSE = "Never wire money. Cap spend at 200. No medical or classified data."
 def _engine(tmp, votes=("yes", "yes"), quorum=None):
     key = generate_private_key()
     env = sign_constitution(PROSE, RULES, key, SPECS)
-    ledger = Ledger(Path(tmp), key)
+    ledger = Ledger(Path(tmp, "ledger"), key)
     judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", vendor=f"v{i}", local_weights=(i == 0))
               for i, vote in enumerate(votes)]
     tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
                 private_key=key, quorum=quorum or QuorumPolicy(required_yes=len(votes)),
-                allow_test_doubles=True)
+                allow_test_doubles=True, monitored_agent=TEST_AGENT)
     return key, tk
 
 
@@ -96,9 +96,9 @@ class ConceptTests(unittest.TestCase):
             mismatch = gw.invoke(decision.token, "email_draft", {"to": "eve"})
             self.assertTrue(first.allowed)
             self.assertEqual(calls, [{"to": "ada"}])
-            self.assertFalse(any(p.name.startswith(".redeem-") for p in Path(tmp).iterdir()))
-            self.assertTrue((Path(tmp).parent / f"{Path(tmp).name}.redeem-locks").is_dir())
-            self.assertTrue((Path(tmp).parent / f"{Path(tmp).name}.lock").is_file())
+            self.assertFalse(any(p.name.startswith(".redeem-") for p in Path(tmp, "ledger").iterdir()))
+            self.assertTrue((Path(tmp) / "ledger.redeem-locks").is_dir())
+            self.assertTrue((Path(tmp) / "ledger.lock").is_file())
             self.assertEqual(replay.reason, "already_redeemed")
             self.assertFalse(mismatch.allowed)
 
@@ -129,7 +129,7 @@ class ConceptTests(unittest.TestCase):
         key = generate_private_key()
         env = sign_constitution(PROSE, RULES, key, SPECS)
         env["signature"] = "aa"
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(ConstitutionSignatureError, "^constitution signature failed"):
             verify_signed(env, key.public_key())
 
     def test_schema_400_falls_back_once(self):
@@ -153,7 +153,7 @@ class ConceptTests(unittest.TestCase):
         self.assertEqual(rec.calls[1]["response_format"]["type"], "json_object")
 
     def test_proposal_parser_rejects_extra_keys(self):
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(AgentConfigError, "no other keys"):
             parse_proposal(json.dumps({"tool": "search", "arguments": {}, "proposal": "x", "exec": True}))
 
 
@@ -207,18 +207,18 @@ class ConceptTests(unittest.TestCase):
     def test_ledger_ciphertext_and_witness(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, tk = _engine(tmp)
-            raw = Path(tmp, "entries.jsonl").read_text()
+            raw = Path(tmp, "ledger", "entries.jsonl").read_text()
             self.assertNotIn("constitution_loaded", raw)
             self.assertIn("two-key-concept-ledger-enc/1", raw)
-            self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp).iterdir()))
+            self.assertFalse(any(p.name == "witness.pem" for p in Path(tmp, "ledger").iterdir()))
             self.assertTrue(tk.ledger.witness_path.exists())
-            self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp)) + "/"))
+            self.assertFalse(str(tk.ledger.witness_path).startswith(str(Path(tmp, "ledger")) + "/"))
             key = tk.ledger.private_key
-            Ledger(tmp, key).verify()
+            Ledger(Path(tmp, "ledger"), key).verify()
             with self.assertRaises(LedgerError):
-                Ledger(tmp, key, ledger_key_path=Path(tmp, "missing.key"))
+                Ledger(Path(tmp, "ledger"), key, ledger_key_path=Path(tmp, "missing.key"))
             with self.assertRaises(LedgerError):
-                Ledger(tmp, generate_private_key())
+                Ledger(Path(tmp, "ledger"), generate_private_key())
 
     def test_missing_witness_refuses_checkpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -269,7 +269,8 @@ class ConceptTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main(["authorize", "--allow-test-doubles"])
             buf = io.StringIO()
-            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))):
+            with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=2))), \
+                 patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT):
                 with redirect_stdout(buf):
                     with self.assertRaises(ValueError) as raised:
                         main(["authorize", "--key", str(Path(tmp, "principal.pem")),
@@ -287,7 +288,7 @@ class ConceptTests(unittest.TestCase):
         captured = {}
 
         class _Stopped:
-            def authorize(self, action, arguments, proposal, agent_session=None):
+            def authorize(self, action, arguments, proposal, agent_session=None, origin=None):
                 captured["action"] = action
                 return Decision(False, "stopped", None, {}, {}, 0, None)
 
@@ -300,6 +301,7 @@ class ConceptTests(unittest.TestCase):
             judges = [FixedJudge("a", "yes", provider="p0")]
             buf = io.StringIO()
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
+                 patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT), \
                  patch("two_key.ledger.Ledger", return_value=object()), \
                  patch("two_key.core.TwoKey.load", return_value=_Stopped()), \
                  redirect_stdout(buf):
@@ -313,6 +315,7 @@ class ConceptTests(unittest.TestCase):
             self.assertEqual(captured["action"]["data_class"], "classified")
             self.assertIs(captured["action"]["irreversible"], True)
             with patch("two_key.judges.config.load_config_file", return_value=(judges, QuorumPolicy(required_yes=1))), \
+                 patch("two_key.identity.load_monitored_agent_file", return_value=TEST_AGENT), \
                  patch("two_key.ledger.Ledger", return_value=object()), \
                  patch("two_key.core.TwoKey.load", return_value=_Stopped()), \
                  redirect_stdout(buf):
@@ -347,29 +350,47 @@ class ConceptTests(unittest.TestCase):
             self.assertTrue(first.lock_path().is_file())
             self.assertFalse(str(first.lock_path()).startswith(str(path) + os.sep))
 
-    def test_diversity_floors_default_on_and_can_be_opted_out(self):
+    def test_one_judge_default_and_high_assurance_opt_in(self):
         policy = QuorumPolicy()
-        self.assertEqual(policy.min_vendors, 2)
-        self.assertEqual(policy.min_local_judges, 1)
-        self.assertTrue(policy.require_local_yes)
+        self.assertEqual(policy.min_vendors, 1)
+        self.assertEqual(policy.min_local_judges, 0)
+        self.assertFalse(policy.require_local_yes)
         self.assertFalse(policy.require_path_a_first)
+        self.assertEqual(QuorumPolicy.without_diversity_floors(required_yes=2), QuorumPolicy(required_yes=2))
+        strict = QuorumPolicy.high_assurance()
+        self.assertEqual((strict.min_vendors, strict.min_local_judges, strict.require_local_yes), (2, 1, True))
         same = [FixedJudge("a", "yes", provider="p", vendor="v"),
                 FixedJudge("b", "yes", provider="p", vendor="v")]
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             env = sign_constitution(PROSE, RULES, key, SPECS)
-            ledger = Ledger(Path(tmp), key)
+            ledger = Ledger(Path(tmp, "ledger"), key)
             constitution = verify_signed(env, key.public_key())
             with self.assertRaises(QuorumConfigError):
                 TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
-                       quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True)
+                       quorum=QuorumPolicy.high_assurance(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
             tk = TwoKey(ledger, key.public_key(), constitution, same, private_key=key,
-                        quorum=QuorumPolicy.without_diversity_floors(required_yes=2),
-                        allow_test_doubles=True)
+                        quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
             decision = tk.authorize(
                 {"tool": "search", "amount_usd": 0, "data_class": "public", "irreversible": False},
                 {"q": "weather"}, "search")
             self.assertTrue(decision.allowed, decision.reason)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, one = _engine(tmp, ("yes",), quorum=QuorumPolicy(required_yes=1))
+            decision = one.authorize(
+                {"tool": "search", "amount_usd": 0, "data_class": "public", "irreversible": False},
+                {"q": "weather"}, "search")
+            self.assertTrue(decision.allowed, decision.reason)
+
+    def test_quorum_profile_in_yaml(self):
+        from two_key.judges.config import load_config
+        judge = {"id": "l", "type": "ollama", "model": "qwen2.5:7b"}
+        _, policy = load_config({"judges": [judge]})
+        self.assertEqual((policy.required_yes, policy.min_vendors, policy.require_local_yes), (1, 1, False))
+        with self.assertRaisesRegex(JudgeConfigError, "insufficient_vendors:1<2"):
+            load_config({"judges": [judge], "quorum": {"profile": "high_assurance", "required_yes": 1}})
+        with self.assertRaisesRegex(JudgeConfigError, "quorum profile must be one of"):
+            load_config({"judges": [judge], "quorum": {"profile": "paranoid"}})
 
     def test_section4_does_not_skip_path_b(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -391,7 +412,7 @@ class ConceptTests(unittest.TestCase):
             self.assertNotEqual(fingerprint(tk.issuer.public_key), fingerprint(tk.public_key))
             cap = tk.ledger.capability_key_path()
             self.assertTrue(cap.is_file())
-            self.assertFalse(str(cap).startswith(str(Path(tmp)) + os.sep))
+            self.assertFalse(str(cap).startswith(str(Path(tmp, "ledger")) + os.sep))
             decision = tk.authorize(
                 {"tool": "email_draft", "amount_usd": 0, "data_class": "public", "irreversible": False,
                  "counterparty": "ada"},

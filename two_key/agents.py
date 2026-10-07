@@ -3,7 +3,7 @@
 A configured agent may be local (Ollama, a loopback OpenAI-compatible server)
 or a vendor model (xAI, OpenAI, Anthropic, Gemini, or any other host). A
 vendor-hosted agent can exceed the constitution, so its proposal is untrusted
-data. ``authorize_from_agent`` always runs Path A and Path B. This module
+data. ``authorize_from_agent`` runs Path A and Path B once the call is well-formed and within limits. This module
 never calls the tool gateway and never sees tool credentials.
 
 The request shapes match the judge connectors. No vendor SDK and no streaming.
@@ -19,14 +19,20 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from .derive import MAX_ARGS_BYTES
 from .judges.config import JudgeConfigError, build_credential
 from .judges.credentials import CredentialError, CredentialProvider, NoCredential
 from .judges.llm import LOOPBACK
 from .judges.transport import pooled_transport
+from .netloc import model_is_cloud
+from .strict import StrictParseError, load_file_strict, loads_json
 
 Transport = Callable[[str, dict, dict, float], dict]
 AGENT_TYPES = ("openai_compatible", "anthropic", "gemini", "ollama")
 AGENT_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "hosting", "max_tokens"}
+# A proposal carries arguments (at most MAX_ARGS_BYTES) plus prose; four times that is generous.
+# Longer text is refused before it is parsed.
+MAX_PROPOSAL_TEXT_CHARS = 4 * MAX_ARGS_BYTES
 _ALLOWED = {"tool", "arguments", "proposal", "amount_usd", "counterparty", "data_class", "irreversible"}
 _REQUIRED = {"tool", "arguments", "proposal"}
 
@@ -96,32 +102,43 @@ class AgentProposal:
                 "model": self.model, "proposal": self.proposal, "action": self.action}
 
 
-def hosting_of(base_url: str, declared: str | None, *, local_default: bool = False) -> str:
-    """A vendor host stays cloud even if the file says local."""
+def hosting_of(base_url: str, declared: str | None, *, local_default: bool = False,
+               model: str | None = None) -> str:
+    """A vendor host, or a ``:cloud``/``-cloud`` model on any host, stays cloud even if the file says local."""
     host = (urlparse(base_url).hostname or "").lower()
     vendor = bool(host) and host not in LOOPBACK
-    if declared == "cloud" or vendor:
+    if declared == "cloud" or vendor or model_is_cloud(model):
         return "cloud"
     if declared == "local" or local_default:
         return "local"
     return "local" if host in LOOPBACK else "cloud"
 
 
-def parse_proposal(text: str) -> tuple[dict, dict, str]:
+def _loads_strict(text: str, what: str):
+    """A repeated key could make the checked value differ from the one a tool reads, so it is refused."""
     try:
-        obj = json.loads(text.strip())
-    except json.JSONDecodeError as e:
-        raise AgentConfigError(f"agent proposal is not JSON: {e.msg}") from None
+        return loads_json(text)
+    except StrictParseError as e:
+        msg = str(e)
+        if msg.startswith("not valid JSON: "):
+            raise AgentConfigError(f"{what} is not JSON: {msg[16:]}") from None
+        raise AgentConfigError(f"{what} has a {msg}") from None
+
+
+def parse_proposal(text: str) -> tuple[dict, dict, str]:
+    """Parse an untrusted proposal. A duplicate key at any depth is refused, not last-one-wins."""
+    if not isinstance(text, str):
+        raise AgentConfigError("agent proposal must be a string")
+    if len(text) > MAX_PROPOSAL_TEXT_CHARS:
+        raise AgentConfigError(f"agent proposal is longer than {MAX_PROPOSAL_TEXT_CHARS} characters")
+    obj = _loads_strict(text.strip(), "agent proposal")
     if not isinstance(obj, dict) or set(obj) - _ALLOWED or not _REQUIRED <= set(obj):
         raise AgentConfigError("agent proposal must contain tool, arguments, and proposal, and no other keys")
     if not isinstance(obj["tool"], str) or not obj["tool"].strip():
         raise AgentConfigError("tool must be a non-empty string")
     args = obj["arguments"]
     if isinstance(args, str):
-        try:
-            args = json.loads(args)
-        except json.JSONDecodeError as e:
-            raise AgentConfigError(f"arguments string is not JSON: {e.msg}") from None
+        args = _loads_strict(args, "arguments string")
     if not isinstance(args, dict):
         raise AgentConfigError("arguments must be an object")
     obj = dict(obj)
@@ -283,7 +300,7 @@ def build_agent(spec: dict, transport=None) -> MonitoredAgent:
     except JudgeConfigError as e:
         raise AgentConfigError(str(e)) from e
     return MonitoredAgent(spec.get("id") or "", spec.get("provider") or kind, model, base,
-                          hosting_of(base, declared, local_default=kind == "ollama"), cred,
+                          hosting_of(base, declared, local_default=kind == "ollama", model=model), cred,
                           kind=kind, timeout=float(spec.get("timeout", 60)),
                           max_tokens=int(spec.get("max_tokens", 800)), transport=transport)
 
@@ -291,6 +308,8 @@ def build_agent(spec: dict, transport=None) -> MonitoredAgent:
 def load_agents(data: dict, transport=None) -> list[MonitoredAgent]:
     if not isinstance(data, dict) or not isinstance(data.get("agents"), list) or not data["agents"]:
         raise AgentConfigError("config must contain a non-empty 'agents' list")
+    if set(data) - {"agents"}:
+        raise AgentConfigError(f"unknown top-level key(s) {sorted(map(str, set(data) - {'agents'}))}; allowed: ['agents']")
     agents = [build_agent(a, transport) for a in data["agents"]]
     ids = [a.agent_id for a in agents]
     if any(not i for i in ids) or len(set(ids)) != len(ids):
@@ -299,7 +318,8 @@ def load_agents(data: dict, transport=None) -> list[MonitoredAgent]:
 
 
 def load_agents_file(path: Path, transport=None) -> list[MonitoredAgent]:
-    path = Path(path)
-    text = path.read_text(encoding="utf-8")
-    data = json.loads(text) if path.suffix.lower() == ".json" else __import__("yaml").safe_load(text)
+    try:
+        data = load_file_strict(path)
+    except StrictParseError as e:
+        raise AgentConfigError(f"{path}: {e}") from None
     return load_agents(data, transport)

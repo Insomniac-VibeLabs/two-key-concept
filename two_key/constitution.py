@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+
+from .strict import StrictParseError, load_file_strict, loads_json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -67,7 +69,9 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
     ``deny_unmapped`` defaults to false: a key the spec does not name
     does not reach the tool. Set it true to deny that key instead.
     ``payload`` names paths that may be present and are not interpreted. With
-    no ``shape``, a named path covers that value and its children. ``shape``
+    no ``shape``, a named path covers that value and its children. A payload
+    path that equals, is an ancestor of, or sits under an amount, currency, or
+    counterparty path is refused, so a payload never carries a field Path A reads. ``shape``
     is ``string``, ``number``, or ``list`` (a list of strings). ``max_length``
     bounds a string or a list. A shape does not classify the contents.
     """
@@ -144,6 +148,10 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
                 raise ConstitutionError(f"{where}.allow: expected a non-empty list of strings")
             canonical = sorted({item.strip().casefold() for item in allow})
             party_out.append({"json_path": path, "allow": canonical})
+        # A payload path is copied unread. It must not cover, or sit under, a path Path A reads,
+        # compared without regard to case.
+        control_paths = [p for p in ((amount_out or {}).get("json_path"), (amount_out or {}).get("currency_path"))
+                         if p] + [entry["json_path"] for entry in party_out]
         payload = spec.get("payload", [])
         if not isinstance(payload, list):
             raise ConstitutionError(f"tool_specs.{tool}.payload: expected a list")
@@ -156,6 +164,12 @@ def validate_tool_specs(specs: Any, rules: list) -> dict:
             if extra:
                 raise ConstitutionError(f"{where}: unknown key(s) {sorted(extra)}")
             path = take(_json_path(entry["json_path"], where), where)
+            # Casefolded: a tool that reads keys case-insensitively must not see `TO.name` as payload.
+            folded = path.casefold()
+            for control in control_paths:
+                c = control.casefold()
+                if folded == c or c.startswith(folded + ".") or folded.startswith(c + "."):
+                    raise ConstitutionError(f"{where}: payload path {path!r} overlaps the field path {control!r}")
             shape = entry.get("shape")
             if shape is not None and shape not in ("string", "number", "list"):
                 raise ConstitutionError(f"{where}.shape: expected string, number, or list")
@@ -197,15 +211,15 @@ def load_unsigned(prose_path: Path | str, rules_path: Path | str) -> tuple[str, 
 
 
 def _load_rules_document(path: Path) -> tuple[list, dict]:
-    text = path.read_text(encoding="utf-8")
-    if path.suffix == ".json":
-        data = json.loads(text)
-    else:
+    if path.suffix.lower() != ".json":
         try:
-            import yaml
+            import yaml  # noqa: F401
         except ImportError as e:
             raise ConstitutionError("reading YAML rules needs the yaml extra (pip install pyyaml)") from e
-        data = yaml.safe_load(text)
+    try:
+        data = load_file_strict(path)
+    except StrictParseError as e:
+        raise ConstitutionError(f"rules file {path}: {e}") from None
     if isinstance(data, list):
         raise ConstitutionError("tool_specs required: a bare rule list cannot be signed")
     if isinstance(data, dict) and "hard_rules" in data:
@@ -249,7 +263,11 @@ def save_envelope(path: Path | str, envelope: dict) -> None:
 
 
 def load_envelope(path: Path | str) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    """Read a signed constitution. A duplicate key is refused: the signature covers one reading only."""
+    try:
+        return loads_json(Path(path).read_text(encoding="utf-8"))
+    except StrictParseError as e:
+        raise ConstitutionError(f"constitution {path}: {e}") from None
 
 
 def verify_signed(envelope: dict, public_key) -> Constitution:

@@ -14,25 +14,34 @@ Fixes from the original prototype (see CHANGES.md):
   never counts as "yes".
 - ``min_distinct_providers`` counts providers among responding ballots.
   It still defaults to 1, so that check is not a floor by itself.
-- The diversity floors are on by default: at least two vendors, at least
-  one judge on local weights, and a yes from a local judge
-  (``require_local_yes``). Opt out with ``QuorumPolicy.without_diversity_floors``
-  or by setting those fields. ``require_path_a_first`` is not part of the
-  floor and is not a skip.
+- The default needs one judge: ``min_vendors=1``, ``min_local_judges=0``,
+  ``require_local_yes=False``. The owner's rule is at least one judge, and
+  that judge must not be the monitored agent. The diversity floors are
+  opt-in: ``QuorumPolicy.high_assurance()`` (or ``profile: high_assurance``
+  in judges.yaml) sets at least two vendors, at least one local judge, and a
+  yes from a local judge (``require_local_yes``). It is recommended for
+  destructive, irreversible, financial, or external-send tools.
+  ``require_local_yes`` with no local judge in the set is a configuration
+  error at start-up and a deny in ``convene``.
+  ``QuorumPolicy.without_diversity_floors`` still works and now builds the
+  default. ``require_path_a_first`` is not part of the floor and is not a
+  skip.
 - Judges run in parallel (one thread per judge) under an overall deadline
   ``timeout_seconds`` (default 45 s). A judge that has not answered by the
   deadline is recorded as an abstention (``error="timeout..."``), so a slow or
   hung provider can never produce a "yes" and cannot stall Two-Key beyond
-  the deadline. Per-request HTTP timeouts are still set on each LLM judge.
+  the deadline. ``TwoKey`` and the judges.yaml loader refuse
+  ``timeout_seconds=None``, so a deployment always has a hard deadline. Per-request
+  HTTP timeouts are still set on each LLM judge.
 
 Quorum protocol specifics. The prior-art memo is not stored in this
 repository or in two-key. The decision record is CONCEPTION_NOTES.md
 Entry 2 in Insomniac-VibeLabs/two-key:
 - Vendor heterogeneity: ``check_judge_set`` runs when ``TwoKey`` starts, and
-  again inside ``convene``. The default is >= 2 vendors, >= 1 local weight
-  file, and ``require_local_yes``. ``QuorumPolicy.section4`` is that floor
-  plus ``require_path_a_first``, which ``TwoKey.authorize`` still does not
-  read. Opt out with ``QuorumPolicy.without_diversity_floors``.
+  again inside ``convene``. The default floor is one vendor and no local
+  judge. ``QuorumPolicy.high_assurance`` is >= 2 vendors, >= 1 local judge,
+  and ``require_local_yes``. ``QuorumPolicy.section4`` is that floor plus
+  ``require_path_a_first``, which ``TwoKey.authorize`` still does not read.
   With ``heterogeneity_scope="responding"`` the same floor also applies to the
   judges that actually returned valid ballots.
 - Availability floor K (``min_responding``) distinct from the approval
@@ -50,7 +59,7 @@ Entry 2 in Insomniac-VibeLabs/two-key:
   text (transcript) or tool outputs. "record_and_proposal" restores the
   earlier behaviour. After a derive deny, ``tool_args`` is omitted unless
   ``tool_args_on_derive_deny`` is set. Path B still runs.
-- Both paths always run. A Path A deny does not skip Path B.
+- Both paths run once the call is well-formed and within limits. A Path A deny does not skip Path B.
   ``require_path_a_first`` is stored on the policy and copied into
   ``to_record``. ``TwoKey.authorize`` does not read it. There is no
   ``short_circuit_path_b`` setting in this package.
@@ -60,6 +69,7 @@ from __future__ import annotations
 
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass, fields, replace
 from typing import Mapping, Sequence
 
@@ -73,29 +83,38 @@ class QuorumConfigError(ValueError):
 
 @dataclass(frozen=True)
 class QuorumPolicy:
-    required_yes: int = 2            # k in k-of-n
+    required_yes: int | None = None  # k in k-of-n; None = min(2, number of judges), resolved at start-up
     min_responding: int | None = None  # K in spec 5.4; defaults to required_yes
     min_distinct_providers: int = 1  # responding providers; 1 means this check is not a floor
-    timeout_seconds: float | None = 45.0  # overall deadline for all judges; None = no deadline
+    timeout_seconds: float | None = 45.0  # overall deadline; None (no deadline) is refused by TwoKey
     parallel: bool = True
-    # On by default. Opt out with QuorumPolicy.without_diversity_floors().
-    min_vendors: int = 2
-    min_local_judges: int = 1
+    # One judge is enough by default. QuorumPolicy.high_assurance() opts in to the diversity floors.
+    min_vendors: int = 1
+    min_local_judges: int = 0
     heterogeneity_scope: str = "selection"      # selection | responding
     judge_inputs: str = "record_only"           # record_only | record_and_proposal
     ballot_binding: str = "stamp"               # stamp | echo
     require_path_a_first: bool = False          # stored, not a skip
-    require_local_yes: bool = True              # a local judge in the set must itself vote yes
+    require_local_yes: bool = False             # a local judge in the set must itself vote yes
+                                                # (a config error if no judge is local)
+    # Deprecated, no effect: the same provider with a different model is allowed (identity.py).
+    # Still accepted and recorded so older configurations load.
+    allow_same_provider_judge: bool = False
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
     tool_args_on_derive_deny: bool = False
+    # Logged opt-in, default off: allow a judge on the agent's own model and endpoint or upstream when both
+    # sides declare different tenants and both have different keys (identity.compare). Recorded in
+    # constitution_loaded as same_model_tenant_optin, part of the policy digest, warned on stderr.
+    allow_same_model_distinct_tenant: bool = False
 
 
     def __post_init__(self):
-        if isinstance(self.required_yes, bool) or not isinstance(self.required_yes, int) or self.required_yes < 1:
+        if self.required_yes is not None and (isinstance(self.required_yes, bool)
+                                              or not isinstance(self.required_yes, int) or self.required_yes < 1):
             raise QuorumConfigError("required_yes must be an integer >= 1")
         mr = self.effective_min_responding
-        if not isinstance(mr, int) or mr < 1:
+        if mr is not None and (isinstance(mr, bool) or not isinstance(mr, int) or mr < 1):
             raise QuorumConfigError("min_responding must be an integer >= 1")
         if not isinstance(self.min_distinct_providers, int) or self.min_distinct_providers < 1:
             raise QuorumConfigError("min_distinct_providers must be an integer >= 1")
@@ -120,18 +139,33 @@ class QuorumPolicy:
             raise QuorumConfigError("require_local_yes must be a boolean")
         if not isinstance(self.tool_args_on_derive_deny, bool):
             raise QuorumConfigError("tool_args_on_derive_deny must be a boolean")
+        if not isinstance(self.allow_same_model_distinct_tenant, bool):
+            raise QuorumConfigError("allow_same_model_distinct_tenant must be a boolean")
+        if not isinstance(self.allow_same_provider_judge, bool):
+            raise QuorumConfigError("allow_same_provider_judge must be a boolean")
+
+    @classmethod
+    def high_assurance(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
+        """Opt-in diversity floors: >= 2 vendors, >= 1 local judge, and a yes from a local judge.
+
+        Recommended for destructive, irreversible, financial, or external-send tools.
+        This was the default in 0.1.12. The default is now one judge.
+        """
+        base = {"min_vendors": 2, "min_local_judges": 1, "require_local_yes": True}
+        base.update(kw)
+        return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
     def without_diversity_floors(cls, required_yes: int = 2, min_responding: int | None = None,
                                  **kw) -> "QuorumPolicy":
-        """Opt out of the default floors. One vendor is enough, and no local judge is required."""
+        """Compatibility name for the default floors: one vendor, no local judge required."""
         base = {"min_vendors": 1, "min_local_judges": 0, "require_local_yes": False}
         base.update(kw)
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
     def section4(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
-        """Default diversity floors, plus ``require_path_a_first``.
+        """``high_assurance`` floors, plus ``require_path_a_first``.
 
         ``TwoKey.authorize`` still runs both paths; it does not read that flag.
         K and T remain the principal's choice.
@@ -148,11 +182,19 @@ class QuorumPolicy:
                 "heterogeneity_scope": self.heterogeneity_scope, "judge_inputs": self.judge_inputs,
                 "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first,
                 "require_local_yes": self.require_local_yes,
-                "tool_args_on_derive_deny": self.tool_args_on_derive_deny}
+                "tool_args_on_derive_deny": self.tool_args_on_derive_deny,
+                "allow_same_provider_judge": self.allow_same_provider_judge,
+                "allow_same_model_distinct_tenant": self.allow_same_model_distinct_tenant}
 
     @property
-    def effective_min_responding(self) -> int:
+    def effective_min_responding(self) -> int | None:
         return self.required_yes if self.min_responding is None else self.min_responding
+
+    def resolved(self, n_judges: int) -> "QuorumPolicy":
+        """``required_yes=None`` becomes min(2, n_judges) (at least 1). Other fields are unchanged."""
+        if self.required_yes is not None:
+            return self
+        return replace(self, required_yes=max(1, min(2, n_judges)))
 
 
 @dataclass(frozen=True)
@@ -197,11 +239,16 @@ def _ballot_record(b: Ballot, binding: Mapping[str, str] | None = None) -> dict:
 
 
 def _local(j) -> bool:
-    return bool(getattr(j, "local_weights", False))
+    """Effective locality (Judge.is_local), not the declared ``local_weights`` flag."""
+    is_local = getattr(j, "is_local", None)
+    return bool(is_local()) if callable(is_local) else False
 
 
 def _vendor(j) -> str:
-    return str(getattr(j, "vendor", None) or getattr(j, "provider", "?"))
+    """The vendor key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
+    "openai " are one vendor, not two."""
+    raw = str(getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
+    return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
 
 
 def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | None:
@@ -211,6 +258,8 @@ def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | Non
         return f"insufficient_vendors:{len(vendors)}<{policy.min_vendors}"
     if local < policy.min_local_judges:
         return f"insufficient_local_judges:{local}<{policy.min_local_judges}"
+    if policy.require_local_yes and local == 0:
+        return "require_local_yes_without_local_judge"
     return None
 
 
@@ -263,6 +312,13 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
         if not isinstance(b, Ballot) or b.vote not in ("yes", "no", "abstain"):
             b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
                        None, "", error="judge returned an invalid ballot object")
+        elif b.judge_id != getattr(j, "judge_id", None):
+            # A ballot naming another judge (for example the local one) is not that judge's vote.
+            b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
+                       None, "", error="judge_id_mismatch")
+        else:
+            # Identity comes from the judge object, never from what the ballot says about itself.
+            b = replace(b, judge_id=j.judge_id, provider=getattr(j, "provider", b.provider))
     except Exception as e:  # a failing judge is an abstention, never a yes
         b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
                    None, "", error=f"{type(e).__name__}: {e}")
@@ -320,7 +376,7 @@ def convene(
 
     ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (Two-Key always passes it).
     """
-    policy = policy or QuorumPolicy()
+    policy = (policy or QuorumPolicy()).resolved(len(judges))
     k_floor = policy.effective_min_responding
     judge_action = action
     if tool_args:
@@ -328,8 +384,12 @@ def convene(
         raw["tool_args"] = dict(tool_args)
         judge_action = replace(action, raw=raw)
     ballots: list[Ballot] = []
-    selection = heterogeneity_shortfall(judges, policy) if judges else None
-    if judges and selection is None:
+    # Ballots are matched to judges by id (local yes, responding heterogeneity). Two judges with
+    # one id would let one judge's ballot stand in for the other's, so the judges are not called.
+    ids = [getattr(j, "judge_id", None) for j in judges]
+    duplicate = len(set(ids)) != len(ids) or any(not isinstance(i, str) or not i for i in ids)
+    selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
+    if judges and not duplicate and selection is None:
         ballots = [_bind(b, binding, policy)
                    for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
     responding = [b for b in ballots if b.responded]
@@ -344,6 +404,8 @@ def convene(
 
     if not judges:
         return result(False, "no_judges", counted=False)
+    if duplicate:
+        return result(False, "duplicate_judge_id", counted=False)
     if selection is not None:
         return result(False, f"judge_set_not_heterogeneous:{selection}", counted=False)
     if len(judges) < policy.required_yes:
@@ -355,20 +417,19 @@ def convene(
     # Availability floor K: below it, deny WITHOUT counting (§4 (iii)).
     if len(responding) < k_floor:
         return result(False, f"insufficient_responses:{len(responding)}<{k_floor}", counted=False)
+    # Ballots are paired with judges by position (_collect keeps the order), not by the id a ballot reports.
+    pairs = list(zip(judges, ballots))
     if policy.heterogeneity_scope == "responding":
-        by_id = {getattr(j, "judge_id", None): j for j in judges}
-        short = heterogeneity_shortfall([by_id.get(b.judge_id) for b in responding if b.judge_id in by_id],
-                                        policy)
+        short = heterogeneity_shortfall([j for j, b in pairs if b.responded], policy)
         if short:
             return result(False, f"responding_not_heterogeneous:{short}", counted=False)
-    providers = {b.provider for b in responding}
+    providers = {unicodedata.normalize("NFKC", str(b.provider)).strip().casefold() for b in responding}
     if len(providers) < policy.min_distinct_providers:
         return result(False, f"insufficient_distinct_providers:{len(providers)}<{policy.min_distinct_providers}")
     yes = sum(1 for b in responding if b.vote == "yes")
     if yes < policy.required_yes:
         return result(False, f"insufficient_yes:{yes}<{policy.required_yes}")
     if policy.require_local_yes:
-        local_ids = {getattr(j, "judge_id", None) for j in judges if _local(j)}
-        if local_ids and not any(b.vote == "yes" and b.judge_id in local_ids for b in responding):
+        if not any(b.vote == "yes" and _local(j) for j, b in pairs):
             return result(False, "local_judge_required")
     return result(True, "quorum_pass")
