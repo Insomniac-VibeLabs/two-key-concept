@@ -182,20 +182,87 @@ claims to close.
   does not claim cross-process exclusion on those platforms.
 - There is no TEE. Username/password and OAuth device-code judge auth are
   rejected. Use `env`, `keyring`, or `callback`.
+- The signatures are not quantum resistant. Ed25519 signs the constitution,
+  the ledger head (principal and witness), and capability tokens. A
+  sufficiently capable quantum computer could forge an Ed25519 signature.
+  The exposure is greatest for long-lived signatures, the constitution and
+  the ledger head. A capability token lives at most 300 seconds, so it is a
+  smaller exposure. AES-256-GCM and SHA-256 are not the concern at these
+  sizes. Hybrid signatures are planned (see [ROADMAP.md](../ROADMAP.md)).
 
 ## Out of scope
 
-- The prototype status itself and missing FIPS validation.
+- The prototype status itself and missing FIPS validation. A planned
+  approved mode (see [ROADMAP.md](../ROADMAP.md)) would run on a validated
+  module. It would not validate this package.
 - Prompt injection that Path A denies because the structured record tripped
   a rule.
 - A vulnerability in a judge vendor's API.
 - Using this package as an MCP server, as user login, or as a DLP or
-  antivirus product. It is none of those.
+  antivirus product. It is none of those. An optional MCP adapter and
+  scanner hooks are planned (see [ROADMAP.md](../ROADMAP.md)). They would sit
+  in front of or beside the gateway, and they would not make this package a
+  server or a scanner.
 - Full per-value information-flow tracking, and a content classifier. A
-  tool-spec floor is not a taint label. Scanning, PKI, anchoring, seed
+  tool-spec floor is not a taint label. Scanning engines, PKI, anchoring, seed
   phrases, and hybrid ML-DSA are in
-  [two-key](https://github.com/Insomniac-VibeLabs/two-key), not here. See
-  [SCOPE.md](SCOPE.md).
+  [two-key](https://github.com/Insomniac-VibeLabs/two-key), not here. Planned
+  scanner hooks and key backup (see [ROADMAP.md](../ROADMAP.md)) do not change
+  that. See [SCOPE.md](SCOPE.md).
+
+## Planned changes to this model
+
+These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.1, and nothing in
+this section describes current behavior. Each item is added to the sections
+above in the release that ships it.
+
+- Key backup (target 0.3). New asset: the backup bundle. It holds the same
+  secrets as the keys above, so it is treated as equal to them. The ledger
+  key and the witness key are meant to be backed up separately from each
+  other, because the residual risks above say that those keys plus the
+  principal key can rewrite a ledger. A weak passphrase becomes a new
+  residual risk.
+- Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
+  SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
+  is meant to carry digests, sizes, and reason codes, not argument values.
+  Whoever can read the SIEM becomes a new audience for ledger metadata.
+- Inspection hooks for DLP and antivirus (target 0.5). New trust boundary:
+  the scanner. A scanner error, timeout, or missing result is meant to be a
+  deny. A scanner sees only what the tool spec lets through, so a payload
+  value it cannot read stays a residual risk. Where the hook runs relative to
+  the judges is an open choice, because cloud judges receive `tool_args`
+  today.
+- MCP adapter (target 0.6). New boundary: MCP client to proxy to MCP server.
+  The assumption that the gateway is the only holder of tool credentials
+  becomes the central one, because an agent that can reach an MCP server
+  directly bypasses the proxy. A `tool_specs` draft made from MCP schemas is
+  a proposal for the principal to review and sign, not trusted input.
+- Post-quantum signatures (target 0.7). New assets: a second signing key per
+  signing role, and larger signatures in the constitution, ledger head, and
+  possibly tokens. A hybrid signature is meant to verify only when both
+  halves verify. New risk to design against: a downgrade, where the
+  post-quantum half is stripped. Every signed format carries an algorithm
+  identifier, and a verifier that expects the hybrid form refuses a
+  classical-only one. Existing 0.2.x ledgers stay readable.
+- FIPS approved mode (target 0.8). New boundary: the cryptographic provider.
+  The mode is meant to refuse to start unless the library runs on a FIPS
+  140-3 validated module in approved mode, and to refuse algorithms outside
+  the approved set. The module's certificate and version are meant to be
+  recorded in `constitution_loaded`. The claim is limited to "runs on a
+  validated module". This package stays unvalidated, and the mode does not
+  cover the rest of the host. How a hybrid signature is treated in approved
+  mode depends on what the validated module supports, and is decided when
+  the mode is built.
+- Local GUI (target 0.9). New boundary: browser to a local server. It is
+  meant to bind to loopback only and to require a per-session token, which
+  is meant to address other local pages, cross-site requests, and DNS
+  rebinding. It is the first place decrypted ledger content is displayed, so
+  anyone who can see the screen or reach the local port is a new audience. It
+  is meant to show digests, sizes, and reason codes, not argument values.
+  Configuration edits change policy, so the GUI is meant never to hold the
+  principal key. It prepares a constitution and hands it to the existing
+  signing command. A GUI that is reachable from another machine is out of
+  scope.
 
 ## What to re-check when the code changes
 
