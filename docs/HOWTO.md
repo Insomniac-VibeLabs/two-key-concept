@@ -492,6 +492,10 @@ the tool runs also blocks a retry.
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
 
+- Declared `upstream:` labels are folded before match (NFKC, zero-width stripped,
+  Unicode dashes to ASCII, casefold). Bare maker names such as `openai` map to the
+  maker's API host (`api.openai.com`).
+- Omit `tenant` when there is none; an empty mapping `tenant: {}` is refused.
 - Declared `upstream:` and `tenant:` values are trusted as declared, not
   verified. A false declaration on a proxy can hide that it forwards with
   the agent's account and key. The same model through another endpoint is
@@ -510,10 +514,10 @@ names the setting or declaration that controls it.
 - A `tenant:` on a proxy is scoped by the provider family its `upstream:`
   reaches, not by the proxy's address.
 - `allow_same_model_distinct_tenant: true` lets a judge run the agent's
-  exact model on the same endpoint under a different declared tenant.
-  Tenants are operator-attested and never verified. The flag is off by
+  exact model on the same endpoint under a different declared tenant. It is off by
   default, warns at startup, and is logged as `same_model_tenant_optin` in
-  `constitution_loaded`. Leave it off unless the accounts are separate.
+  `constitution_loaded` (load-time only; not re-checked on each authorize).
+  Leave it off unless the accounts are separate.
 - Two judges, or a judge and the agent, on the same endpoint and model are
   refused whatever their `tenant:`, unless that flag is set.
 - The runtime agent is not matched against `monitored_agent:`. The

@@ -408,10 +408,17 @@ def endpoint_key(base_url: str) -> str:
 def normalize_upstream(label: str) -> str:
     """A comparable upstream: a URL or ``host[:port]`` becomes lower-case ``host`` or ``host:port`` with a
     default port (80, 443) removed and local aliases written ``localhost``; ``maker:<name>`` and
-    ``in-process:`` labels are kept as they are."""
-    s = (label or "").strip().lower()
+    ``in-process:`` labels are kept as they are.
+
+    Declared labels are folded first (NFKC, zero-width / soft-hyphen stripped, Unicode dashes to
+    ASCII, strip, lower case). A bare maker name such as ``openai`` maps to that maker's API host
+    (``api.openai.com``).
+    """
+    s = fold_model_id(label).rstrip("/")
     if not s or s.startswith(("maker:", f"{IN_PROCESS}:")):
         return s
+    if s in _PREFIX_MAKERS:
+        return _maker_upstream(_PREFIX_MAKERS[s])
     try:
         u = urlparse(s if "://" in s else f"//{s}")
         host = (u.hostname or "").rstrip(".")
@@ -502,11 +509,17 @@ def validate_upstream(upstream: Any, who: str) -> frozenset[str]:
 
 # ---------------------------------------------------------------- tenants
 def validate_tenant(tenant: Any, who: str) -> dict[str, str]:
-    """An operator-declared ``tenant:`` mapping: organization, project, account, deployment."""
+    """An operator-declared ``tenant:`` mapping: organization, project, account, deployment.
+
+    ``None`` (omit the field) means no tenant. An empty mapping ``{}`` is invalid — omit
+    ``tenant`` instead of passing an empty dict.
+    """
     if tenant is None:
         return {}
     if not isinstance(tenant, Mapping):
         raise IdentityError(f"{who}: tenant must be a mapping of {', '.join(TENANT_KEYS)}")
+    if len(tenant) == 0:
+        raise IdentityError(f"{who}: tenant mapping must not be empty (omit tenant instead)")
     extra = set(tenant) - set(TENANT_KEYS)
     if extra:
         raise IdentityError(f"{who}: unknown tenant key(s) {sorted(extra)}")
