@@ -183,5 +183,168 @@ class EncodingErrorReasonCap(unittest.TestCase):
 
 
 
+
+class DeriveValueUnreadableBounded(unittest.TestCase):
+    """#26: value_unreadable / derive_failed never carry raw unbounded __name__."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from two_key.constitution import sign_constitution, verify_signed
+        from two_key.core import TwoKey
+        from two_key.keys import generate_private_key
+        from two_key.ledger import Ledger
+        from two_key.quorum import QuorumPolicy
+        from two_key.testing import TEST_AGENT, FixedJudge
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        key = generate_private_key()
+        rules = [{"id": "tools", "allow_only_tools": ["pay"]}]
+        specs = {"pay": {"irreversible": False, "data_class_floor": "public",
+                         "amount": {"json_path": "amt", "unit": "usd"},
+                         "counterparties": [{"json_path": "to", "allow": ["ada"]}]}}
+        env = sign_constitution("Pay ada.", rules, key, specs)
+        self.tk = TwoKey(Ledger(Path(self.tmp.name, "ledger"), key), key.public_key(),
+                         verify_signed(env, key.public_key()), [FixedJudge("a", "yes")],
+                         private_key=key, quorum=QuorumPolicy(required_yes=1),
+                         allow_test_doubles=True, monitored_agent=TEST_AGENT)
+        self.pay = normalize_action({"tool": "pay", "data_class": "public", "irreversible": False})
+
+    def test_pathological_type_name_in_value_unreadable_is_type_tag(self):
+        from unittest import mock
+        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
+        from two_key.derive import DeriveError, derive
+
+        huge = "P" * 200_000
+        cls = type(huge, (ValueError,), {})
+        with mock.patch("two_key.derive._derive", side_effect=cls("boom")):
+            with self.assertRaises(DeriveError) as cm:
+                derive({"amount": {"json_path": "amt", "unit": "usd"}}, {"amt": 1})
+        reason = str(cm.exception)
+        tag = type_tag(cls("x"))
+        self.assertEqual(reason, f"value_unreadable:{tag}")
+        self.assertLessEqual(len(tag), MAX_TYPE_TAG_CHARS)
+        self.assertNotIn(huge, reason)
+        self.assertLess(len(reason), 80)
+
+    def test_authorize_derive_failed_reason_bounded_for_huge_type_name(self):
+        """Even a pre-capped DeriveError reason is cap_ledger_text'd into the decision."""
+        from unittest import mock
+        from two_key.agent_meta import MAX_LEDGER_ERROR_CHARS
+        from two_key.derive import DeriveError
+
+        huge = "Q" * 200_000
+        with mock.patch("two_key.core.derive",
+                        side_effect=DeriveError("value_unreadable:" + huge)):
+            d = self.tk.authorize(self.pay, {"amt": 1, "to": "ada"}, "pay")
+        self.assertFalse(d.allowed)
+        self.assertTrue(d.reason.startswith("derive_failed:"), d.reason)
+        self.assertNotIn(huge, d.reason)
+        self.assertLess(len(d.reason), len("derive_failed:") + MAX_LEDGER_ERROR_CHARS + 80)
+        self.assertIn("…sha256:", d.reason)
+        decisions = [e.body for e in self.tk.ledger.entries if e.kind == "decision"]
+        self.assertTrue(decisions)
+        self.assertEqual(decisions[-1]["reason"], d.reason)
+        self.assertLess(len(str(decisions[-1]["reason"])),
+                        len("derive_failed:") + MAX_LEDGER_ERROR_CHARS + 80)
+
+    def test_derive_raises_type_tag_then_authorize_is_bounded(self):
+        from unittest import mock
+        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
+
+        huge = "R" * 200_000
+        cls = type(huge, (OverflowError,), {})
+        with mock.patch("two_key.derive._derive", side_effect=cls("x")):
+            d = self.tk.authorize(self.pay, {"amt": 1, "to": "ada"}, "pay")
+        tag = type_tag(cls("x"))
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.reason, f"derive_failed:value_unreadable:{tag}")
+        self.assertLessEqual(len(tag), MAX_TYPE_TAG_CHARS)
+        self.assertNotIn(huge, d.reason)
+        self.assertLess(len(d.reason), 80)
+
+
+class LedgerOmitDefaultBounded(unittest.TestCase):
+    """#26: omitted_body JSON default uses type_tag, not raw __name__."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from two_key.keys import generate_private_key
+        from two_key.ledger import Ledger
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.key = generate_private_key()
+        self.ledger = Ledger(Path(self.tmp.name, "ledger"), self.key)
+
+    def test_pathological_type_name_does_not_inflate_omit_digest_allocation(self):
+        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
+
+        huge = "O" * 200_000
+        bad = type(huge, (), {})()
+        entry = self.ledger.append_bounded("x", {"n": 3, "obj": bad})
+        self.assertTrue(entry.body["body_omitted"])
+        # Temporary dump uses <type_tag>, so body_size stays small (not ~200k).
+        self.assertLess(entry.body["body_size"], 500)
+        self.assertNotIn(huge, str(entry.body))
+        tag = type_tag(bad)
+        self.assertLessEqual(len(tag), MAX_TYPE_TAG_CHARS)
+        # Digest still present and well-formed.
+        self.assertRegex(entry.body["body_digest"], r"^sha256:[0-9a-f]{64}$")
+
+
+class LlmAbstainTypeTag(unittest.TestCase):
+    """#27: transport / malformed_response abstain errors use type_tag."""
+
+    def test_transport_pathological_type_name_is_type_tag(self):
+        from two_key.action import normalize_action
+        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
+        from two_key.judges.ollama import OllamaJudge
+
+        huge = "T" * 200_000
+        cls = type(huge, (OSError,), {})
+
+        def transport(url, headers, body, timeout):
+            raise cls("boom")
+
+        j = OllamaJudge("local", "ollama", "qwen2.5:7b", transport=transport)
+        action = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
+        b = j.score_bound("Searching is fine.", action, "look", None)
+        self.assertEqual(b.vote, "abstain")
+        tag = type_tag(cls("x"))
+        self.assertEqual(b.error, f"transport: {tag}")
+        self.assertLessEqual(len(tag), MAX_TYPE_TAG_CHARS)
+        self.assertNotIn(huge, b.error)
+        self.assertLess(len(b.error), 80)
+
+    def test_malformed_response_pathological_type_name_is_type_tag(self):
+        from two_key.action import normalize_action
+        from two_key.agent_meta import MAX_TYPE_TAG_CHARS, type_tag
+        from two_key.judges.ollama import OllamaJudge
+
+        huge = "M" * 200_000
+        cls = type(huge, (RuntimeError,), {})
+
+        def transport(url, headers, body, timeout):
+            return {"message": {"content": '{"consistent": true, "confidence": 0.9, "rationale": "ok"}'}}
+
+        j = OllamaJudge("local", "ollama", "qwen2.5:7b", transport=transport)
+
+        def boom_extract(resp):
+            raise cls("bad")
+
+        j._extract_text = boom_extract  # type: ignore[method-assign]
+        action = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
+        b = j.score_bound("Searching is fine.", action, "look", None)
+        self.assertEqual(b.vote, "abstain")
+        tag = type_tag(cls("x"))
+        self.assertEqual(b.error, f"malformed_response: {tag}")
+        self.assertLessEqual(len(tag), MAX_TYPE_TAG_CHARS)
+        self.assertNotIn(huge, b.error)
+        self.assertLess(len(b.error), 80)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -248,5 +248,24 @@ class GatewayDenied(unittest.TestCase):
 
 
 
+    def test_deny_inflight_wait_nonfinite_falls_back_to_default(self):
+        """#28: inf/nan (and <=0) for deny_inflight_wait_seconds fall back to 30s."""
+        from two_key.gateway import _DENY_INFLIGHT_WAIT_SECONDS
+
+        for bad in (float("inf"), float("-inf"), float("nan"), 0, -1, -0.5):
+            gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                             tools={"search": lambda a: "ok"},
+                             deny_inflight_wait_seconds=bad)
+            self.assertEqual(gw._deny_inflight_wait_seconds, _DENY_INFLIGHT_WAIT_SECONDS)
+            self.assertEqual(gw._deny_inflight_wait_seconds, 30.0)
+
+    def test_deny_inflight_wait_finite_positive_is_kept(self):
+        """#28: a finite positive wait is accepted as-is."""
+        gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                         tools={"search": lambda a: "ok"},
+                         deny_inflight_wait_seconds=12.5)
+        self.assertEqual(gw._deny_inflight_wait_seconds, 12.5)
+
+
 if __name__ == "__main__":
     unittest.main()

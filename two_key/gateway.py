@@ -14,9 +14,9 @@ failed ledger write can be retried on a later deny. Concurrent same-jti denies a
 single-flight under ``_denied_jtis_guard`` so only one ``gateway_denied`` append runs
 at a time; waiters re-check and skip if already marked. Waiters use a timed
 ``Condition.wait`` (``_DENY_INFLIGHT_WAIT_SECONDS``, default 30s; configurable via
-``deny_inflight_wait_seconds``): on timeout they still deny fail-closed without
-marking and without fail-open, so a stuck ``append_bounded`` cannot hang waiters
-forever. The in-memory set is LRU-capped (``_MAX_DENIED_JTIS``, clamped to at least 1).
+``deny_inflight_wait_seconds``, which must be finite and positive — ``inf``/``nan``
+fall back to 30s): on timeout they still deny fail-closed without marking and
+without fail-open, so a stuck ``append_bounded`` cannot hang waiters forever. The in-memory set is LRU-capped (``_MAX_DENIED_JTIS``, clamped to at least 1).
 Further denies for a remembered jti still refuse but do not append. A token that does
 not verify writes nothing.
 """
@@ -24,6 +24,7 @@ not verify writes nothing.
 from __future__ import annotations
 
 from collections import OrderedDict
+import math
 import os
 import sys
 import threading
@@ -104,10 +105,13 @@ class ToolGateway:
         # #22: zero/negative would make the LRU pop loop KeyError on an empty map.
         n = int(max_denied_jtis) if max_denied_jtis is not None else _MAX_DENIED_JTIS
         self._max_denied_jtis = max(1, n)
-        # #25: timed wait so a hung append cannot block same-jti waiters forever.
+        # #25/#28: timed wait so a hung append cannot block same-jti waiters forever.
+        # Require finite positive; inf/nan (and <=0) fall back to the 30s default.
         wait = (_DENY_INFLIGHT_WAIT_SECONDS if deny_inflight_wait_seconds is None
                 else float(deny_inflight_wait_seconds))
-        self._deny_inflight_wait_seconds = wait if wait > 0 else _DENY_INFLIGHT_WAIT_SECONDS
+        self._deny_inflight_wait_seconds = (
+            wait if math.isfinite(wait) and wait > 0 else _DENY_INFLIGHT_WAIT_SECONDS
+        )
 
     def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
         """Redeem ``token`` for ``tool(arguments)``.

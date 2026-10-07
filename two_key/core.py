@@ -301,7 +301,7 @@ class TwoKey:
                     raise DeriveError("arguments_not_object")
                 derived = derive(spec, arguments)
             except DeriveError as exc:
-                deny_reason = f"derive_failed:{exc.reason}"
+                deny_reason = f"derive_failed:{cap_ledger_text(exc.reason)}"
                 normalized = replace(normalized, data_class="classified", irreversible=True)
             else:
                 mismatch = disagreement(proposed, derived)

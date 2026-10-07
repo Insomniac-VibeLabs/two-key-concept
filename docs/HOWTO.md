@@ -43,8 +43,8 @@ carries text the rules must treat as sensitive needs that class as its
 `data_class_floor`. A missing amount path, a non-numeric amount, or a
 currency other than `usd` on `pay_bill` is a deny. A value that cannot be
 read at all is a `derive_failed` deny: `derive_failed:amount_unreadable`
-for an amount such as `10**400`, `derive_failed:value_unreadable:<Type>` for
-any other value.
+for an amount such as `10**400`, `derive_failed:value_unreadable:<type_tag>` for
+any other value (type label via `type_tag`, ≤32 chars; never raw `__name__`).
 
 A key the spec does not name does not change the form and does not reach
 the tool. The spec does not have to list every nested key. `deny_unmapped`
@@ -522,7 +522,7 @@ names the setting or declaration that controls it.
   declaration is what is compared.
 - `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
   when the agent runs behind a proxy.
-- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096; `max_denied_jtis` is clamped to at least 1). Concurrent same-jti denies are single-flight: only one append runs at a time; waiters re-check and skip if already marked. Waiters use a timed wait (default 30 seconds; `deny_inflight_wait_seconds` on `ToolGateway`): on timeout they still deny fail-closed without marking and without fail-open, so a stuck ledger append cannot hang waiters forever. `ttl_seconds` still bounds how long a token can be presented.
+- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096; `max_denied_jtis` is clamped to at least 1). Concurrent same-jti denies are single-flight: only one append runs at a time; waiters re-check and skip if already marked. Waiters use a timed wait (default 30 seconds; `deny_inflight_wait_seconds` on `ToolGateway` must be finite and positive — `inf`/`nan`/≤0 fall back to 30s): on timeout they still deny fail-closed without marking and without fail-open, so a stuck ledger append cannot hang waiters forever. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Reload the constitution or revoke to change it.
 - `payload:` paths in a tool spec may overlap each other. Only overlap
@@ -543,7 +543,7 @@ names the setting or declaration that controls it.
   `authorize()`, which is why the cap exists. If a ledger body cannot be
   encoded on a path about to issue a token, the decision is
   `ledger_body_too_large` (fail closed).
-- Quorum/judge ledger exception text and both Path A `vm_fault` paths (`VMFault` and generic `Exception`) are `type_tag: message` capped at 300 characters; oversize keeps a prefix plus a digest of the remainder (`exception_ledger_error` / `cap_ledger_text`). All `ledger_failed:` reason strings for a `LedgerError` (gateway `_record_deny`, gateway redemption, core authorize/`_deny`) cap the message the same way; non-`LedgerError` deny paths keep `type_tag` only. Canonical encoding refuses a non-JSON type with the fixed label `unsupported_type` (never raw `__name__`); authorize/gateway `invalid_call:` / `malformed_action:` suffixes from `EncodingError` also go through `cap_ledger_text`.
+- Quorum/judge ledger exception text and both Path A `vm_fault` paths (`VMFault` and generic `Exception`) are `type_tag: message` capped at 300 characters; oversize keeps a prefix plus a digest of the remainder (`exception_ledger_error` / `cap_ledger_text`). All `ledger_failed:` reason strings for a `LedgerError` (gateway `_record_deny`, gateway redemption, core authorize/`_deny`) cap the message the same way; non-`LedgerError` deny paths keep `type_tag` only. Canonical encoding refuses a non-JSON type with the fixed label `unsupported_type` (never raw `__name__`); authorize/gateway `invalid_call:` / `malformed_action:` suffixes from `EncodingError` also go through `cap_ledger_text`. Derive `value_unreadable:` uses `type_tag`; `derive_failed:` reasons are `cap_ledger_text`'d where stored. Ledger `omitted_body` JSON default writes `<type_tag>` for non-JSON values. LLM judge `transport:` / `malformed_response:` abstain errors use `type_tag`.
 - A token's `iat`/`exp` are read with `float()`. Tokens minted here are
   always numeric, so this only matters for tokens from another issuer.
 - Config errors from the CLI print a traceback. Check judges.yaml with a

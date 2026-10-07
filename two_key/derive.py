@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .action import DATA_CLASSES, MAX_AMOUNT_USD
+from .agent_meta import type_tag
 
 
 # Size cap on tool arguments and on the proposal text, in UTF-8 bytes of their compact JSON.
@@ -321,8 +322,9 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
     An amount that cannot be read (for example 10**400) is
     ``DeriveError("amount_unreadable")``. Any other ``OverflowError``,
     ``TypeError``, ``ValueError``, or ``RecursionError`` (a value nested too
-    deeply) becomes ``DeriveError("value_unreadable:<type>")``,
-    which ``TwoKey`` turns into a ``derive_failed:`` deny.
+    deeply) becomes ``DeriveError("value_unreadable:<type_tag>")`` (bounded type label,
+    never raw unbounded ``__name__``), which ``TwoKey`` turns into a
+    ``derive_failed:`` deny (``cap_ledger_text`` on the reason).
     """
     try:
         return _derive(spec, arguments)
@@ -330,7 +332,7 @@ def derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:
         raise
     except (OverflowError, TypeError, ValueError, RecursionError) as exc:
         # RecursionError: a value nested too deeply to read is a deny, never a crash.
-        raise DeriveError(f"value_unreadable:{type(exc).__name__}") from None
+        raise DeriveError(f"value_unreadable:{type_tag(exc)}") from None
 
 
 def _derive(spec: Mapping[str, Any], arguments: Mapping[str, Any]) -> Derived:

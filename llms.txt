@@ -17,7 +17,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(350 tests, no network).
+(358 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
@@ -45,7 +45,7 @@ Optional shape locks it to a string, a number, or a list of strings and
 does not read the contents. Omit shape and the value's children are copied
 unread. After a derive deny, tool_args are withheld from
 judges unless tool_args_on_derive_deny is set. Path B still runs.
-Free text is not classified. There is no per-value information-flow tracking.
+Ledger deny/error type labels use type_tag (≤32 chars); derive_failed and EncodingError paths are capped. Same-jti deny waiters time out (default 30s; deny_inflight_wait_seconds must be finite positive). Free text is not classified. There is no per-value information-flow tracking.
 two-key authorize uses the same fail-closed defaults as normalize_action:
 --data-class classified, and --irreversible true. --no-irreversible turns that off.
 Those claims must match the tool spec.
