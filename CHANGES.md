@@ -455,3 +455,13 @@ on stderr, not a refusal.
   being special cases and become ordinary typed fields that rules can
   name. Until then the action record keeps `amount_usd` and `counterparty`
   as fields, with neutral defaults for tools that have neither.
+
+## Working — Cyber fail-closed pass (2026-10-06)
+
+On branch `working`. Issues closed (not #24 — product-only deferred heuristics):
+
+- **#9** — Declared upstream labels folded (NFKC / zero-width); bare `openai` maps to `api.openai.com`.
+- **#8** — Empty `tenant: {}` refused (omit instead); same-model distinct-tenant opt-in documented as `constitution_loaded`-only.
+- **#12** — Per-jti throttle: after the first `gateway_denied` for a jti, further denies still refuse but do not append repeats.
+- **#11** — `append_bounded` `body_omitted` entries always retain `policy_digest` and `identities_digest`.
+
