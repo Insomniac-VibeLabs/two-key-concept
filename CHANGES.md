@@ -465,7 +465,7 @@ On branch `working`. Issues closed (not #24 — product-only deferred heuristics
 - **#12** — Per-jti throttle: after the first `gateway_denied` for a jti, further denies still refuse but do not append repeats.
 - **#11** — `append_bounded` `body_omitted` entries always retain `policy_digest` and `identities_digest`.
 - **#16** — Bound `_denied_jtis`: mark jti only after successful `gateway_denied` append+checkpoint; LRU hard cap (`_MAX_DENIED_JTIS`, default 4096).
-- **#17** — Cap exception/reason ledger text (~300 chars + digest) via `cap_ledger_text` / `exception_ledger_error` (quorum ballot error, `vm_fault`, gateway `ledger_failed` LedgerError message).
+- **#17** — Partial: cap exception/reason ledger text (~300 chars + digest) via `cap_ledger_text` / `exception_ledger_error` (quorum ballot error, generic `vm_fault` Exception path, gateway `_record_deny` `ledger_failed` for `LedgerError`). Dedicated `VMFault` path and other `ledger_failed` sites remain open as #20 / #21 — keep #17 open until those land.
 - **#18** — `check_agent_meta_mapping` reports `got: non_mapping` for a non-Mapping `agent_meta` (field values stay `non_str`).
 - **#19** — SHA-pin third-party GitHub Actions (`checkout`, `setup-python`, `codeql-action`) to full commit SHAs.
 

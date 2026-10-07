@@ -522,7 +522,7 @@ names the setting or declaration that controls it.
   declaration is what is compared.
 - `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
   when the agent runs behind a proxy.
-- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped. `ttl_seconds` still bounds how long a token can be presented.
+- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096). `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Reload the constitution or revoke to change it.
 - `payload:` paths in a tool spec may overlap each other. Only overlap
@@ -536,11 +536,14 @@ names the setting or declaration that controls it.
   agent-controlled claims. Each must be a `str` or omitted (`None`); after
   strip, longer than 256 characters is refused (`agent_metadata_too_large`).
   Non-str is `invalid_agent_metadata` (ledger `got: non_str`, never the raw
-  type name). The value is never ledgered on deny. Blank/`None` `origin`
+  type name). A non-Mapping `agent_meta` (`check_agent_meta_mapping`) is
+  `invalid_agent_metadata` with `got: non_mapping` (field values stay
+  `non_str`). The value is never ledgered on deny. Blank/`None` `origin`
   defaults to `library`. An agent process can still pass huge values into
   `authorize()`, which is why the cap exists. If a ledger body cannot be
   encoded on a path about to issue a token, the decision is
   `ledger_body_too_large` (fail closed).
+- Quorum/judge ledger exception text and the generic Path A `vm_fault` (non-`VMFault`) path are `type_tag: message` capped at 300 characters; oversize keeps a prefix plus a digest of the remainder (`exception_ledger_error` / `cap_ledger_text`). A gateway `_record_deny` `ledger_failed` for a `LedgerError` caps the message the same way. Dedicated `VMFault` reasons and other `ledger_failed` sites are still open (#20 / #21).
 - A token's `iat`/`exp` are read with `float()`. Tokens minted here are
   always numeric, so this only matters for tokens from another issuer.
 - Config errors from the CLI print a traceback. Check judges.yaml with a
