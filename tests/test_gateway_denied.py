@@ -76,13 +76,12 @@ class GatewayDenied(unittest.TestCase):
     def test_oversized_and_deep_arguments(self):
         self.assertEqual(self.gw.invoke(self.token, "search", {"q": SECRET * (MAX_ARGS_BYTES // 10)}).reason,
                          "args_too_large")
+        # Same jti: second deny still refuses but does not append another gateway_denied (#12).
         self.assertEqual(self.gw.invoke(self.token, "search", {"q": nest(5000)}).reason,
                          "invalid_call:tool args are nested too deeply")
-        big, deep = self.denied()
+        [big] = self.denied()
         self.assertEqual(big["reason"], "args_too_large")
         self.assertGreater(big["tool_args_size"], MAX_ARGS_BYTES)
-        self.assertEqual(deep["reason"], "invalid_call:tool args are nested too deeply")
-        self.assertIn("tool_args_size", deep)
         self.assertNotIn(SECRET, self.ledger_text())
 
     def test_replay_is_ledgered_and_success_is_not_a_deny(self):
@@ -90,7 +89,16 @@ class GatewayDenied(unittest.TestCase):
         self.assertEqual(self.denied(), [])
         self.assertEqual(self.gw.invoke(self.token, "search", {"q": "weather"}).reason, "already_redeemed")
         self.assertEqual([b["reason"] for b in self.denied()], ["already_redeemed"])
+        # Further replays of the same jti still deny but do not flood the ledger (#12).
+        self.assertEqual(self.gw.invoke(self.token, "search", {"q": "weather"}).reason, "already_redeemed")
+        self.assertEqual(len(self.denied()), 1)
         self.tk.ledger.verify()
+
+    def test_per_jti_throttle_stops_repeat_appends(self):
+        r1 = self.gw.invoke(self.token, "search", {"q": SECRET})
+        r2 = self.gw.invoke(self.token, "search", {"q": SECRET})
+        self.assertEqual(r1.reason, r2.reason)
+        self.assertEqual(len(self.denied()), 1)
 
 
 if __name__ == "__main__":

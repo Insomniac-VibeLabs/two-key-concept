@@ -8,7 +8,8 @@ retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
 A refusal of an authenticated token is ledgered as ``gateway_denied`` (reason,
-jti, tool, argument size and digest); a token that does not verify writes nothing.
+jti, tool, argument size and digest) at most once per jti; further denies for that
+jti still refuse but do not append. A token that does not verify writes nothing.
 """
 
 from __future__ import annotations
@@ -78,6 +79,9 @@ class ToolGateway:
         self.tools = tools or {}
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+        # After the first gateway_denied for a jti, further denies still refuse but do not append.
+        self._denied_jtis: set[str] = set()
+        self._denied_jtis_guard = threading.Lock()
 
     def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
         """Redeem ``token`` for ``tool(arguments)``.
@@ -98,7 +102,15 @@ class ToolGateway:
         return self._record_deny(result, payload, tool, encoded)
 
     def _record_deny(self, result: GatewayResult, payload: dict, tool, encoded: dict) -> GatewayResult:
-        body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": _short(payload.get("jti"))}
+        jti = _short(payload.get("jti"))
+        if jti is not None:
+            with self._denied_jtis_guard:
+                already = jti in self._denied_jtis
+                if not already:
+                    self._denied_jtis.add(jti)
+            if already:
+                return result          # still deny; do not append another gateway_denied for this jti
+        body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": jti}
         if isinstance(tool, str) and len(tool) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool):
             body["tool"] = tool
         else:
