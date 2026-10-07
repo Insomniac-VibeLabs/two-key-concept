@@ -319,9 +319,7 @@ One level more is `malformed_action:action claim is nested too deeply` or
 `malformed_proposal`, and it is ledgered.
 
 If a ledger body still cannot be encoded, `Ledger.append_bounded` writes
-the entry anyway. It keeps only the body's short scalar fields (reason,
-jti, tool, allowed), plus `body_size`, `body_digest`, `body_omitted: true`,
-and `body_error`.
+the entry anyway. It keeps the body's short scalar fields (reason, jti, tool, allowed), always retains `policy_digest` and `identities_digest` when present, plus `body_size`, `body_digest`, `body_omitted: true`, and `body_error`.
 
 The token lifetime (`TwoKey(ttl_seconds=...)`, `--ttl-seconds`) is an
 integer from 1 to 300 seconds; anything else, including a float, NaN, or
@@ -524,9 +522,7 @@ names the setting or declaration that controls it.
   declaration is what is compared.
 - `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
   when the agent runs behind a proxy.
-- A `gateway_denied` entry is written for each replay of a refused token.
-  `ttl_seconds` bounds how long a token can be replayed. There is no
-  per-jti cap.
+- After the first `gateway_denied` for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Reload the constitution or revoke to change it.
 - `payload:` paths in a tool spec may overlap each other. Only overlap
