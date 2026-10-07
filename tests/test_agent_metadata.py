@@ -141,5 +141,34 @@ class AgentMetadataTests(unittest.TestCase):
             self.assertEqual(d.agent["id"], "b" * 256)
 
 
+    def test_invalid_detail_uses_non_str_not_raw_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tk = _engine(tmp)
+            d = tk.authorize(SEARCH, {"q": "x"}, "look", agent_id=b"bytes")
+            self.assertEqual(d.reason, REASON_INVALID)
+            bodies = [e.body for e in tk.ledger.entries if e.kind == "decision"]
+            self.assertEqual(bodies[-1].get("got"), "non_str")
+            self.assertEqual(bodies[-1].get("field"), "agent_id")
+
+    def test_huge_type_name_cannot_balloon_deny(self):
+        """A caller-defined type with a multi-MB __name__ must not inflate the ledger."""
+        from two_key.agent_meta import type_tag, MAX_TYPE_TAG_CHARS
+        huge = "H" * (2 << 20)
+        cls = type(huge, (), {})
+        tag = type_tag(cls())
+        self.assertLessEqual(len(tag), MAX_TYPE_TAG_CHARS)
+        self.assertNotIn(huge, tag)
+        with tempfile.TemporaryDirectory() as tmp:
+            tk = _engine(tmp)
+            d = tk.authorize(SEARCH, {"q": "x"}, "look", agent_id=cls())
+            self.assertEqual((d.allowed, d.token, d.reason), (False, None, REASON_INVALID))
+            blob = _ledger_blob(tk)
+            self.assertNotIn(b"H" * 100, blob)
+            self.assertLess(len(blob), 64 * 1024)
+            bodies = [e.body for e in tk.ledger.entries if e.kind == "decision"]
+            self.assertEqual(bodies[-1].get("got"), "non_str")
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -319,6 +319,11 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   `field`/`size`/`digest` only). `append_bounded` with `body_omitted` on a
   path about to issue a token becomes `ledger_body_too_large` instead of an
   allow. Shared helper: `two_key.agent_meta`.
+- Decision `origin` (library/CLI label) uses the same 256-char / str caps as
+  B1 metadata (`normalize_origin`). Oversize or non-str is a fail-closed deny
+  with `field`/`size`/`digest` or `got: non_str` only — never the full value,
+  and no token. Ledger type labels use `type_tag` (allowlisted or ≤32 chars),
+  never raw unbounded `__name__`.
 - `authorize_from_agent` measures the proposal text before parsing it:
   over 1,048,576 characters is `proposal_too_large`, and text that is not
   a string (including `None`) or does not parse is `malformed_proposal`.
@@ -423,7 +428,7 @@ on stderr, not a refusal.
 | `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, nested too deeply to parse (a `RecursionError` on any Python version), or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
 | `invalid_call:<why>` (authorize and gateway) | Arguments nested more than 62 levels, NaN, or a non-string key | Flatten or fix the arguments |
 | `malformed_action:action claim is nested too deeply` | The action claim (usually `raw`) nests more than 62 levels | Flatten `raw` |
-| `body_omitted: true` on a ledger entry | The entry's body could not be encoded; only its short fields, size, and digest were kept | Read `body_error`; report it |
+| `body_omitted: true` on a ledger entry | The entry's body could not be encoded; short scalars plus `body_size`/`body_digest`/`body_error` are kept, and `policy_digest`/`identities_digest` are always retained when present | Read `body_error`; report it |
 | `derive_failed:amount_unreadable` | The amount cannot be read (for example `10**400`, `"1e400"`, or a non-number) | Send a readable amount |
 | `derive_failed:value_unreadable:<Type>` | Another derived value cannot be read (for example nested too deeply to walk) | Send a readable value |
 | `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |
@@ -450,3 +455,13 @@ on stderr, not a refusal.
   being special cases and become ordinary typed fields that rules can
   name. Until then the action record keeps `amount_usd` and `counterparty`
   as fields, with neutral defaults for tools that have neither.
+
+## Working — Cyber fail-closed pass (2026-10-06)
+
+On branch `working`. Issues closed (not #24 — product-only deferred heuristics):
+
+- **#9** — Declared upstream labels folded (NFKC / zero-width); bare `openai` maps to `api.openai.com`.
+- **#8** — Empty `tenant: {}` refused (omit instead); same-model distinct-tenant opt-in documented as `constitution_loaded`-only.
+- **#12** — Per-jti throttle: after the first `gateway_denied` for a jti, further denies still refuse but do not append repeats.
+- **#11** — `append_bounded` `body_omitted` entries always retain `policy_digest` and `identities_digest`.
+

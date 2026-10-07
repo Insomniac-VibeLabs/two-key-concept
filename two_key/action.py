@@ -25,6 +25,7 @@ import math
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
+from .agent_meta import type_tag
 
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
 
@@ -49,14 +50,14 @@ class ActionValidationError(ValueError):
 def canon_str(value: Any, name: str) -> str:
     """Trim and case-fold a string field. Non-strings are rejected."""
     if not isinstance(value, str):
-        raise ActionValidationError(f"{name}: expected string, got {type(value).__name__}")
+        raise ActionValidationError(f"{name}: expected string, got {type_tag(value)}")
     return value.strip().casefold()
 
 
 def _number(value: Any, name: str, *, lo: float = 0.0, hi: float = MAX_AMOUNT_USD) -> float:
     # bool is a subclass of int; reject it explicitly. Numeric strings are rejected.
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ActionValidationError(f"{name}: expected a number, got {type(value).__name__}")
+        raise ActionValidationError(f"{name}: expected a number, got {type_tag(value)}")
     try:
         f = float(value)
     except OverflowError:  # an int such as 10**400

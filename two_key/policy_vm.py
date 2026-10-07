@@ -24,6 +24,7 @@ from enum import IntEnum
 from typing import Any, Iterable, Mapping
 
 from .action import DATA_CLASSES, Action, canon_str
+from .agent_meta import type_tag
 
 DEFAULT_MAX_STEPS = 4096
 
@@ -145,7 +146,7 @@ class PolicyVM:
         except VMFault as e:
             return VMResult(False, f"vm_fault:{e}", steps, "vm")
         except Exception as e:  # defensive: any interpreter bug is a deny
-            return VMResult(False, f"vm_fault:{type(e).__name__}:{e}", steps, "vm")
+            return VMResult(False, f"vm_fault:{type_tag(e)}:{e}", steps, "vm")
 
 
 # ---------------------------------------------------------------------------

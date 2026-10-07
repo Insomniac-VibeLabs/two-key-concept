@@ -1,6 +1,9 @@
 
 # Two-Key concept
 
+[![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/working/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml) [![Documentation Status](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/pages/pages-build-deployment/badge.svg)](https://insomniac-vibelabs.github.io/two-key-concept/)
+
 Two independent keys must turn before an AI agent can act.
 
 This repository is the initial concept, extracted from
@@ -16,7 +19,7 @@ Read [docs/FIT.md](docs/FIT.md) first, then
 [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), and
 [docs/SCOPE.md](docs/SCOPE.md), before relying on it.
 
-## What turns
+## Dual-path authorization
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
    structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
@@ -48,8 +51,9 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    judge, and a yes from that local judge; use it for destructive,
    irreversible, financial, or external-send tools. `require_local_yes`
    with no local judge does not start. A judge is local only when it says
-   so and its `base_url` host is on an allowlist: loopback, RFC 1918, or
-   IPv6 unique-local. A `:cloud`/`-cloud` model is never local, for any judge class. With
+   so (`local_weights: true`) and its `base_url` host is on an allowlist:
+   loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
+   never local, for any judge class. With
    `required_yes` unset, the quorum needs `min(2, judges)` yes votes.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless
@@ -95,7 +99,7 @@ flowchart TD
   judgeText --> pathB
   declared["monitored_agent<br/>declared by the operator"] -->|"start-up: judge is not the agent"| judges
   session["agent_session<br/>must not be a judge API key"] --> pathB
-  pathB -->|"parallel score, separate credentials"| judges["Judges<br/>xAI, OpenAI, Anthropic, Gemini, Ollama"]
+  pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
   judges -->|"yes, no, or abstain"| pathB
   pathA --> gate{"both allow?"}
   pathB --> gate

@@ -219,9 +219,11 @@ double (`in_process_agent_refused`).
 
 The default needs one judge and has no diversity floors: `min_vendors: 1`,
 `min_local_judges: 0`, `require_local_yes: false`. When `required_yes` is
-not set (in `QuorumPolicy`, the quorum block, or `TwoKey` with no policy),
+not set (in `QuorumPolicy()`, the quorum block, or `TwoKey` with no policy),
 it is `min(2, number of judges)`.
-`QuorumPolicy.without_diversity_floors()` is kept as a name for the default.
+`QuorumPolicy.without_diversity_floors()` is **not** that default: it sets the
+same floor values but defaults `required_yes` to 2. Prefer `QuorumPolicy()`
+(or omit / set `required_yes` to `null`) for the one-judge default threshold.
 
 `profile: high_assurance` in the quorum block, or
 `QuorumPolicy.high_assurance()`, turns on two vendors, one local judge, and
@@ -317,9 +319,7 @@ One level more is `malformed_action:action claim is nested too deeply` or
 `malformed_proposal`, and it is ledgered.
 
 If a ledger body still cannot be encoded, `Ledger.append_bounded` writes
-the entry anyway. It keeps only the body's short scalar fields (reason,
-jti, tool, allowed), plus `body_size`, `body_digest`, `body_omitted: true`,
-and `body_error`.
+the entry anyway. It keeps the body's short scalar fields (reason, jti, tool, allowed), always retains `policy_digest` and `identities_digest` when present, plus `body_size`, `body_digest`, `body_omitted: true`, and `body_error`.
 
 The token lifetime (`TwoKey(ttl_seconds=...)`, `--ttl-seconds`) is an
 integer from 1 to 300 seconds; anything else, including a float, NaN, or
@@ -490,6 +490,10 @@ the tool runs also blocks a retry.
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
 
+- Declared `upstream:` labels are folded before match (NFKC, zero-width stripped,
+  Unicode dashes to ASCII, casefold). Bare maker names such as `openai` map to the
+  maker's API host (`api.openai.com`).
+- Omit `tenant` when there is none; an empty mapping `tenant: {}` is refused.
 - Declared `upstream:` and `tenant:` values are trusted as declared, not
   verified. A false declaration on a proxy can hide that it forwards with
   the agent's account and key. The same model through another endpoint is
@@ -508,19 +512,17 @@ names the setting or declaration that controls it.
 - A `tenant:` on a proxy is scoped by the provider family its `upstream:`
   reaches, not by the proxy's address.
 - `allow_same_model_distinct_tenant: true` lets a judge run the agent's
-  exact model on the same endpoint under a different declared tenant.
-  Tenants are operator-attested and never verified. The flag is off by
+  exact model on the same endpoint under a different declared tenant. It is off by
   default, warns at startup, and is logged as `same_model_tenant_optin` in
-  `constitution_loaded`. Leave it off unless the accounts are separate.
+  `constitution_loaded` (load-time only; not re-checked on each authorize).
+  Leave it off unless the accounts are separate.
 - Two judges, or a judge and the agent, on the same endpoint and model are
   refused whatever their `tenant:`, unless that flag is set.
 - The runtime agent is not matched against `monitored_agent:`. The
   declaration is what is compared.
 - `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
   when the agent runs behind a proxy.
-- A `gateway_denied` entry is written for each replay of a refused token.
-  `ttl_seconds` bounds how long a token can be replayed. There is no
-  per-jti cap.
+- After the first `gateway_denied` for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Reload the constitution or revoke to change it.
 - `payload:` paths in a tool spec may overlap each other. Only overlap
@@ -529,14 +531,16 @@ names the setting or declaration that controls it.
   with the size of a tool spec.
 - `model:` ids are not length-capped before they are normalized. Keep them
   to real model names.
-- `authorize(..., agent_id=, hosting=)` and `authorize_from_agent` treat those
-  fields as operator/library metadata for the ledger, not agent-controlled
-  claims. Each must be a `str` or omitted (`None`); after strip, longer than
-  256 characters is refused (`agent_metadata_too_large`). Non-str is
-  `invalid_agent_metadata`. The value is never ledgered on deny. An agent
-  process can still pass huge values into `authorize()`, which is why the
-  cap exists. If a ledger body cannot be encoded on a path about to issue a
-  token, the decision is `ledger_body_too_large` (fail closed).
+- `authorize(..., agent_id=, hosting=, origin=)` and `authorize_from_agent`
+  treat those fields as operator/library metadata for the ledger, not
+  agent-controlled claims. Each must be a `str` or omitted (`None`); after
+  strip, longer than 256 characters is refused (`agent_metadata_too_large`).
+  Non-str is `invalid_agent_metadata` (ledger `got: non_str`, never the raw
+  type name). The value is never ledgered on deny. Blank/`None` `origin`
+  defaults to `library`. An agent process can still pass huge values into
+  `authorize()`, which is why the cap exists. If a ledger body cannot be
+  encoded on a path about to issue a token, the decision is
+  `ledger_body_too_large` (fail closed).
 - A token's `iat`/`exp` are read with `float()`. Tokens minted here are
   always numeric, so this only matters for tokens from another issuer.
 - Config errors from the CLI print a traceback. Check judges.yaml with a
