@@ -47,8 +47,9 @@ Read [docs/FIT.md](docs/FIT.md) first, then
    judge, and a yes from that local judge; use it for destructive,
    irreversible, financial, or external-send tools. `require_local_yes`
    with no local judge does not start. A judge is local only when it says
-   so and its `base_url` host is on an allowlist: loopback, RFC 1918, or
-   IPv6 unique-local. A `:cloud`/`-cloud` model is never local, for any judge class. With
+   so (`local_weights: true`) and its `base_url` host is on an allowlist:
+   loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
+   never local, for any judge class. With
    `required_yes` unset, the quorum needs `min(2, judges)` yes votes.
    `require_path_a_first` is not a floor and it is not a skip. After a derive
    deny, judges do not receive the argument bytes unless

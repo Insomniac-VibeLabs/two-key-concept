@@ -21,9 +21,13 @@
 
 # The monitored agent, declared by you, never by the agent. Required. At
 # startup Two-Key refuses (judge_matches_agent:) only when a judge is the
-# same agent: the same credential, a shared tenant id, or the same model on
-# the same endpoint host:port. An identity it cannot resolve also refuses
-# (for example a local proxy serving an alias model; declare upstream:).
+# same agent: the same credential, a shared tenant id, the same model on
+# the same endpoint host:port, the same model with a shared route
+# (same_model_same_upstream: declared upstream, the endpoint itself, or
+# ollama.com for a -cloud model), or the same model through a local or
+# unrecognized proxy/daemon with no upstream: that is non-overlapping with
+# the other side. An unresolved identity also refuses (for example a local
+# or unrecognized proxy serving an alias model; declare upstream:).
 # The same provider with a different model is allowed.
 # This example agent is ChatGPT, which is not one of the judges below.
 monitored_agent:

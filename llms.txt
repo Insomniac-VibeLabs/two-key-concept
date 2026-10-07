@@ -30,7 +30,7 @@ shared tenant id, same model on the same endpoint or upstream (even with
 different tenants, unless the logged opt-in allow_same_model_distinct_tenant
 is set and tenants and keys differ), same model through a local or unrecognized host, proxy, or daemon
 without a non-overlapping declared upstream, or an unresolved identity.
-The same provider is allowed. Local means loopback, RFC 1918, or fc00::/7.
+The same provider is allowed. Local means local_weights true, host loopback / RFC 1918 / fc00::/7 (names not resolved), and not a :cloud/-cloud model.
 JSON and YAML inputs refuse duplicate keys. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
 require_path_a_first is not a skip. There is no scanner, no PKI, and no anchor.

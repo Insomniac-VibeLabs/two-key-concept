@@ -219,9 +219,11 @@ double (`in_process_agent_refused`).
 
 The default needs one judge and has no diversity floors: `min_vendors: 1`,
 `min_local_judges: 0`, `require_local_yes: false`. When `required_yes` is
-not set (in `QuorumPolicy`, the quorum block, or `TwoKey` with no policy),
+not set (in `QuorumPolicy()`, the quorum block, or `TwoKey` with no policy),
 it is `min(2, number of judges)`.
-`QuorumPolicy.without_diversity_floors()` is kept as a name for the default.
+`QuorumPolicy.without_diversity_floors()` is **not** that default: it sets the
+same floor values but defaults `required_yes` to 2. Prefer `QuorumPolicy()`
+(or omit / set `required_yes` to `null`) for the one-judge default threshold.
 
 `profile: high_assurance` in the quorum block, or
 `QuorumPolicy.high_assurance()`, turns on two vendors, one local judge, and
