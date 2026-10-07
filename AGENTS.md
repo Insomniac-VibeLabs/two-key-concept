@@ -18,8 +18,8 @@ hybrid ML-DSA here. Those belong in `Insomniac-VibeLabs/two-key`. See
 
 ## Branch and commit rules
 
-- Unreleased 0.2.0 work lives on `working` (not tagged yet). Tag `v0.1.12` is
-  on `main`. `v0.1.6` stays on the previous tree.
+- Package 0.2.1 is tag `v0.2.1` on `main` and `working`. Do not move `v0.2.0`
+  (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
 - Update `CHANGES.md` when behavior or configuration changes. Read
@@ -28,7 +28,7 @@ hybrid ML-DSA here. Those belong in `Insomniac-VibeLabs/two-key`. See
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.2.0` on branch `working`. Not on PyPI.
+version `0.2.1`, tag `v0.2.1`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -43,8 +43,8 @@ python -m two_key demo
 | (none) | `cryptography>=41` | Ed25519, SHA-256, AES-256-GCM ledger |
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
-Git install until tagged:  
-`pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@working"`
+Git install:  
+`pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.1"`
 
 ## PYTHONPATH gotcha
 

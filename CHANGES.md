@@ -188,10 +188,20 @@ Tag `v0.1.12` on `main`. No behavior change in this version. The `working`
 line through 0.1.11 is this tree. `v0.1.6` stays on the previous tree.
 Not published to PyPI.
 
+## 0.2.1 — 2026-10-07
+
+Tag `v0.2.1` on `main` and `working`. Docs and version only. No behavior
+change. Not published to PyPI. `v0.2.0` stays on `2f756ac` and is not moved.
+
+- Package version is 0.2.1 (`pyproject.toml`, `two_key.__version__`).
+- README, AGENTS.md, and llms.txt name tag `v0.2.1` and install from
+  `@v0.2.1`. The 0.2.0 README still said the package was untagged on
+  `working`.
+
 ## 0.2.0 — 2026-10-03
 
-On branch `working`. Not tagged yet; `main` stays at `v0.1.12`. Not
-published to PyPI. This version changes configuration and refuses some
+Tagged `v0.2.0` on `main` at `2f756ac` on 2026-10-07 (merge of PR #30).
+Not published to PyPI. This version changes configuration and refuses some
 setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 
 ### Changed
