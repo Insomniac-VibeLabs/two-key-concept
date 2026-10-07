@@ -21,6 +21,8 @@ from .audit import identities_digest, policy_digest
 from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, canonical_hash, digest_hex,
                         to_plain)
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
+from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, check_agent_meta_field,
+                         concept_agent_record)
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
 from .compiler import CompiledConstitution, compile_both
@@ -203,24 +205,25 @@ class TwoKey:
         """Run both paths once the call is well-formed and within limits. Any exception is a deny that is written to the ledger (``internal_error:``).
 
         ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
+        ``agent_id`` and ``hosting`` are operator/library metadata for the ledger
+        (at most 256 characters after strip; non-str refused). They are not trust.
         """
         origin = origin if isinstance(origin, str) and origin else "library"
         try:
-            return self._authorize(action, arguments, proposal, agent_id=agent_id, hosting=hosting,
+            agent = concept_agent_record(agent_id, hosting)
+        except AgentMetadataError as e:
+            return self._deny(origin, e.reason, None, None, None, e.detail)
+        try:
+            return self._authorize(action, arguments, proposal, agent=agent,
                                    agent_session=agent_session, origin=origin)
         except Exception as e:  # fail closed: no exception reaches the caller as anything but a deny
-            agent = None
-            if agent_id or hosting:
-                agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
             return self._deny(origin, f"internal_error:{type(e).__name__}", agent, None, None)
 
     def _authorize(self, action: dict, arguments: dict, proposal: str, *,
-                   agent_id: str | None = None, hosting: str | None = None,
+                   agent: dict | None = None,
                    agent_session: str | None = None, origin: str = "library") -> Decision:
-        agent = None
-        if agent_id or hosting:
-            # Hosting is a deployment fact, not a trust decision.
-            agent = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
+        # agent was built by authorize()/authorize_from_agent via concept_agent_record
+        # (type and 256-char caps). Hosting is a deployment fact, not a trust decision.
         # The raw claim is measured before anything reads it: an oversized one keeps only size and digest.
         # Each input is copied once into built-in types (any Mapping becomes a dict), and everything below
         # reads only the copy: a custom Mapping cannot be sized by its str() and then read as 5 MB.
@@ -339,9 +342,18 @@ class TwoKey:
             reason = path_a.reason if not path_a.allowed else quorum.reason
         token = None
         try:
-            self.ledger.append_bounded("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
+            body_omitted = False
+
+            def _bounded(kind: str, body: dict):
+                nonlocal body_omitted
+                entry = self.ledger.append_bounded(kind, body)
+                if entry.body.get("body_omitted"):
+                    body_omitted = True
+                return entry
+
+            _bounded("proposal", {"tool": normalized.tool, "proposal": proposal, "agent": agent})
             if spec is not None:
-                self.ledger.append_bounded("action_normalized", {
+                _bounded("action_normalized", {
                     "tool": normalized.tool,
                     "form": form,
                     "claimed_data_class": claimed_data_class,
@@ -349,8 +361,12 @@ class TwoKey:
                     # Names of keys the tool will not receive. Never their values.
                     "dropped_keys": dropped_keys(spec, arguments),
                 })
-            self.ledger.append_bounded("path_a", path_a_rec)
-            self.ledger.append_bounded("path_b", path_b_rec)
+            _bounded("path_a", path_a_rec)
+            _bounded("path_b", path_b_rec)
+            # body_omitted is only for an already-decided DENY audit entry. If it would
+            # fire on a path about to issue a token, fail closed instead.
+            if allowed and body_omitted:
+                allowed, reason = False, REASON_LEDGER_BODY
             if allowed:
                 if self.issuer is None:
                     allowed, reason = False, "no_issuer_key"
@@ -363,11 +379,15 @@ class TwoKey:
                         form=form, claimed_data_class=claimed_data_class if form is not None else None,
                         ttl_seconds=self.ttl_seconds)
                     token = issued.token
-                    self.ledger.append_bounded("capability_issued", {"jti": issued.payload["jti"],
-                                                                    "token_hash": issued.token_hash,
-                                                                    "ledger_root": issued.payload["ledger_root"]})
-            self.ledger.append_bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
-                                                    "origin": origin, **self._decision_context})
+                    _bounded("capability_issued", {"jti": issued.payload["jti"],
+                                                   "token_hash": issued.token_hash,
+                                                   "ledger_root": issued.payload["ledger_root"]})
+                    if body_omitted:
+                        allowed, reason, token = False, REASON_LEDGER_BODY, None
+            _bounded("decision", {"allowed": allowed, "reason": reason, "agent": agent,
+                                  "origin": origin, **self._decision_context})
+            if allowed and body_omitted:
+                allowed, reason, token = False, REASON_LEDGER_BODY, None
             self.ledger.checkpoint()
         except LedgerError as e:
             return Decision(False, f"ledger_failed:{e}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
@@ -381,12 +401,17 @@ class TwoKey:
         ``proposal_too_large`` deny, and text that is not a string or does not parse is a
         ``malformed_proposal`` deny. Either way the ledger keeps only its size and digest, and
         the reason carries no value or key name.
+
+        ``agent.agent_id`` / ``agent.hosting`` are library metadata for the ledger (same
+        type and 256-char caps as ``authorize`` kwargs).
         """
-        agent_id, hosting = getattr(agent, "agent_id", None), getattr(agent, "hosting", None)
         origin = origin if isinstance(origin, str) and origin else "library"
-        record = None
-        if agent_id or hosting:
-            record = {"id": agent_id, "hosting": hosting or "unspecified", "trusted": False}
+        try:
+            agent_id = check_agent_meta_field("agent_id", getattr(agent, "agent_id", None))
+            hosting = check_agent_meta_field("hosting", getattr(agent, "hosting", None))
+            record = concept_agent_record(agent_id, hosting)
+        except AgentMetadataError as e:
+            return self._deny(origin, e.reason, None, None, None, e.detail)
         try:
             if isinstance(proposal_text, str) and len(proposal_text) > MAX_PROPOSAL_TEXT_CHARS:
                 return self._deny(origin, "proposal_too_large", record, None, None,

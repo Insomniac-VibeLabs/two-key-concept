@@ -113,8 +113,9 @@ It does not receive Path A bytecode, judge credentials, or tool credentials.
 Its reply is data: `tool`, `arguments`, `proposal`, and optional structured
 fields. Extra keys are rejected. `authorize_from_agent` parses that JSON,
 records `agent id`, `hosting`, and `trusted: false`, and does not call the
-model again. Hosting is local or cloud. It is not trust, and it does not
-skip either path.
+model again. Those fields are operator/library metadata (str, at most 256
+characters after strip); non-str or oversize is a deny. Hosting is local or
+cloud. It is not trust, and it does not skip either path.
 
 Path A reads only the five structured fields. Path B judges see the
 normalized action record. Non-empty tool arguments are attached on that

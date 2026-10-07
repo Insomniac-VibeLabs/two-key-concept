@@ -189,6 +189,9 @@ class AppendBounded(unittest.TestCase):
         self.assertEqual(self.ledger.append_bounded("x", {"a": [1, 2]}).body, {"a": [1, 2]})
 
     def test_authorize_records_a_body_the_encoder_refuses(self):
+        # body_omitted on a path that would issue a token is fail-closed (B1 / Cyber):
+        # ledger the omitted proposal for audit, but do not allow or mint a token.
+        from two_key.agent_meta import REASON_LEDGER_BODY
         env = sign_constitution("Searching is fine.", RULES, self.key, SPECS)
         tk = TwoKey(self.ledger, self.key.public_key(), verify_signed(env, self.key.public_key()),
                     [FixedJudge("a", "yes")], private_key=self.key, quorum=QuorumPolicy(required_yes=1),
@@ -201,7 +204,7 @@ class AppendBounded(unittest.TestCase):
             return real(ledger, kind, body)
         with mock.patch.object(Ledger, "append", refuse_proposal):
             d = tk.authorize(SEARCH, {"q": "x"}, "look it up " * 30)   # over the 200 characters a fallback keeps
-        self.assertTrue(d.allowed, d.reason)
+        self.assertEqual((d.allowed, d.token, d.reason), (False, None, REASON_LEDGER_BODY))
         [entry] = [e for e in tk.ledger.entries if e.kind == "proposal"]
         self.assertTrue(entry.body["body_omitted"])
         self.assertEqual(entry.body["tool"], "search")

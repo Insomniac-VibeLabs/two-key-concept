@@ -313,6 +313,12 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   directory, so the ledger key, witness, capability key, and lock files no
   longer outlive the run in the system temp directory. The tests do the
   same.
+- B1: `agent_id` and `hosting` on `authorize` / `authorize_from_agent` are
+  operator/library metadata. Non-`str` is `invalid_agent_metadata`; after
+  strip, over 256 characters is `agent_metadata_too_large` (ledger
+  `field`/`size`/`digest` only). `append_bounded` with `body_omitted` on a
+  path about to issue a token becomes `ledger_body_too_large` instead of an
+  allow. Shared helper: `two_key.agent_meta`.
 - `authorize_from_agent` measures the proposal text before parsing it:
   over 1,048,576 characters is `proposal_too_large`, and text that is not
   a string (including `None`) or does not parse is `malformed_proposal`.
