@@ -6,10 +6,9 @@ server in this release. Package `two-key-concept` version 0.2.1 (tag `v0.2.1` on
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
 
-This is the smaller package. It has a ledger, Path A, Path B, and judge and
+This package has a ledger, Path A, Path B, and judge and
 monitored-agent hooks. It does not scan payloads. It has no PKI, no
-anchoring, and no seed phrase. The larger package is
-[two-key](https://github.com/Insomniac-VibeLabs/two-key).
+anchoring, and no seed phrase.
 
 ## Use this if
 
@@ -39,7 +38,7 @@ anchoring, and no seed phrase. The larger package is
 - You need a validated cryptographic module, or a control that has had an
   independent review. This release has not.
 - You need DLP, antivirus, PKI, permissioned anchoring, a seed phrase, or
-  hybrid ML-DSA. Those are in `two-key`, not here.
+  hybrid ML-DSA. Those are not here.
 
 ## Smallest working shape
 
