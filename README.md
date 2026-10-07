@@ -15,7 +15,7 @@ Read [docs/FIT.md](docs/FIT.md) first, then
 [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), and
 [docs/SCOPE.md](docs/SCOPE.md), before relying on it.
 
-## What turns
+## Dual-path authorization
 
 1. Path A is a policy VM. Hard rules compile to bytecode. The VM reads only
    structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`,
@@ -94,7 +94,7 @@ flowchart TD
   judgeText --> pathB
   declared["monitored_agent<br/>declared by the operator"] -->|"start-up: judge is not the agent"| judges
   session["agent_session<br/>must not be a judge API key"] --> pathB
-  pathB -->|"parallel score, separate credentials"| judges["Judges<br/>xAI, OpenAI, Anthropic, Gemini, Ollama"]
+  pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
   judges -->|"yes, no, or abstain"| pathB
   pathA --> gate{"both allow?"}
   pathB --> gate
