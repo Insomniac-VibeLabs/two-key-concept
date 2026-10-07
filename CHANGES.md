@@ -4,8 +4,7 @@
 
 Initial concept repository, private, Apache-2.0.
 
-Taken from `Insomniac-VibeLabs/two-key` branch `10.2.2026` (`b9e588e`) as the
-reference, then cut down to the initial two-key:
+Cut down to the initial two-key:
 
 - signed constitution, Path A policy VM, Path B judge quorum
 - hash-chained ledger with a signed head and Merkle root bound into the token
@@ -17,9 +16,6 @@ reference, then cut down to the initial two-key:
 
 Not included: scanning, antivirus, DLP, PKI, anchoring, seed phrases, ledger
 encryption, hybrid ML-DSA.
-
-Engineering note, not a conception entry. The dated conception record stays
-in the `two-key` repository.
 
 ## 0.1.1 — 2026-10-02
 
@@ -64,7 +60,7 @@ Tag `v0.1.4`. No behavior change. The `v0.1.3` tag stays on the earlier tree.
 
 On branch `10.3.2026.2`, cut from `main`. `main` was not updated.
 
-- Added `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, and `docs/SCOPE.md` for this package, not for the full `two-key` repository.
+- Added `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, and `docs/SCOPE.md` for this package.
 - `README.md`, `docs/HOWTO.md`, `llms.txt`, `SECURITY.md`, and `CONTRIBUTING.md` point at them.
 - `SECURITY.md` no longer calls this repository private.
 - No behavior change. Package version stays 0.1.4.
@@ -84,9 +80,6 @@ On branch `10.3.2026.2`. `main` was not updated.
 ## 0.1.6 — 2026-10-03
 
 Tag `v0.1.6`. `v0.1.2`, `v0.1.3`, and `v0.1.4` stay on their earlier commits.
-
-`two-key` main is 0.1.5. This package skipped 0.1.5 so this release is higher.
-The two packages do not share a version line.
 
 Pulled in by merge of pull request #4, previously unreleased:
 
@@ -179,7 +172,7 @@ the tagged release.
   `payload_shape`, which is a derive deny. Shape does not read the contents.
   Omit `shape` and the value, including its children, is still copied unread.
 - No payload class floor. What the text means stays with Path B, or with DLP
-  in the full `two-key` repository.
+  outside this package.
 - Not published to PyPI.
 
 ## 0.1.12 — 2026-10-03
@@ -220,7 +213,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   with no declared `upstream:`, the same model reaching the same upstream
   (`same_model_same_upstream`: declared upstreams and `ollama.com` for a
   cloud model count as endpoints, and different declared tenants do not
-  lift it, as in two-key), or an unresolved identity (an
+  lift it), or an unresolved identity (an
   unknown router, or a local proxy serving an alias model without a declared
   `upstream:`). Declared tenants are scoped by provider family, not by a
   proxy's address, and upstreams are normalized (`host[:port]`, default port
@@ -488,4 +481,3 @@ On branch `working`. Issues addressed on this tip (GitHub issues left open for C
 - **#27** — LLM judge `transport:` / `malformed_response:` abstain errors use `type_tag(e)` (not raw `type(e).__name__`) into `ballot.error` → path_b ledger.
 - **#28** — `deny_inflight_wait_seconds` requires finite positive (`math.isfinite`); `inf` / `nan` / ≤0 fall back to the 30s default (so `inf` cannot restore unbounded same-jti `Condition.wait`).
 - README: removed the GitHub Pages `pages-build-deployment` Documentation Status badge (other badges kept).
-

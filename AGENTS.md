@@ -13,8 +13,7 @@ monitored-agent hooks, encrypted ledger, single-use capability token, and a
 verify-only gateway. Prototype. Apache-2.0.
 
 Do **not** add scanning, antivirus, DLP, PKI, chain anchoring, seed phrases, or
-hybrid ML-DSA here. Those belong in `Insomniac-VibeLabs/two-key`. See
-[docs/SCOPE.md](docs/SCOPE.md).
+hybrid ML-DSA here. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
@@ -45,13 +44,6 @@ python -m two_key demo
 
 Git install:  
 `pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.1"`
-
-## PYTHONPATH gotcha
-
-Both this package and full `two-key` import as `two_key`. Do not put both
-repository roots on `PYTHONPATH`. Use a dedicated virtualenv and
-`pip install -e` for the tree you are editing. Imports from the wrong tree
-are silent and wrong.
 
 ## Tests and docs
 
