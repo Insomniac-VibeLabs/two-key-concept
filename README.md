@@ -1,5 +1,7 @@
 # Two-Key concept
 
+[![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml)
+
 Two independent keys must turn before an AI agent can act.
 
 This repository is the initial concept, extracted from
