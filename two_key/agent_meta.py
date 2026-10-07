@@ -13,6 +13,7 @@ from typing import Any, Mapping
 
 MAX_AGENT_METADATA_CHARS = 256
 MAX_TYPE_TAG_CHARS = 32
+MAX_LEDGER_ERROR_CHARS = 300
 
 REASON_INVALID = "invalid_agent_metadata"
 REASON_TOO_LARGE = "agent_metadata_too_large"
@@ -24,7 +25,7 @@ _TYPE_TAG_ALLOWLIST = frozenset({
     "str", "bytes", "bytearray", "memoryview",
     "int", "float", "complex", "bool", "NoneType",
     "list", "dict", "tuple", "set", "frozenset",
-    "object", "type", "other", "non_str",
+    "object", "type", "other", "non_str", "non_mapping",
 })
 
 # Fields copied from library agent_meta / AgentProposal.to_record() onto the ledger.
@@ -59,6 +60,19 @@ def type_tag(value: Any) -> str:
     return name
 
 
+def cap_ledger_text(text: str, limit: int = MAX_LEDGER_ERROR_CHARS) -> str:
+    """Hard-cap a ledger error/detail string; oversize keeps a prefix plus digest of the remainder."""
+    s = text if type(text) is str else str(text)
+    if len(s) <= limit:
+        return s
+    return f"{s[:limit]}…{_digest(s[limit:])}"
+
+
+def exception_ledger_error(exc: BaseException) -> str:
+    """``type_tag: message`` capped for quorum/judge ledger fields — never raw ``__name__``."""
+    return cap_ledger_text(f"{type_tag(exc)}: {exc}")
+
+
 def check_agent_meta_field(field: str, value: Any) -> str | None:
     """Normalize one optional identity field for the ledger.
 
@@ -91,7 +105,7 @@ def check_agent_meta_mapping(meta: Any, fields: tuple[str, ...] = AGENT_META_FIE
     if not isinstance(meta, Mapping):
         raise AgentMetadataError(
             REASON_INVALID,
-            {"field": "agent_meta", "got": "non_str"},
+            {"field": "agent_meta", "got": "non_mapping"},
         )
     out: dict[str, str] = {}
     for key in fields:

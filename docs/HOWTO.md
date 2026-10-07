@@ -522,7 +522,7 @@ names the setting or declaration that controls it.
   declaration is what is compared.
 - `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
   when the agent runs behind a proxy.
-- After the first `gateway_denied` for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. `ttl_seconds` still bounds how long a token can be presented.
+- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Reload the constitution or revoke to change it.
 - `payload:` paths in a tool spec may overlap each other. Only overlap

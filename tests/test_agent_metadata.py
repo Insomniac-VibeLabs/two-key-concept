@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from two_key.agent_meta import (MAX_AGENT_METADATA_CHARS, REASON_INVALID, REASON_TOO_LARGE,
-                                check_agent_meta_field)
+                                check_agent_meta_field, check_agent_meta_mapping)
 from two_key.agents import MonitoredAgent
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
@@ -167,6 +167,16 @@ class AgentMetadataTests(unittest.TestCase):
             self.assertLess(len(blob), 64 * 1024)
             bodies = [e.body for e in tk.ledger.entries if e.kind == "decision"]
             self.assertEqual(bodies[-1].get("got"), "non_str")
+
+
+    def test_mapping_helper_rejects_non_mapping(self):
+        for bad in (["agent_id", "x"], 123, "not-a-map"):
+            with self.assertRaises(Exception) as ctx:
+                check_agent_meta_mapping(bad)
+            self.assertEqual(ctx.exception.reason, REASON_INVALID)
+            self.assertEqual(ctx.exception.detail.get("got"), "non_mapping")
+            self.assertEqual(ctx.exception.detail.get("field"), "agent_meta")
+
 
 
 

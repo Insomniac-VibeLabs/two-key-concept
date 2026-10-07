@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from two_key.constitution import sign_constitution, verify_signed
@@ -99,6 +100,44 @@ class GatewayDenied(unittest.TestCase):
         r2 = self.gw.invoke(self.token, "search", {"q": SECRET})
         self.assertEqual(r1.reason, r2.reason)
         self.assertEqual(len(self.denied()), 1)
+
+    def test_append_failure_does_not_mark_jti_so_retry_can_ledger(self):
+        """#16: mark-after-append — a failed deny ledger write leaves jti unmarked."""
+        real_append = self.tk.ledger.append_bounded
+        calls = {"n": 0}
+
+        def flaky(kind, body):
+            calls["n"] += 1
+            if calls["n"] == 1 and kind == "gateway_denied":
+                raise OSError("disk full")
+            return real_append(kind, body)
+
+        with mock.patch.object(self.tk.ledger, "append_bounded", side_effect=flaky):
+            r1 = self.gw.invoke(self.token, "search", {"q": SECRET})
+        self.assertTrue(r1.reason.startswith("ledger_failed:"))
+        self.assertEqual(self.denied(), [])  # first append failed
+        # Later deny with working ledger can append.
+        r2 = self.gw.invoke(self.token, "search", {"q": SECRET})
+        self.assertEqual(r2.reason, "args_mismatch")
+        self.assertEqual(len(self.denied()), 1)
+
+    def test_denied_jtis_hard_cap(self):
+        """#16: remembered denied jtis do not grow past the configured cap."""
+        # Rebuild gateway with a tiny cap; mint many tokens with distinct jtis.
+        gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                         tools={"search": lambda a: "ok"}, max_denied_jtis=3)
+        tokens = []
+        for i in range(5):
+            d = self.tk.authorize(SEARCH, {"q": f"weather-{i}"}, "look")
+            self.assertTrue(d.allowed, d.reason)
+            tokens.append(d.token)
+        for tok in tokens:
+            r = gw.invoke(tok, "search", {"q": SECRET})
+            self.assertEqual(r.reason, "args_mismatch")
+        self.assertLessEqual(len(gw._denied_jtis), 3)
+        # Cap is hard: exactly at most 3 remembered after 5 distinct denies.
+        self.assertEqual(len(gw._denied_jtis), 3)
+
 
 
 if __name__ == "__main__":

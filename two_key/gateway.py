@@ -8,12 +8,16 @@ retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
 A refusal of an authenticated token is ledgered as ``gateway_denied`` (reason,
-jti, tool, argument size and digest) at most once per jti; further denies for that
-jti still refuse but do not append. A token that does not verify writes nothing.
+jti, tool, argument size and digest) at most once per jti after a successful append:
+the jti is recorded only after ``append_bounded`` + ``checkpoint`` succeed, so a
+failed ledger write can be retried on a later deny. The in-memory set is LRU-capped
+(``_MAX_DENIED_JTIS``). Further denies for a remembered jti still refuse but do not
+append. A token that does not verify writes nothing.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
 import os
 import sys
 import threading
@@ -27,7 +31,7 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
-from .agent_meta import type_tag
+from .agent_meta import cap_ledger_text, type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
 from .derive import (MAX_ARGS_BYTES, DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
@@ -37,6 +41,8 @@ from .ledger import LedgerError
 
 _MAX_REASON_CHARS = 200
 _MAX_JTI_CHARS = 64
+# Hard cap on remembered denied jtis (LRU via OrderedDict). Cyber #16.
+_MAX_DENIED_JTIS = 4096
 
 
 def _short(value) -> str | None:
@@ -68,7 +74,8 @@ def _as_verifier(issuer) -> CapabilityVerifier:
 
 
 class ToolGateway:
-    def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None):
+    def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
+                 max_denied_jtis: int | None = None):
         self.ledger = ledger
         self.issuer = _as_verifier(issuer)
         principal = getattr(ledger, "public_key", None)
@@ -79,9 +86,11 @@ class ToolGateway:
         self.tools = tools or {}
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
-        # After the first gateway_denied for a jti, further denies still refuse but do not append.
-        self._denied_jtis: set[str] = set()
+        # After a successful gateway_denied append for a jti, further denies still refuse but
+        # do not append. Marked only after append+checkpoint succeed (#16). LRU-capped.
+        self._denied_jtis: OrderedDict[str, None] = OrderedDict()
         self._denied_jtis_guard = threading.Lock()
+        self._max_denied_jtis = int(max_denied_jtis) if max_denied_jtis is not None else _MAX_DENIED_JTIS
 
     def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
         """Redeem ``token`` for ``tool(arguments)``.
@@ -105,11 +114,10 @@ class ToolGateway:
         jti = _short(payload.get("jti"))
         if jti is not None:
             with self._denied_jtis_guard:
-                already = jti in self._denied_jtis
-                if not already:
-                    self._denied_jtis.add(jti)
-            if already:
-                return result          # still deny; do not append another gateway_denied for this jti
+                if jti in self._denied_jtis:
+                    self._denied_jtis.move_to_end(jti)
+                    return result      # still deny; do not append another gateway_denied for this jti
+                # Do not mark yet — only after a successful append (#16).
         body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": jti}
         if isinstance(tool, str) and len(tool) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool):
             body["tool"] = tool
@@ -126,11 +134,22 @@ class ToolGateway:
         try:
             self.ledger.append_bounded("gateway_denied", body)
             self.ledger.checkpoint()
-        except Exception as e:  # still a deny; say so, because the ledger now lacks it
+        except Exception as e:  # still a deny; do not mark jti, so a later deny can retry ledgering
             print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
                   f"{type_tag(e)}"[:500], file=sys.stderr)
-            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type_tag(e)}"
+            if isinstance(e, LedgerError):
+                reason = f"ledger_failed:{cap_ledger_text(str(e))}"
+            else:
+                reason = f"ledger_failed:{type_tag(e)}"
             return GatewayResult(False, reason, result.output)
+        if jti is not None:
+            with self._denied_jtis_guard:
+                if jti in self._denied_jtis:
+                    self._denied_jtis.move_to_end(jti)
+                else:
+                    while len(self._denied_jtis) >= self._max_denied_jtis:
+                        self._denied_jtis.popitem(last=False)  # drop oldest
+                    self._denied_jtis[jti] = None
         return result
 
     def _invoke_verified(self, payload: dict, tool: str, arguments: dict) -> tuple[GatewayResult, dict]:
