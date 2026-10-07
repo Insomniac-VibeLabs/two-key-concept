@@ -28,9 +28,8 @@ TwoKey needs monitored_agent, declared by the operator. It refuses a judge
 that is the same agent: same credential fingerprint (HMAC, per-install key),
 shared tenant id, same model on the same endpoint or upstream (even with
 different tenants, unless the logged opt-in allow_same_model_distinct_tenant
-is set and tenants and keys differ), same
-model through a local proxy or daemon with no declared upstream, or an
-unresolved identity.
+is set and tenants and keys differ), same model through a local or unrecognized host, proxy, or daemon
+without a non-overlapping declared upstream, or an unresolved identity.
 The same provider is allowed. Local means loopback, RFC 1918, or fc00::/7.
 JSON and YAML inputs refuse duplicate keys. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.

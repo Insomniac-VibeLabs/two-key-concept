@@ -490,9 +490,15 @@ the tool runs also blocks a retry.
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
 
-- `upstream:` on a judge or `monitored_agent` is attested, not checked.
-  The same model through another endpoint is accepted by design, and a
-  `maker/` model prefix is taken as given.
+- Declared `upstream:` and `tenant:` values are trusted as declared, not
+  verified. A false declaration on a proxy can hide that it forwards with
+  the agent's account and key. The same model through another endpoint is
+  accepted by design when upstreams do not overlap.
+- A maker prefix in a model id (`mistral/gpt-4o`) names the maker, not the
+  host that serves it. On a host that is not a recognized vendor, router,
+  or inference host (or any local alias), the same model as the agent is
+  refused (`same_model_unknown_upstream`) unless that side declares an
+  `upstream:` that is not the agent's.
 - A local daemon serving its own weights is refused against the same model
   until you declare its own address (`upstream: localhost:11434`).
 - A private-address `base_url` (RFC 1918, fc00::/7) is treated as a local
@@ -501,8 +507,11 @@ names the setting or declaration that controls it.
   change, restart before relying on how `base_url` hosts fold to `localhost`.
 - A `tenant:` on a proxy is scoped by the provider family its `upstream:`
   reaches, not by the proxy's address.
-- `allow_same_model_distinct_tenant: true` trusts declared `tenant:` values
-  that are never verified. Leave it off unless the accounts are separate.
+- `allow_same_model_distinct_tenant: true` lets a judge run the agent's
+  exact model on the same endpoint under a different declared tenant.
+  Tenants are operator-attested and never verified. The flag is off by
+  default, warns at startup, and is logged as `same_model_tenant_optin` in
+  `constitution_loaded`. Leave it off unless the accounts are separate.
 - Two judges, or a judge and the agent, on the same endpoint and model are
   refused whatever their `tenant:`, unless that flag is set.
 - The runtime agent is not matched against `monitored_agent:`. The
