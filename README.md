@@ -5,18 +5,19 @@
 
 Two independent keys must turn before an AI agent can act.
 
-This repository is the initial concept, extracted from
-[Insomniac-VibeLabs/two-key](https://github.com/Insomniac-VibeLabs/two-key)
-after that line grew past the first working system. It keeps a working
-ledger, Path A, Path B, and the judge and monitored-agent hooks. It does
-not scan payloads and it has no antivirus or DLP hooks.
+This repository is the initial concept, kept small on purpose. It has a
+working ledger, Path A, Path B, and the judge and monitored-agent hooks. It does
+not scan payloads and it has no antivirus or DLP hooks today. Hooks for
+them, and the rest of the path to a 1.0 release, are on the
+[roadmap](#roadmap).
 
 Apache License 2.0. See [LICENSE](LICENSE).
 
 Read [docs/FIT.md](docs/FIT.md) first, then
 [docs/COMPARISON.md](docs/COMPARISON.md),
 [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), and
-[docs/SCOPE.md](docs/SCOPE.md), before relying on it.
+[docs/SCOPE.md](docs/SCOPE.md), before relying on it. For where the project
+is going, see [ROADMAP.md](ROADMAP.md).
 
 ## Dual-path authorization
 
@@ -254,7 +255,7 @@ or changed key refuses to start. Its fingerprint is recorded in
 
 ## What this repo leaves out
 
-Left in the full `two-key` repository, on purpose:
+Not in this repository:
 
 - payload scanning, antivirus, and DLP hooks
 - enterprise deployment modes and permissioned-chain anchoring
@@ -262,8 +263,13 @@ Left in the full `two-key` repository, on purpose:
 - seed-phrase backup
 - hybrid ML-DSA-65
 
-This concept line does encrypt the ledger at rest. The full repository also
-has a separate at-rest design. They are not the same code.
+Some of this is planned as optional additions. See the
+[roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
+external scanners, not a scanning engine), key backup (not seed-phrase
+backup), and hybrid ML-DSA-65. Enterprise deployment modes,
+permissioned-chain anchoring, PKI, and seed phrases are not planned.
+
+The ledger is encrypted at rest.
 
 Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
 entries and the signed head are AES-256-GCM at rest. The data key is wrapped
@@ -271,6 +277,48 @@ by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key cannot decrypt the log or sign a new head.
 It is a prototype. It is not a FIPS 140-3 validated module.
+
+## Known limits
+
+- No independent review and no production deployment.
+- No external anchor for the ledger. Someone holding the principal, witness,
+  and ledger keys can rewrite a ledger that never leaves the machine.
+- Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
+  module is on the roadmap. It would not validate this package.
+- Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
+  are on the roadmap.
+- It does not scan payloads, and it is not an antivirus or DLP product.
+
+The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
+## Roadmap
+
+The plan from the 0.2.1 prototype to a 1.0 release. It states intent, not a
+promise. The order may change, and version numbers are targets, not dates.
+Nothing below exists in 0.2.1. The detail is in [ROADMAP.md](ROADMAP.md).
+
+```mermaid
+flowchart LR
+  p0["0.2.x<br/>Baseline"] --> p1["0.3<br/>Key backup"]
+  p1 --> p2["0.4<br/>Ledger export<br/>for SIEM"]
+  p2 --> p3["0.5<br/>DLP and AV hooks"]
+  p3 --> p4["0.6<br/>MCP adapter"]
+  p4 --> p5["0.7<br/>Post-quantum<br/>signatures"]
+  p5 --> p6["0.8<br/>FIPS approved<br/>mode"]
+  p6 --> p7["0.9<br/>Local GUI"]
+  p7 --> p8["1.0<br/>Review and release"]
+```
+
+| Target | What |
+| --- | --- |
+| 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys |
+| 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
+| 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
+| 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
+| 0.7 | Hybrid Ed25519 plus ML-DSA-65 signatures for the constitution and ledger head |
+| 0.8 | FIPS approved mode: refuses to start unless running on a validated module |
+| 0.9 | Local GUI for configuration and ledger auditing |
+| 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 
 Install from git. It is not published to PyPI. Package version 0.2.1.
 Tag `v0.2.1` is on `main` and on `working`. Tag `v0.2.0` stays on commit
@@ -315,8 +363,9 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
 | `two_key/keys.py`, `cli.py` | Key files; `two-key` command line |
 | `examples/` | Constitution, hard rules, judges, agents |
+| `ROADMAP.md` | Planned work from 0.2.1 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |
 | `docs/THREAT_MODEL.md` | Boundaries and residual risk |
-| `docs/SCOPE.md` | What this package leaves in the full repository |
+| `docs/SCOPE.md` | What this package includes, leaves out, and plans |

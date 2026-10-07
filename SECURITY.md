@@ -18,8 +18,7 @@ is how to report a vulnerability. It is not the model.
 
 ## Out of scope for this repository
 
-- Malware or DLP scanning of tool payloads. That lives in `two-key` and is
-  intentionally absent here.
+- Malware or DLP scanning of tool payloads. It is intentionally absent here.
 - FIPS validation. Algorithms are Ed25519 and SHA-256 from `cryptography`.
 
 Ledger entries and the head are AES-256-GCM ciphertext. The data key is
