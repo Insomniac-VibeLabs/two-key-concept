@@ -2,16 +2,18 @@
 
 import json
 import tempfile
+import threading
 import unittest
 from unittest import mock
 from pathlib import Path
 
+from two_key.agent_meta import MAX_LEDGER_ERROR_CHARS
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey
 from two_key.derive import MAX_ARGS_BYTES
 from two_key.gateway import ToolGateway
 from two_key.keys import generate_private_key
-from two_key.ledger import Ledger
+from two_key.ledger import Ledger, LedgerError
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
 
@@ -137,6 +139,71 @@ class GatewayDenied(unittest.TestCase):
         self.assertLessEqual(len(gw._denied_jtis), 3)
         # Cap is hard: exactly at most 3 remembered after 5 distinct denies.
         self.assertEqual(len(gw._denied_jtis), 3)
+
+    def test_max_denied_jtis_zero_clamped_no_keyerror(self):
+        """#22: max_denied_jtis=0 clamps to 1; deny succeeds without KeyError."""
+        gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                         tools={"search": lambda a: "ok"}, max_denied_jtis=0)
+        self.assertEqual(gw._max_denied_jtis, 1)
+        r = gw.invoke(self.token, "search", {"q": SECRET})
+        self.assertEqual(r.reason, "args_mismatch")
+        self.assertEqual(len(self.denied()), 1)
+        self.assertEqual(len(gw._denied_jtis), 1)
+        # Second distinct jti: LRU drops the first (cap 1), no KeyError.
+        d2 = self.tk.authorize(SEARCH, {"q": "other"}, "look")
+        self.assertTrue(d2.allowed, d2.reason)
+        r2 = gw.invoke(d2.token, "search", {"q": SECRET})
+        self.assertEqual(r2.reason, "args_mismatch")
+        self.assertEqual(len(gw._denied_jtis), 1)
+
+    def test_max_denied_jtis_negative_clamped(self):
+        """#22: negative max_denied_jtis also clamps to 1."""
+        gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                         tools={"search": lambda a: "ok"}, max_denied_jtis=-5)
+        self.assertEqual(gw._max_denied_jtis, 1)
+
+    def test_same_jti_concurrent_denies_single_gateway_denied(self):
+        """#23: concurrent same-jti denies yield at most one gateway_denied row."""
+        barrier = threading.Barrier(8)
+        results = []
+        errors = []
+
+        def worker():
+            try:
+                barrier.wait(timeout=5)
+                results.append(self.gw.invoke(self.token, "search", {"q": SECRET}))
+            except Exception as e:  # noqa: BLE001 — collect for assertion
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 8)
+        for r in results:
+            self.assertEqual(r.reason, "args_mismatch")
+        self.assertEqual(len(self.denied()), 1)
+
+    def test_huge_redemption_ledger_failed_is_capped(self):
+        """#21: gateway redemption ledger_failed:{e} message is capped."""
+        mark = "ZQXGW"
+        huge = mark + "G" * (5 << 20)
+        real_append = self.tk.ledger.append_bounded
+
+        def boom(kind, body):
+            if kind == "redemption_started":
+                raise LedgerError(huge)
+            return real_append(kind, body)
+
+        with mock.patch.object(self.tk.ledger, "append_bounded", side_effect=boom):
+            r = self.gw.invoke(self.token, "search", {"q": "weather"})
+        self.assertTrue(r.reason.startswith("ledger_failed:"), r.reason)
+        self.assertIn(mark, r.reason)
+        self.assertIn("…sha256:", r.reason)
+        self.assertLess(len(r.reason), len("ledger_failed:") + MAX_LEDGER_ERROR_CHARS + 80)
+        self.assertNotIn("G" * 1000, r.reason)
 
 
 

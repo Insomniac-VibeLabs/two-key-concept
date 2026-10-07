@@ -522,7 +522,7 @@ names the setting or declaration that controls it.
   declaration is what is compared.
 - `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
   when the agent runs behind a proxy.
-- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096). `ttl_seconds` still bounds how long a token can be presented.
+- After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096; `max_denied_jtis` is clamped to at least 1). Concurrent same-jti denies are single-flight: only one append runs at a time; waiters re-check and skip if already marked. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Reload the constitution or revoke to change it.
 - `payload:` paths in a tool spec may overlap each other. Only overlap
@@ -543,7 +543,7 @@ names the setting or declaration that controls it.
   `authorize()`, which is why the cap exists. If a ledger body cannot be
   encoded on a path about to issue a token, the decision is
   `ledger_body_too_large` (fail closed).
-- Quorum/judge ledger exception text and the generic Path A `vm_fault` (non-`VMFault`) path are `type_tag: message` capped at 300 characters; oversize keeps a prefix plus a digest of the remainder (`exception_ledger_error` / `cap_ledger_text`). A gateway `_record_deny` `ledger_failed` for a `LedgerError` caps the message the same way. Dedicated `VMFault` reasons and other `ledger_failed` sites are still open (#20 / #21).
+- Quorum/judge ledger exception text and both Path A `vm_fault` paths (`VMFault` and generic `Exception`) are `type_tag: message` capped at 300 characters; oversize keeps a prefix plus a digest of the remainder (`exception_ledger_error` / `cap_ledger_text`). All `ledger_failed:` reason strings for a `LedgerError` (gateway `_record_deny`, gateway redemption, core authorize/`_deny`) cap the message the same way; non-`LedgerError` deny paths keep `type_tag` only.
 - A token's `iat`/`exp` are read with `float()`. Tokens minted here are
   always numeric, so this only matters for tokens from another issuer.
 - Config errors from the CLI print a traceback. Check judges.yaml with a

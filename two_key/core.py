@@ -21,7 +21,7 @@ from .audit import identities_digest, policy_digest
 from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, canonical_hash, digest_hex,
                         to_plain)
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
-from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, check_agent_meta_field,
+from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, cap_ledger_text, check_agent_meta_field,
                          concept_agent_record, normalize_origin, type_tag)
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
@@ -394,7 +394,7 @@ class TwoKey:
                 allowed, reason, token = False, REASON_LEDGER_BODY, None
             self.ledger.checkpoint()
         except LedgerError as e:
-            return Decision(False, f"ledger_failed:{e}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
+            return Decision(False, f"ledger_failed:{cap_ledger_text(str(e))}", None, path_a_rec, path_b_rec, self.ledger.size(), agent)
         return Decision(allowed, reason, token if allowed else None, path_a_rec, path_b_rec, self.ledger.size(), agent)
 
     def authorize_from_agent(self, agent, proposal_text: str, *, agent_session: str | None = None,
@@ -454,7 +454,8 @@ class TwoKey:
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
             print(f"two-key: could not record deny decision {reason!r}: {type_tag(e)}: {e}"[:500],
                   file=sys.stderr)
-            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type_tag(e)}"
+            reason = (f"ledger_failed:{cap_ledger_text(str(e))}" if isinstance(e, LedgerError)
+                      else f"ledger_failed:{type_tag(e)}")
         try:
             size = self.ledger.size()
         except Exception:

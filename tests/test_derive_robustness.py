@@ -92,6 +92,26 @@ class Unreadable(unittest.TestCase):
                 d = tk.authorize(PAY, {"amt": 1, "to": "ada"}, "x")
             self.assertEqual(d.reason, "ledger_failed:ledger file changed")
 
+    def test_huge_ledger_error_reason_is_capped(self):
+        """#21: core _deny ledger_failed message is capped."""
+        import io
+        from contextlib import redirect_stderr
+        from two_key.agent_meta import MAX_LEDGER_ERROR_CHARS
+        from two_key.ledger import LedgerError
+        mark = "ZQXLED"
+        huge = mark + "L" * (5 << 20)
+        with tempfile.TemporaryDirectory() as tmp:
+            tk = engine(tmp)
+            with patch("two_key.core.convene", side_effect=RuntimeError("boom")), \
+                 patch.object(tk.ledger, "append", side_effect=LedgerError(huge)), \
+                 redirect_stderr(io.StringIO()):
+                d = tk.authorize(PAY, {"amt": 1, "to": "ada"}, "x")
+            self.assertTrue(d.reason.startswith("ledger_failed:"), d.reason)
+            self.assertIn(mark, d.reason)
+            self.assertIn("…sha256:", d.reason)
+            self.assertLess(len(d.reason), len("ledger_failed:") + MAX_LEDGER_ERROR_CHARS + 80)
+            self.assertNotIn("L" * 1000, d.reason)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

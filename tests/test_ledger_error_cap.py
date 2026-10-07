@@ -84,6 +84,24 @@ class VmFaultExceptionCap(unittest.TestCase):
         self.assertLess(len(r.reason), len("vm_fault:") + MAX_LEDGER_ERROR_CHARS + 80)
         self.assertNotIn("y" * 1000, r.reason)
 
+    def test_vmfault_branch_reason_is_capped(self):
+        """#20: dedicated VMFault path (not generic Exception) also caps reason text."""
+        mark = "ZQXVMF"
+
+        class HugeOp:
+            def __repr__(self):
+                return mark + "z" * (5 << 20)
+
+        vm = PolicyVM([(HugeOp(),)])  # type: ignore[arg-type]
+        r = vm.eval(object())  # type: ignore[arg-type]
+        self.assertFalse(r.allowed)
+        self.assertTrue(r.reason.startswith("vm_fault:"))
+        self.assertIn(mark, r.reason)
+        self.assertIn("…sha256:", r.reason)
+        self.assertLess(len(r.reason), len("vm_fault:") + MAX_LEDGER_ERROR_CHARS + 80)
+        self.assertNotIn("z" * 1000, r.reason)
+        self.assertIn("VMFault", r.reason)
+
 
 class ExceptionLedgerErrorHelper(unittest.TestCase):
     def test_exception_ledger_error_uses_type_tag(self):

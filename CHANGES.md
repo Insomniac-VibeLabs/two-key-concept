@@ -465,7 +465,11 @@ On branch `working`. Issues closed (not #24 — product-only deferred heuristics
 - **#12** — Per-jti throttle: after the first `gateway_denied` for a jti, further denies still refuse but do not append repeats.
 - **#11** — `append_bounded` `body_omitted` entries always retain `policy_digest` and `identities_digest`.
 - **#16** — Bound `_denied_jtis`: mark jti only after successful `gateway_denied` append+checkpoint; LRU hard cap (`_MAX_DENIED_JTIS`, default 4096).
-- **#17** — Partial: cap exception/reason ledger text (~300 chars + digest) via `cap_ledger_text` / `exception_ledger_error` (quorum ballot error, generic `vm_fault` Exception path, gateway `_record_deny` `ledger_failed` for `LedgerError`). Dedicated `VMFault` path and other `ledger_failed` sites remain open as #20 / #21 — keep #17 open until those land.
+- **#17** — Complete (via #20 / #21): cap exception/reason ledger text (~300 chars + digest) via `cap_ledger_text` / `exception_ledger_error`. Covers quorum ballot error, both Path A `vm_fault` paths (`VMFault` and generic `Exception`), gateway `_record_deny` `ledger_failed`, core authorize/`_deny` `ledger_failed`, and gateway redemption `ledger_failed` sites. Non-`LedgerError` deny paths keep `type_tag` only.
 - **#18** — `check_agent_meta_mapping` reports `got: non_mapping` for a non-Mapping `agent_meta` (field values stay `non_str`).
 - **#19** — SHA-pin third-party GitHub Actions (`checkout`, `setup-python`, `codeql-action`) to full commit SHAs.
+- **#20** — Cap dedicated `VMFault` `vm_fault:` reason via `exception_ledger_error` (parity with #17 generic Exception path).
+- **#21** — Cap remaining `ledger_failed:{e}` / `ledger_failed:{le}` in `core.py` and `gateway.py` redemption paths via `cap_ledger_text`.
+- **#22** — Clamp `max_denied_jtis` to `>= 1` (zero/negative no longer KeyError after deny).
+- **#23** — Same-jti single-flight under `_denied_jtis_guard`: concurrent denies for one jti wait; at most one successful `gateway_denied` append per jti. Mark-after-success (#16) preserved.
 
