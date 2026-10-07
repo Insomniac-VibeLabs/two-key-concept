@@ -3,7 +3,7 @@
 `two-key-concept` is the first working cut. Package version 0.2.1 (tag `v0.2.1` on `main`). Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
-It keeps:
+It has:
 
 - a signed constitution, Path A bytecode, and a policy VM that does not read English
 - required `tool_specs` that fill Path A's form from argument bytes. Omitting them does not load. `deny_unmapped` defaults off: an unnamed key does not reach the tool. Set the flag to deny it. A counterparty path requires `allow`. A payload `shape`, when set, locks the value to a string, a number, or a list of strings and does not read it
@@ -18,9 +18,8 @@ Modules that carry these rules include `two_key/identity.py` (judge ≠ agent),
 digest checks), and the per-install fingerprint key beside the ledger
 (`*.ledger-key/fingerprint.key`).
 
-It does not keep scanning, antivirus, DLP, PKI, permissioned-chain
-anchoring, seed phrases, or hybrid ML-DSA. Those are in
-[two-key](https://github.com/Insomniac-VibeLabs/two-key).
+It does not include scanning, antivirus, DLP, PKI, permissioned-chain
+anchoring, seed phrases, or hybrid ML-DSA.
 
 ## Planned additions
 
@@ -30,7 +29,7 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
 
 - Key backup and recovery (target 0.3): encrypted backup and restore of this
   package's own keys (principal, capability, ledger, witness). This is not
-  PKI, X.509 identities, or seed-phrase backup. Those stay in `two-key`.
+  PKI, X.509 identities, or seed-phrase backup. Those are not planned.
 - Ledger export for SIEM (target 0.4): a command that verifies and decrypts
   the ledger locally and writes events without argument values.
 - Inspection hooks for DLP and antivirus (target 0.5): an interface that
@@ -40,7 +39,7 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
   package is still not an MCP server.
 - Post-quantum signatures (target 0.7): hybrid Ed25519 plus ML-DSA-65 for the
   long-lived signatures (the constitution and the ledger head), sized to this
-  repository's scope. The hybrid ML-DSA work today is in `two-key`.
+  repository's scope.
 - FIPS approved mode (target 0.8): an opt-in mode that refuses to start unless
   the cryptography library runs on a FIPS 140-3 validated module in approved
   mode, and that refuses algorithms outside the approved set. This package is
