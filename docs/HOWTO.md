@@ -529,14 +529,16 @@ names the setting or declaration that controls it.
   with the size of a tool spec.
 - `model:` ids are not length-capped before they are normalized. Keep them
   to real model names.
-- `authorize(..., agent_id=, hosting=)` and `authorize_from_agent` treat those
-  fields as operator/library metadata for the ledger, not agent-controlled
-  claims. Each must be a `str` or omitted (`None`); after strip, longer than
-  256 characters is refused (`agent_metadata_too_large`). Non-str is
-  `invalid_agent_metadata`. The value is never ledgered on deny. An agent
-  process can still pass huge values into `authorize()`, which is why the
-  cap exists. If a ledger body cannot be encoded on a path about to issue a
-  token, the decision is `ledger_body_too_large` (fail closed).
+- `authorize(..., agent_id=, hosting=, origin=)` and `authorize_from_agent`
+  treat those fields as operator/library metadata for the ledger, not
+  agent-controlled claims. Each must be a `str` or omitted (`None`); after
+  strip, longer than 256 characters is refused (`agent_metadata_too_large`).
+  Non-str is `invalid_agent_metadata` (ledger `got: non_str`, never the raw
+  type name). The value is never ledgered on deny. Blank/`None` `origin`
+  defaults to `library`. An agent process can still pass huge values into
+  `authorize()`, which is why the cap exists. If a ledger body cannot be
+  encoded on a path about to issue a token, the decision is
+  `ledger_body_too_large` (fail closed).
 - A token's `iat`/`exp` are read with `float()`. Tokens minted here are
   always numeric, so this only matters for tokens from another issuer.
 - Config errors from the CLI print a traceback. Check judges.yaml with a

@@ -22,7 +22,7 @@ from .canonical import (MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical
                         to_plain)
 from .agents import MAX_PROPOSAL_TEXT_CHARS, AgentConfigError, parse_proposal
 from .agent_meta import (AgentMetadataError, REASON_LEDGER_BODY, check_agent_meta_field,
-                         concept_agent_record)
+                         concept_agent_record, normalize_origin, type_tag)
 from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fingerprint, open_capability_key,
                          valid_ttl)
 from .compiler import CompiledConstitution, compile_both
@@ -205,10 +205,14 @@ class TwoKey:
         """Run both paths once the call is well-formed and within limits. Any exception is a deny that is written to the ledger (``internal_error:``).
 
         ``origin`` is recorded on the decision entry (the CLI passes ``"cli"``).
-        ``agent_id`` and ``hosting`` are operator/library metadata for the ledger
-        (at most 256 characters after strip; non-str refused). They are not trust.
+        ``origin``, ``agent_id``, and ``hosting`` are operator/library metadata for the
+        ledger (at most 256 characters after strip; non-str refused). They are not trust.
         """
-        origin = origin if isinstance(origin, str) and origin else "library"
+        try:
+            origin = normalize_origin(origin)
+        except AgentMetadataError as e:
+            # Fail closed: never echo the bad origin onto the ledger.
+            return self._deny(None, e.reason, None, None, None, e.detail)
         try:
             agent = concept_agent_record(agent_id, hosting)
         except AgentMetadataError as e:
@@ -217,7 +221,7 @@ class TwoKey:
             return self._authorize(action, arguments, proposal, agent=agent,
                                    agent_session=agent_session, origin=origin)
         except Exception as e:  # fail closed: no exception reaches the caller as anything but a deny
-            return self._deny(origin, f"internal_error:{type(e).__name__}", agent, None, None)
+            return self._deny(origin, f"internal_error:{type_tag(e)}", agent, None, None)
 
     def _authorize(self, action: dict, arguments: dict, proposal: str, *,
                    agent: dict | None = None,
@@ -402,10 +406,13 @@ class TwoKey:
         ``malformed_proposal`` deny. Either way the ledger keeps only its size and digest, and
         the reason carries no value or key name.
 
-        ``agent.agent_id`` / ``agent.hosting`` are library metadata for the ledger (same
-        type and 256-char caps as ``authorize`` kwargs).
+        ``origin``, ``agent.agent_id``, and ``agent.hosting`` are library metadata for the
+        ledger (same type and 256-char caps as ``authorize`` kwargs).
         """
-        origin = origin if isinstance(origin, str) and origin else "library"
+        try:
+            origin = normalize_origin(origin)
+        except AgentMetadataError as e:
+            return self._deny(None, e.reason, None, None, None, e.detail)
         try:
             agent_id = check_agent_meta_field("agent_id", getattr(agent, "agent_id", None))
             hosting = check_agent_meta_field("hosting", getattr(agent, "hosting", None))
@@ -421,9 +428,9 @@ class TwoKey:
             except (AgentConfigError, RecursionError):   # the message may quote a key name: not in the reason
                 return self._deny(origin, "malformed_proposal", record, None, None,
                                   {**size_record(proposal_text, "proposal_text"),
-                                   "proposal_text_type": type(proposal_text).__name__})
+                                   "proposal_text_type": type_tag(proposal_text)})
         except Exception as e:  # fail closed, as in authorize()
-            return self._deny(origin, f"internal_error:{type(e).__name__}", record, None, None)
+            return self._deny(origin, f"internal_error:{type_tag(e)}", record, None, None)
         return self.authorize(action, arguments, proposal, agent_id=agent_id,
                               hosting=hosting, agent_session=agent_session, origin=origin)
 
@@ -431,17 +438,23 @@ class TwoKey:
         self.ledger.append("revocation", {"reason": reason})
         self.ledger.checkpoint()
 
-    def _deny(self, origin: str, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
-        """Ledger a deny decision. ``origin`` is passed down by the caller, never stored on ``self``."""
+    def _deny(self, origin: str | None, reason: str, agent, path_a, path_b, extra: dict | None = None) -> Decision:
+        """Ledger a deny decision. ``origin`` is passed down by the caller, never stored on ``self``.
+
+        ``origin`` may be ``None`` when the supplied origin itself failed validation
+        (detail already carries ``field``/``size``/``digest`` or ``got``; do not echo it).
+        """
         try:
-            self.ledger.append_bounded("decision", {"allowed": False, "reason": reason, "agent": agent,
-                                                    "origin": origin,
-                                                    **(extra or {}), **self._decision_context})
+            body = {"allowed": False, "reason": reason, "agent": agent,
+                    **(extra or {}), **self._decision_context}
+            if origin is not None:
+                body["origin"] = origin
+            self.ledger.append_bounded("decision", body)
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
-            print(f"two-key: could not record deny decision {reason!r}: {type(e).__name__}: {e}"[:500],
+            print(f"two-key: could not record deny decision {reason!r}: {type_tag(e)}: {e}"[:500],
                   file=sys.stderr)
-            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type(e).__name__}"
+            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type_tag(e)}"
         try:
             size = self.ledger.size()
         except Exception:

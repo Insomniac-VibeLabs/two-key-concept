@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
+from .agent_meta import type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
 from .derive import (MAX_ARGS_BYTES, DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
@@ -115,8 +116,8 @@ class ToolGateway:
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks it
             print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
-                  f"{type(e).__name__}"[:500], file=sys.stderr)
-            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type(e).__name__}"
+                  f"{type_tag(e)}"[:500], file=sys.stderr)
+            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type_tag(e)}"
             return GatewayResult(False, reason, result.output)
         return result
 
@@ -202,7 +203,7 @@ class ToolGateway:
                     self.ledger.checkpoint()
                 except LedgerError as le:
                     return GatewayResult(False, f"ledger_failed:{le}")
-                return GatewayResult(False, f"tool_error:{type(e).__name__}", None)
+                return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
             try:
                 self.ledger.append_bounded("redemption", {"jti": payload["jti"], "tool": tool})
                 self.ledger.checkpoint()

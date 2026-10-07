@@ -1,9 +1,9 @@
 """Bounds on operator/library-supplied agent identity metadata written to the ledger.
 
-``authorize(..., agent_id=, hosting=)`` and ``authorize_from_agent`` accept free-form
-strings from the caller (the operator/library, not a verified agent claim). An agent
-process can still pass huge or non-string values into those kwargs; these checks refuse
-them before they reach the ledger. ``None`` means omitted.
+``authorize(..., agent_id=, hosting=, origin=)`` and ``authorize_from_agent`` accept
+free-form strings from the caller (the operator/library, not a verified agent claim).
+An agent process can still pass huge or non-string values into those kwargs; these
+checks refuse them before they reach the ledger. ``None`` means omitted.
 """
 
 from __future__ import annotations
@@ -12,10 +12,20 @@ import hashlib
 from typing import Any, Mapping
 
 MAX_AGENT_METADATA_CHARS = 256
+MAX_TYPE_TAG_CHARS = 32
 
 REASON_INVALID = "invalid_agent_metadata"
 REASON_TOO_LARGE = "agent_metadata_too_large"
 REASON_LEDGER_BODY = "ledger_body_too_large"
+
+# Allowlisted short tags for ledger ``got`` / ``*_type`` fields. Anything else → ``other``
+# (or a hard-capped name via ``type_tag``). Never emit raw unbounded ``__name__``.
+_TYPE_TAG_ALLOWLIST = frozenset({
+    "str", "bytes", "bytearray", "memoryview",
+    "int", "float", "complex", "bool", "NoneType",
+    "list", "dict", "tuple", "set", "frozenset",
+    "object", "type", "other", "non_str",
+})
 
 # Fields copied from library agent_meta / AgentProposal.to_record() onto the ledger.
 AGENT_META_FIELDS = ("agent_id", "provider", "hosting", "model")
@@ -34,21 +44,36 @@ def _digest(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
 
 
+def type_tag(value: Any) -> str:
+    """Short type label for ledger deny detail — never raw unbounded ``__name__``.
+
+    Allowlisted builtin names pass through. Everything else is hard-capped at
+    ``MAX_TYPE_TAG_CHARS`` (so ``ValueError`` stays useful; a 5 MB class name
+    cannot balloon a deny entry).
+    """
+    name = type(value).__name__ or "other"
+    if name in _TYPE_TAG_ALLOWLIST:
+        return name
+    if len(name) > MAX_TYPE_TAG_CHARS:
+        return name[:MAX_TYPE_TAG_CHARS]
+    return name
+
+
 def check_agent_meta_field(field: str, value: Any) -> str | None:
     """Normalize one optional identity field for the ledger.
 
     ``None`` means omitted. A non-``str`` is ``invalid_agent_metadata`` (ledger the
-    field name and type only). After strip, longer than ``MAX_AGENT_METADATA_CHARS``
-    is ``agent_metadata_too_large`` (ledger ``field``, ``size``, ``digest`` — never
-    the value, and never truncate). Returns the stripped string, or ``None`` when
-    omitted or blank after strip.
+    field name and fixed tag ``non_str`` only). After strip, longer than
+    ``MAX_AGENT_METADATA_CHARS`` is ``agent_metadata_too_large`` (ledger ``field``,
+    ``size``, ``digest`` — never the value, and never truncate). Returns the
+    stripped string, or ``None`` when omitted or blank after strip.
     """
     if value is None:
         return None
     if type(value) is not str:
         raise AgentMetadataError(
             REASON_INVALID,
-            {"field": field, "got": type(value).__name__},
+            {"field": field, "got": "non_str"},
         )
     stripped = value.strip()
     if len(stripped) > MAX_AGENT_METADATA_CHARS:
@@ -66,7 +91,7 @@ def check_agent_meta_mapping(meta: Any, fields: tuple[str, ...] = AGENT_META_FIE
     if not isinstance(meta, Mapping):
         raise AgentMetadataError(
             REASON_INVALID,
-            {"field": "agent_meta", "got": type(meta).__name__},
+            {"field": "agent_meta", "got": "non_str"},
         )
     out: dict[str, str] = {}
     for key in fields:
@@ -76,6 +101,19 @@ def check_agent_meta_mapping(meta: Any, fields: tuple[str, ...] = AGENT_META_FIE
         if normalized is not None:
             out[key] = normalized
     return out or None
+
+
+def normalize_origin(origin: Any = None) -> str:
+    """Normalize decision ``origin`` for the ledger (same caps as B1 metadata).
+
+    Omitted / ``None`` / blank after strip → ``\"library\"``. Non-``str`` →
+    ``invalid_agent_metadata``. After strip, over 256 characters →
+    ``agent_metadata_too_large`` (detail ``field``/``size``/``digest`` only).
+    """
+    if origin is None:
+        return "library"
+    normalized = check_agent_meta_field("origin", origin)
+    return normalized or "library"
 
 
 def concept_agent_record(agent_id: Any = None, hosting: Any = None) -> dict | None:

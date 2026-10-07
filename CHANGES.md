@@ -319,6 +319,11 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   `field`/`size`/`digest` only). `append_bounded` with `body_omitted` on a
   path about to issue a token becomes `ledger_body_too_large` instead of an
   allow. Shared helper: `two_key.agent_meta`.
+- Decision `origin` (library/CLI label) uses the same 256-char / str caps as
+  B1 metadata (`normalize_origin`). Oversize or non-str is a fail-closed deny
+  with `field`/`size`/`digest` or `got: non_str` only — never the full value,
+  and no token. Ledger type labels use `type_tag` (allowlisted or ≤32 chars),
+  never raw unbounded `__name__`.
 - `authorize_from_agent` measures the proposal text before parsing it:
   over 1,048,576 characters is `proposal_too_large`, and text that is not
   a string (including `None`) or does not parse is `malformed_proposal`.
