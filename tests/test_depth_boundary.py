@@ -183,7 +183,7 @@ class AppendBounded(unittest.TestCase):
     def test_unencodable_value_and_long_string_are_dropped(self):
         entry = self.ledger.append_bounded("x", {"reason": "r" * 500, "obj": object(), "n": 3})
         self.assertEqual(set(entry.body) - {"body_size", "body_digest", "body_omitted", "body_error"}, {"n"})
-        self.assertEqual(entry.body["body_error"], "unsupported type object")
+        self.assertEqual(entry.body["body_error"], "unsupported_type")
 
     def test_body_omitted_retains_policy_and_identity_digests(self):
         """Auditors can still bind a truncated decision to the loaded policy/identities (#11)."""

@@ -12,9 +12,13 @@ jti, tool, argument size and digest) at most once per jti after a successful app
 the jti is recorded only after ``append_bounded`` + ``checkpoint`` succeed, so a
 failed ledger write can be retried on a later deny. Concurrent same-jti denies are
 single-flight under ``_denied_jtis_guard`` so only one ``gateway_denied`` append runs
-at a time; waiters re-check and skip if already marked. The in-memory set is LRU-capped
-(``_MAX_DENIED_JTIS``, clamped to at least 1). Further denies for a remembered jti
-still refuse but do not append. A token that does not verify writes nothing.
+at a time; waiters re-check and skip if already marked. Waiters use a timed
+``Condition.wait`` (``_DENY_INFLIGHT_WAIT_SECONDS``, default 30s; configurable via
+``deny_inflight_wait_seconds``): on timeout they still deny fail-closed without
+marking and without fail-open, so a stuck ``append_bounded`` cannot hang waiters
+forever. The in-memory set is LRU-capped (``_MAX_DENIED_JTIS``, clamped to at least 1).
+Further denies for a remembered jti still refuse but do not append. A token that does
+not verify writes nothing.
 """
 
 from __future__ import annotations
@@ -45,6 +49,8 @@ _MAX_REASON_CHARS = 200
 _MAX_JTI_CHARS = 64
 # Hard cap on remembered denied jtis (LRU via OrderedDict). Cyber #16.
 _MAX_DENIED_JTIS = 4096
+# Same-jti waiters: max seconds to wait for an in-flight deny append (#25).
+_DENY_INFLIGHT_WAIT_SECONDS = 30.0
 
 
 def _short(value) -> str | None:
@@ -77,7 +83,8 @@ def _as_verifier(issuer) -> CapabilityVerifier:
 
 class ToolGateway:
     def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
-                 max_denied_jtis: int | None = None):
+                 max_denied_jtis: int | None = None,
+                 deny_inflight_wait_seconds: float | None = None):
         self.ledger = ledger
         self.issuer = _as_verifier(issuer)
         principal = getattr(ledger, "public_key", None)
@@ -97,6 +104,10 @@ class ToolGateway:
         # #22: zero/negative would make the LRU pop loop KeyError on an empty map.
         n = int(max_denied_jtis) if max_denied_jtis is not None else _MAX_DENIED_JTIS
         self._max_denied_jtis = max(1, n)
+        # #25: timed wait so a hung append cannot block same-jti waiters forever.
+        wait = (_DENY_INFLIGHT_WAIT_SECONDS if deny_inflight_wait_seconds is None
+                else float(deny_inflight_wait_seconds))
+        self._deny_inflight_wait_seconds = wait if wait > 0 else _DENY_INFLIGHT_WAIT_SECONDS
 
     def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
         """Redeem ``token`` for ``tool(arguments)``.
@@ -120,9 +131,12 @@ class ToolGateway:
         jti = _short(payload.get("jti"))
         if jti is not None:
             with self._denied_jtis_guard:
-                # #23: wait for an in-flight same-jti deny; then skip append if already marked.
+                # #23/#25: wait (timed) for an in-flight same-jti deny; then skip if marked.
                 while jti in self._deny_inflight:
-                    self._denied_jtis_guard.wait()
+                    notified = self._denied_jtis_guard.wait(timeout=self._deny_inflight_wait_seconds)
+                    if not notified and jti in self._deny_inflight:
+                        # Append still stuck: fail-closed deny; do not mark; do not fail-open.
+                        return result
                 if jti in self._denied_jtis:
                     self._denied_jtis.move_to_end(jti)
                     return result      # still deny; do not append another gateway_denied for this jti
@@ -186,12 +200,12 @@ class ToolGateway:
         except OversizeError:
             return GatewayResult(False, "args_too_large")
         except EncodingError as e:
-            return GatewayResult(False, f"invalid_call:{e}")
+            return GatewayResult(False, f"invalid_call:{cap_ledger_text(str(e))}")
         encoded["plain"] = arguments
         try:
             frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
-            return GatewayResult(False, f"invalid_call:{e}")
+            return GatewayResult(False, f"invalid_call:{cap_ledger_text(str(e))}")
         encoded["frozen"] = frozen
         hashed = digest_hex(frozen)
         if canonical_too_large(frozen, arguments):

@@ -240,8 +240,9 @@ class TwoKey:
         except OversizeError:
             return self._deny(origin, "action_too_large", agent, None, None, _unmeasured("action"))
         except EncodingError as e:
-            return self._deny(origin, f"malformed_action:{e}", agent, None, None,
-                              {"action_omitted": True, "action_error": str(e)})
+            why = cap_ledger_text(str(e))
+            return self._deny(origin, f"malformed_action:{why}", agent, None, None,
+                              {"action_omitted": True, "action_error": why})
         claim_size = args_size(claim)
         if claim_size < 0 or claim_size > MAX_ACTION_BYTES:
             return self._deny(origin, "action_too_large", agent, None, None, size_record(claim, "action"))
@@ -255,8 +256,9 @@ class TwoKey:
         except OversizeError:
             return self._deny(origin, "args_too_large", agent, None, None, _unmeasured("tool_args"))
         except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
-            return self._deny(origin, f"invalid_call:{e}", agent, None, None,
-                              {"tool_args_omitted": True, "tool_args_error": str(e)})
+            why = cap_ledger_text(str(e))
+            return self._deny(origin, f"invalid_call:{why}", agent, None, None,
+                              {"tool_args_omitted": True, "tool_args_error": why})
         if isinstance(arguments, Mapping):
             # Freeze the arguments to the canonical bytes a token would bind, before the size check:
             # a value that cannot be encoded (nested too deeply, NaN, a non-string key) is
@@ -264,8 +266,9 @@ class TwoKey:
             try:
                 frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
             except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
-                return self._deny(origin, f"invalid_call:{e}", agent, None, None,
-                                  {"tool_args_omitted": True, "tool_args_error": str(e)})
+                why = cap_ledger_text(str(e))
+                return self._deny(origin, f"invalid_call:{why}", agent, None, None,
+                                  {"tool_args_omitted": True, "tool_args_error": why})
             # Encoded once: these bytes settle the size cap and give the digest the token binds.
             oversized = canonical_too_large(frozen, arguments)
             frozen_digest = digest_hex(frozen)
@@ -281,7 +284,7 @@ class TwoKey:
             return self._deny(origin, "proposal_too_large", agent, None, None, _unmeasured("proposal"))
         except EncodingError as e:
             return self._deny(origin, "malformed_proposal", agent, None, None,
-                              {"proposal_omitted": True, "proposal_error": str(e)})
+                              {"proposal_omitted": True, "proposal_error": cap_ledger_text(str(e))})
         if args_too_large(proposal):
             return self._deny(origin, "proposal_too_large", agent, None, None, size_record(proposal, "proposal"))
         spec = None
@@ -452,7 +455,12 @@ class TwoKey:
             self.ledger.append_bounded("decision", body)
             self.ledger.checkpoint()
         except Exception as e:  # still a deny; say so, because the ledger now lacks this decision
-            print(f"two-key: could not record deny decision {reason!r}: {type_tag(e)}: {e}"[:500],
+            # Cap pieces before format so a huge str(e) is not built into one f-string then sliced.
+            reason_bit = reason if len(reason) <= 200 else reason[:200]
+            exc_bit = str(e)
+            if len(exc_bit) > 200:
+                exc_bit = exc_bit[:200]
+            print(f"two-key: could not record deny decision {reason_bit!r}: {type_tag(e)}: {exc_bit}"[:500],
                   file=sys.stderr)
             reason = (f"ledger_failed:{cap_ledger_text(str(e))}" if isinstance(e, LedgerError)
                       else f"ledger_failed:{type_tag(e)}")

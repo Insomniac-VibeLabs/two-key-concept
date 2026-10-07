@@ -206,6 +206,47 @@ class GatewayDenied(unittest.TestCase):
         self.assertNotIn("G" * 1000, r.reason)
 
 
+    def test_deny_inflight_wait_timeout_fail_closed(self):
+        """#25: if append hangs, same-jti waiter times out; still deny, no mark, no fail-open."""
+        entered = threading.Event()
+        release = threading.Event()
+        real_append = self.tk.ledger.append_bounded
+        results_first = []
+
+        def slow(kind, body):
+            if kind == "gateway_denied":
+                entered.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("release never set")
+            return real_append(kind, body)
+
+        gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                         tools={"search": lambda a: "ok"},
+                         deny_inflight_wait_seconds=0.15)
+
+        def first():
+            with mock.patch.object(self.tk.ledger, "append_bounded", side_effect=slow):
+                results_first.append(gw.invoke(self.token, "search", {"q": SECRET}))
+
+        t = threading.Thread(target=first)
+        t.start()
+        self.assertTrue(entered.wait(timeout=5), "first deny never entered append")
+        # Waiter must return quickly (timeout), still deny, and must not mark jti.
+        r2 = gw.invoke(self.token, "search", {"q": SECRET})
+        self.assertFalse(r2.allowed)
+        self.assertEqual(r2.reason, "args_mismatch")
+        self.assertEqual(len(gw._denied_jtis), 0)
+        self.assertEqual(self.denied(), [])  # first append still blocked
+        release.set()
+        t.join(timeout=5)
+        self.assertFalse(t.is_alive())
+        self.assertEqual(len(results_first), 1)
+        self.assertEqual(results_first[0].reason, "args_mismatch")
+        # After the hung append completes, jti is marked and one gateway_denied exists.
+        self.assertEqual(len(self.denied()), 1)
+        self.assertEqual(len(gw._denied_jtis), 1)
+
+
 
 if __name__ == "__main__":
     unittest.main()

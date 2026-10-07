@@ -114,5 +114,74 @@ class ExceptionLedgerErrorHelper(unittest.TestCase):
         self.assertNotIn("W" * 100, out)
 
 
+class EncodingErrorReasonCap(unittest.TestCase):
+    """#24: EncodingError / invalid_call reasons never carry raw unbounded __name__."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from two_key.constitution import sign_constitution, verify_signed
+        from two_key.core import TwoKey
+        from two_key.gateway import ToolGateway
+        from two_key.keys import generate_private_key
+        from two_key.ledger import Ledger
+        from two_key.quorum import QuorumPolicy
+        from two_key.testing import TEST_AGENT, FixedJudge
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        key = generate_private_key()
+        rules = [{"id": "tools", "allow_only_tools": ["search"]}]
+        specs = {"search": {"irreversible": False, "data_class_floor": "public",
+                            "payload": [{"json_path": "q"}]}}
+        env = sign_constitution("Searching is fine.", rules, key, specs)
+        self.tk = TwoKey(Ledger(Path(self.tmp.name, "ledger"), key), key.public_key(),
+                         verify_signed(env, key.public_key()), [FixedJudge("a", "yes")],
+                         private_key=key, quorum=QuorumPolicy(required_yes=1),
+                         allow_test_doubles=True, monitored_agent=TEST_AGENT)
+        self.gw = ToolGateway(self.tk.ledger, self.tk.issuer, self.tk.compiled,
+                              tools={"search": lambda a: "ok"})
+        self.search = normalize_action({"tool": "search", "data_class": "public",
+                                        "irreversible": False})
+
+    def test_to_plain_pathological_type_name_is_fixed_label(self):
+        from two_key.canonical import EncodingError, to_plain
+        huge = "X" * 200_000
+        bad = type(huge, (), {})()
+        with self.assertRaises(EncodingError) as cm:
+            to_plain({"q": bad})
+        self.assertEqual(str(cm.exception), "unsupported_type")
+        self.assertNotIn(huge, str(cm.exception))
+        self.assertLess(len(str(cm.exception)), 40)
+
+    def test_authorize_invalid_call_reason_bounded_for_huge_type_name(self):
+        huge = "X" * 200_000
+        bad = type(huge, (), {})()
+        d = self.tk.authorize(self.search, {"q": bad}, "look")
+        self.assertFalse(d.allowed)
+        self.assertTrue(d.reason.startswith("invalid_call:"), d.reason)
+        self.assertEqual(d.reason, "invalid_call:unsupported_type")
+        self.assertNotIn(huge, d.reason)
+        self.assertLess(len(d.reason), 80)
+        # Ledger decision reason must stay bounded too.
+        decisions = [e.body for e in self.tk.ledger.entries if e.kind == "decision"]
+        self.assertTrue(decisions)
+        self.assertEqual(decisions[-1]["reason"], "invalid_call:unsupported_type")
+        self.assertEqual(decisions[-1].get("tool_args_error"), "unsupported_type")
+        self.assertLess(len(str(decisions[-1])), 5000)
+
+    def test_gateway_invalid_call_reason_bounded_for_huge_type_name(self):
+        d = self.tk.authorize(self.search, {"q": "weather"}, "look")
+        self.assertTrue(d.allowed, d.reason)
+        huge = "Y" * 200_000
+        bad = type(huge, (), {})()
+        r = self.gw.invoke(d.token, "search", {"q": bad})
+        self.assertFalse(r.allowed)
+        self.assertEqual(r.reason, "invalid_call:unsupported_type")
+        self.assertNotIn(huge, r.reason)
+        self.assertLess(len(r.reason), 80)
+
+
+
 if __name__ == "__main__":
     unittest.main()
