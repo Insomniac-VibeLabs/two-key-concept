@@ -87,7 +87,7 @@ class ToPlain(unittest.TestCase):
     def test_refusals(self):
         with self.assertRaisesRegex(EncodingError, "^canonical object keys must be strings$"):
             to_plain(Small({1: "x"}))
-        with self.assertRaisesRegex(EncodingError, "^unsupported type object$"):
+        with self.assertRaisesRegex(EncodingError, "^unsupported_type$"):
             to_plain({"a": object()})
         with self.assertRaisesRegex(EncodingError, "^tool args are nested too deeply$"):
             to_plain({"a": {"b": 1}}, max_depth=1, what="tool args are")

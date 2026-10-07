@@ -37,6 +37,7 @@ from urllib.parse import urlparse
 from .transport import pooled_transport
 
 from ..action import Action
+from ..agent_meta import type_tag
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge
 from .credentials import CredentialError, CredentialProvider, NoCredential
@@ -247,16 +248,16 @@ class LLMJudge(Judge):
             except urllib.error.HTTPError as e2:
                 return self.abstain(f"http {e2.code}")
             except Exception as e2:
-                return self.abstain(f"transport: {type(e2).__name__}")
+                return self.abstain(f"transport: {type_tag(e2)}")
         except Exception as e:
-            return self.abstain(f"transport: {type(e).__name__}")
+            return self.abstain(f"transport: {type_tag(e)}")
         try:
             text = self._extract_text(resp)
             parsed = parse_ballot_strict(text, echo=echo)
         except MalformedBallot as e:
             return self.abstain(f"malformed_ballot: {e}")
         except Exception as e:
-            return self.abstain(f"malformed_response: {type(e).__name__}")
+            return self.abstain(f"malformed_response: {type_tag(e)}")
         ballot_key = self.ballot_key
         if self.ballot_key_env:
             import os

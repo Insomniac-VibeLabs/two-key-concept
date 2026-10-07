@@ -31,6 +31,7 @@ from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .canonical import EncodingError, canonical_bytes, canonical_hash
+from .agent_meta import type_tag
 from .keys import (
     generate_private_key, load_private_key, public_from_raw, public_key,
     public_raw, save_private_key, save_public_key, sign, verify,
@@ -133,7 +134,8 @@ _DIGEST_KEEP = frozenset({"policy_digest", "identities_digest"})
 
 def omitted_body(body: dict, error: Exception) -> dict:
     """What ``append_bounded`` records for a body that cannot be encoded: its short scalar fields, and the
-    size and SHA-256 of its JSON (non-JSON values written as ``<TypeName>``), never the other values.
+    size and SHA-256 of its JSON (non-JSON values written as ``<type_tag>``, never raw
+    unbounded ``__name__``), never the other values.
 
     ``policy_digest`` and ``identities_digest`` are always retained when present (even if longer than
     the ordinary string cap) so auditors can still bind a truncated decision to the loaded policy
@@ -150,7 +152,7 @@ def omitted_body(body: dict, error: Exception) -> dict:
             kept[k] = v
     try:
         data = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-                          default=lambda o: f"<{type(o).__name__}>").encode("utf-8", "surrogatepass")
+                          default=lambda o: f"<{type_tag(o)}>").encode("utf-8", "surrogatepass")
     except (RecursionError, ValueError, TypeError):
         data = None
     return {**kept, "body_size": -1 if data is None else len(data),

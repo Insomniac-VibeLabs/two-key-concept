@@ -8,12 +8,23 @@ retry of that intent does not run the tool. A tool exception appends an
 abort and leaves the token usable. A crash after a successful return
 cannot run the token again, because the intent is already on the ledger.
 A refusal of an authenticated token is ledgered as ``gateway_denied`` (reason,
-jti, tool, argument size and digest) at most once per jti; further denies for that
-jti still refuse but do not append. A token that does not verify writes nothing.
+jti, tool, argument size and digest) at most once per jti after a successful append:
+the jti is recorded only after ``append_bounded`` + ``checkpoint`` succeed, so a
+failed ledger write can be retried on a later deny. Concurrent same-jti denies are
+single-flight under ``_denied_jtis_guard`` so only one ``gateway_denied`` append runs
+at a time; waiters re-check and skip if already marked. Waiters use a timed
+``Condition.wait`` (``_DENY_INFLIGHT_WAIT_SECONDS``, default 30s; configurable via
+``deny_inflight_wait_seconds``, which must be finite and positive — ``inf``/``nan``
+fall back to 30s): on timeout they still deny fail-closed without marking and
+without fail-open, so a stuck ``append_bounded`` cannot hang waiters forever. The in-memory set is LRU-capped (``_MAX_DENIED_JTIS``, clamped to at least 1).
+Further denies for a remembered jti still refuse but do not append. A token that does
+not verify writes nothing.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
+import math
 import os
 import sys
 import threading
@@ -27,7 +38,7 @@ except ImportError:  # pragma: no cover - POSIX only
 
 from .capability import (DEFAULT_MAX_TTL_SECONDS, CapabilityIssuer, CapabilityVerifier, TokenError, _raw,
                          capability_key_fingerprint)
-from .agent_meta import type_tag
+from .agent_meta import cap_ledger_text, type_tag
 from .action import MAX_TOOL_NAME_CHARS, TOOL_NAME
 from .canonical import MAX_INPUT_DEPTH, EncodingError, OversizeError, canonical_bytes, digest_hex, to_plain
 from .derive import (MAX_ARGS_BYTES, DeriveError, blocked_from_rules, canonical_too_large, derive, dropped_keys, form_for, forms_match,
@@ -37,6 +48,10 @@ from .ledger import LedgerError
 
 _MAX_REASON_CHARS = 200
 _MAX_JTI_CHARS = 64
+# Hard cap on remembered denied jtis (LRU via OrderedDict). Cyber #16.
+_MAX_DENIED_JTIS = 4096
+# Same-jti waiters: max seconds to wait for an in-flight deny append (#25).
+_DENY_INFLIGHT_WAIT_SECONDS = 30.0
 
 
 def _short(value) -> str | None:
@@ -68,7 +83,9 @@ def _as_verifier(issuer) -> CapabilityVerifier:
 
 
 class ToolGateway:
-    def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None):
+    def __init__(self, ledger, issuer, compiled, *, tools: dict[str, Callable] | None = None,
+                 max_denied_jtis: int | None = None,
+                 deny_inflight_wait_seconds: float | None = None):
         self.ledger = ledger
         self.issuer = _as_verifier(issuer)
         principal = getattr(ledger, "public_key", None)
@@ -79,9 +96,22 @@ class ToolGateway:
         self.tools = tools or {}
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
-        # After the first gateway_denied for a jti, further denies still refuse but do not append.
-        self._denied_jtis: set[str] = set()
-        self._denied_jtis_guard = threading.Lock()
+        # After a successful gateway_denied append for a jti, further denies still refuse but
+        # do not append. Marked only after append+checkpoint succeed (#16). LRU-capped.
+        self._denied_jtis: OrderedDict[str, None] = OrderedDict()
+        # Condition: lock + wait/notify for same-jti single-flight (#23).
+        self._denied_jtis_guard = threading.Condition()
+        self._deny_inflight: set[str] = set()
+        # #22: zero/negative would make the LRU pop loop KeyError on an empty map.
+        n = int(max_denied_jtis) if max_denied_jtis is not None else _MAX_DENIED_JTIS
+        self._max_denied_jtis = max(1, n)
+        # #25/#28: timed wait so a hung append cannot block same-jti waiters forever.
+        # Require finite positive; inf/nan (and <=0) fall back to the 30s default.
+        wait = (_DENY_INFLIGHT_WAIT_SECONDS if deny_inflight_wait_seconds is None
+                else float(deny_inflight_wait_seconds))
+        self._deny_inflight_wait_seconds = (
+            wait if math.isfinite(wait) and wait > 0 else _DENY_INFLIGHT_WAIT_SECONDS
+        )
 
     def invoke(self, token: str, tool: str, arguments: dict) -> GatewayResult:
         """Redeem ``token`` for ``tool(arguments)``.
@@ -105,33 +135,56 @@ class ToolGateway:
         jti = _short(payload.get("jti"))
         if jti is not None:
             with self._denied_jtis_guard:
-                already = jti in self._denied_jtis
-                if not already:
-                    self._denied_jtis.add(jti)
-            if already:
-                return result          # still deny; do not append another gateway_denied for this jti
-        body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": jti}
-        if isinstance(tool, str) and len(tool) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool):
-            body["tool"] = tool
-        else:
-            body.update({"tool": None, **size_record(tool, "tool")})
-        frozen = encoded.get("frozen")
-        if frozen is not None:
-            body.update({"tool_args_size": len(frozen), "tool_args_digest": "sha256:" + digest_hex(frozen),
-                         "tool_args_omitted": True})
-        elif "plain" in encoded:     # copied, but not encodable (NaN, for example): measured from the copy
-            body.update(size_record(encoded["plain"], "tool_args"))
-        else:                        # not copied (too deep, too many items, an unsupported type): not measured
-            body.update({"tool_args_size": -1, "tool_args_digest": None, "tool_args_omitted": True})
+                # #23/#25: wait (timed) for an in-flight same-jti deny; then skip if marked.
+                while jti in self._deny_inflight:
+                    notified = self._denied_jtis_guard.wait(timeout=self._deny_inflight_wait_seconds)
+                    if not notified and jti in self._deny_inflight:
+                        # Append still stuck: fail-closed deny; do not mark; do not fail-open.
+                        return result
+                if jti in self._denied_jtis:
+                    self._denied_jtis.move_to_end(jti)
+                    return result      # still deny; do not append another gateway_denied for this jti
+                self._deny_inflight.add(jti)
+                # Do not mark yet — only after a successful append (#16).
         try:
-            self.ledger.append_bounded("gateway_denied", body)
-            self.ledger.checkpoint()
-        except Exception as e:  # still a deny; say so, because the ledger now lacks it
-            print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
-                  f"{type_tag(e)}"[:500], file=sys.stderr)
-            reason = f"ledger_failed:{e}" if isinstance(e, LedgerError) else f"ledger_failed:{type_tag(e)}"
-            return GatewayResult(False, reason, result.output)
-        return result
+            body = {"reason": result.reason[:_MAX_REASON_CHARS], "jti": jti}
+            if isinstance(tool, str) and len(tool) <= MAX_TOOL_NAME_CHARS and TOOL_NAME.fullmatch(tool):
+                body["tool"] = tool
+            else:
+                body.update({"tool": None, **size_record(tool, "tool")})
+            frozen = encoded.get("frozen")
+            if frozen is not None:
+                body.update({"tool_args_size": len(frozen), "tool_args_digest": "sha256:" + digest_hex(frozen),
+                             "tool_args_omitted": True})
+            elif "plain" in encoded:     # copied, but not encodable (NaN, for example): measured from the copy
+                body.update(size_record(encoded["plain"], "tool_args"))
+            else:                        # not copied (too deep, too many items, an unsupported type): not measured
+                body.update({"tool_args_size": -1, "tool_args_digest": None, "tool_args_omitted": True})
+            try:
+                self.ledger.append_bounded("gateway_denied", body)
+                self.ledger.checkpoint()
+            except Exception as e:  # still a deny; do not mark jti, so a later deny can retry ledgering
+                print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
+                      f"{type_tag(e)}"[:500], file=sys.stderr)
+                if isinstance(e, LedgerError):
+                    reason = f"ledger_failed:{cap_ledger_text(str(e))}"
+                else:
+                    reason = f"ledger_failed:{type_tag(e)}"
+                return GatewayResult(False, reason, result.output)
+            if jti is not None:
+                with self._denied_jtis_guard:
+                    if jti in self._denied_jtis:
+                        self._denied_jtis.move_to_end(jti)
+                    else:
+                        while len(self._denied_jtis) >= self._max_denied_jtis:
+                            self._denied_jtis.popitem(last=False)  # drop oldest
+                        self._denied_jtis[jti] = None
+            return result
+        finally:
+            if jti is not None:
+                with self._denied_jtis_guard:
+                    self._deny_inflight.discard(jti)
+                    self._denied_jtis_guard.notify_all()
 
     def _invoke_verified(self, payload: dict, tool: str, arguments: dict) -> tuple[GatewayResult, dict]:
         """Run the checks and the tool; also return the plain copy and encoded bytes, as far as they got."""
@@ -151,12 +204,12 @@ class ToolGateway:
         except OversizeError:
             return GatewayResult(False, "args_too_large")
         except EncodingError as e:
-            return GatewayResult(False, f"invalid_call:{e}")
+            return GatewayResult(False, f"invalid_call:{cap_ledger_text(str(e))}")
         encoded["plain"] = arguments
         try:
             frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
         except EncodingError as e:   # nested too deeply, NaN, or a non-string key; the same reason as authorize
-            return GatewayResult(False, f"invalid_call:{e}")
+            return GatewayResult(False, f"invalid_call:{cap_ledger_text(str(e))}")
         encoded["frozen"] = frozen
         hashed = digest_hex(frozen)
         if canonical_too_large(frozen, arguments):
@@ -206,7 +259,7 @@ class ToolGateway:
                                                                   "dropped_keys": dropped_keys(spec, arguments)})
                 self.ledger.checkpoint()
             except LedgerError as e:
-                return GatewayResult(False, f"ledger_failed:{e}")
+                return GatewayResult(False, f"ledger_failed:{cap_ledger_text(str(e))}")
             try:
                 output = fn(project_arguments(spec, arguments))
             except Exception as e:
@@ -214,13 +267,13 @@ class ToolGateway:
                     self.ledger.append_bounded("redemption_aborted", {"jti": payload["jti"], "tool": tool})
                     self.ledger.checkpoint()
                 except LedgerError as le:
-                    return GatewayResult(False, f"ledger_failed:{le}")
+                    return GatewayResult(False, f"ledger_failed:{cap_ledger_text(str(le))}")
                 return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
             try:
                 self.ledger.append_bounded("redemption", {"jti": payload["jti"], "tool": tool})
                 self.ledger.checkpoint()
             except LedgerError as e:
-                return GatewayResult(False, f"ledger_failed:{e}", output)
+                return GatewayResult(False, f"ledger_failed:{cap_ledger_text(str(e))}", output)
         return GatewayResult(True, "redeemed", output)
 
     def _pinned_at(self, size: int) -> str | None:

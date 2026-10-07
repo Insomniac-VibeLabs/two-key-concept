@@ -59,7 +59,7 @@ def _scalar(value: Any) -> Any:
         return value if type(value) is int else int.__int__(value)
     if isinstance(value, float):
         return value if type(value) is float else float.__float__(value)
-    raise EncodingError(f"unsupported type {type(value).__name__}")
+    raise EncodingError("unsupported_type")
 
 
 def to_plain(value: Any, *, max_depth: int = MAX_INPUT_DEPTH, what: str = "value is",
@@ -133,7 +133,7 @@ def _check(value: Any, max_depth: int, what: str) -> None:
             else:
                 stack.extend((child, level + 1) for child in item)
             continue
-        raise EncodingError(f"unsupported type {type(item).__name__}")
+        raise EncodingError("unsupported_type")
 
 
 def canonical_bytes(value: Any, *, max_depth: int = MAX_DEPTH, what: str = "value is") -> bytes:

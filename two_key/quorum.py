@@ -74,7 +74,7 @@ from dataclasses import dataclass, fields, replace
 from typing import Mapping, Sequence
 
 from .action import Action
-from .agent_meta import type_tag
+from .agent_meta import exception_ledger_error
 from .judges.base import Ballot, Judge
 
 
@@ -322,7 +322,7 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
             b = replace(b, judge_id=j.judge_id, provider=getattr(j, "provider", b.provider))
     except Exception as e:  # a failing judge is an abstention, never a yes
         b = Ballot(getattr(j, "judge_id", "?"), getattr(j, "provider", "?"), "abstain",
-                   None, "", error=f"{type_tag(e)}: {e}")
+                   None, "", error=exception_ledger_error(e))
     return b
 
 

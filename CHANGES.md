@@ -246,7 +246,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
   ledgered), arguments nested more than 62 levels (`invalid_call:tool args are nested too deeply`,
   checked before the size so every Python version gives the same reason), an
   unreadable amount (`derive_failed:amount_unreadable`, for example
-  `10**400`) or other derived value (`derive_failed:value_unreadable:<Type>`),
+  `10**400`) or other derived value (`derive_failed:value_unreadable:<type_tag>`),
   any other exception in `authorize` (`internal_error:<Type>`), and a deny
   that cannot be ledgered (`ledger_failed:<LedgerError message>`, or
   `ledger_failed:<Type>` for any other exception; also on stderr).
@@ -426,11 +426,11 @@ on stderr, not a refusal.
 | `malformed_action:unknown action fields (<n>)` / `<field>: ...` | An unknown or invalid action field (the reason names the field, not the value) | Fix the claim |
 | `args_too_large` / `proposal_too_large` | Over 256 KiB of UTF-8 JSON, or agent proposal text over 1,048,576 characters | Send less; only size and digest are ledgered |
 | `malformed_proposal` | `authorize_from_agent` got text that is not a string, not JSON, nested too deeply to parse (a `RecursionError` on any Python version), or has a missing, extra, or repeated key | Fix the agent's reply; the reason names no key |
-| `invalid_call:<why>` (authorize and gateway) | Arguments nested more than 62 levels, NaN, or a non-string key | Flatten or fix the arguments |
+| `invalid_call:<why>` (authorize and gateway) | Arguments nested more than 62 levels, NaN, a non-string key, or an unsupported type (`unsupported_type`; never a raw type name) | Flatten or fix the arguments |
 | `malformed_action:action claim is nested too deeply` | The action claim (usually `raw`) nests more than 62 levels | Flatten `raw` |
-| `body_omitted: true` on a ledger entry | The entry's body could not be encoded; short scalars plus `body_size`/`body_digest`/`body_error` are kept, and `policy_digest`/`identities_digest` are always retained when present | Read `body_error`; report it |
+| `body_omitted: true` on a ledger entry | The entry's body could not be encoded; short scalars plus `body_size`/`body_digest`/`body_error` are kept, and `policy_digest`/`identities_digest` are always retained when present; temporary JSON for the digest writes non-JSON values as `<type_tag>` (never raw `__name__`) | Read `body_error`; report it |
 | `derive_failed:amount_unreadable` | The amount cannot be read (for example `10**400`, `"1e400"`, or a non-number) | Send a readable amount |
-| `derive_failed:value_unreadable:<Type>` | Another derived value cannot be read (for example nested too deeply to walk) | Send a readable value |
+| `derive_failed:value_unreadable:<type_tag>` | Another derived value cannot be read (for example nested too deeply to walk); type label is `type_tag` (≤32 chars), never raw `__name__` | Send a readable value |
 | `internal_error:<Type>` | Any other exception inside `authorize` | Read the ledger entry; report it |
 | `ledger_failed:<message>` / `ledger_failed:<Type>` | The deny could not be written: a `LedgerError` gives its message (for example `ledger file changed by another writer; reopen the ledger`), any other exception its type (also printed on stderr) | Check the ledger directory |
 | `cloud_judge_session_required` | A judge not on loopback, and no `agent_session` | Pass the agent session (`--agent-session-env`) |
@@ -458,10 +458,24 @@ on stderr, not a refusal.
 
 ## Working — Cyber fail-closed pass (2026-10-06)
 
-On branch `working`. Issues closed (not #24 — product-only deferred heuristics):
+On branch `working`. Issues addressed on this tip (GitHub issues left open for Cyber re-review):
 
 - **#9** — Declared upstream labels folded (NFKC / zero-width); bare `openai` maps to `api.openai.com`.
 - **#8** — Empty `tenant: {}` refused (omit instead); same-model distinct-tenant opt-in documented as `constitution_loaded`-only.
 - **#12** — Per-jti throttle: after the first `gateway_denied` for a jti, further denies still refuse but do not append repeats.
 - **#11** — `append_bounded` `body_omitted` entries always retain `policy_digest` and `identities_digest`.
+- **#16** — Bound `_denied_jtis`: mark jti only after successful `gateway_denied` append+checkpoint; LRU hard cap (`_MAX_DENIED_JTIS`, default 4096).
+- **#17** — Complete (via #20 / #21): cap exception/reason ledger text (~300 chars + digest) via `cap_ledger_text` / `exception_ledger_error`. Covers quorum ballot error, both Path A `vm_fault` paths (`VMFault` and generic `Exception`), gateway `_record_deny` `ledger_failed`, core authorize/`_deny` `ledger_failed`, and gateway redemption `ledger_failed` sites. Non-`LedgerError` deny paths keep `type_tag` only.
+- **#18** — `check_agent_meta_mapping` reports `got: non_mapping` for a non-Mapping `agent_meta` (field values stay `non_str`).
+- **#19** — SHA-pin third-party GitHub Actions (`checkout`, `setup-python`, `codeql-action`) to full commit SHAs.
+- **#20** — Cap dedicated `VMFault` `vm_fault:` reason via `exception_ledger_error` (parity with #17 generic Exception path).
+- **#21** — Cap remaining `ledger_failed:{e}` / `ledger_failed:{le}` in `core.py` and `gateway.py` redemption paths via `cap_ledger_text`.
+- **#22** — Clamp `max_denied_jtis` to `>= 1` (zero/negative no longer KeyError after deny).
+- **#23** — Same-jti single-flight under `_denied_jtis_guard`: concurrent denies for one jti wait; at most one successful `gateway_denied` append per jti. Mark-after-success (#16) preserved.
+- **#24** — `EncodingError` for a non-JSON type is the fixed label `unsupported_type` (never raw unbounded `__name__`). Authorize/gateway `invalid_call:` / `malformed_action:` suffixes and `*_error` ledger fields run through `cap_ledger_text`. `core._deny` stderr caps `reason` / `str(e)` before format (no full `{e}` then `[:500]`).
+- **#25** — Same-jti `Condition.wait` is timed (default 30s, `deny_inflight_wait_seconds`); on timeout waiters still deny fail-closed without marking and without fail-open, so a stuck `append_bounded` cannot hang waiters forever.
+- **#26** — `derive` `value_unreadable:` uses `type_tag(exc)` (never raw unbounded `__name__`); `derive_failed:` decision reasons are `cap_ledger_text`'d where stored. `append_bounded` / `omitted_body` JSON `default=` uses `type_tag(o)` so temporary size/digest allocation cannot balloon on a pathological class name.
+- **#27** — LLM judge `transport:` / `malformed_response:` abstain errors use `type_tag(e)` (not raw `type(e).__name__`) into `ballot.error` → path_b ledger.
+- **#28** — `deny_inflight_wait_seconds` requires finite positive (`math.isfinite`); `inf` / `nan` / ≤0 fall back to the 30s default (so `inf` cannot restore unbounded same-jti `Condition.wait`).
+- README: removed the GitHub Pages `pages-build-deployment` Documentation Status badge (other badges kept).
 
