@@ -1,59 +1,5 @@
 # Changes
 
-## Unreleased — 2026-10-08
-
-On branch `working`. Not tagged. Version unchanged.
-
-- **#29** — Credential and start-up identity errors no longer use raw
-  `type(e).__name__`. `CallbackTokenProvider.get_token` and
-  `identity._secret_from` use `type_tag(e)` (at most 32 characters). The
-  LLM judge `credential:` abstain is capped with `cap_ledger_text`. Tests
-  added in `tests/test_ledger_error_cap.py`.
-- Module docstrings and comments no longer cite notes or a repository
-  outside this one (`credentials.py`, `llm.py`, `base.py`, `ollama.py`,
-  `quorum.py`, `action.py`, `identity.py`, `core.py`, `strict.py`). No
-  behavior change.
-- `pyproject.toml` build requirement raised to `setuptools>=77.0`, the
-  first release that accepts `license = "Apache-2.0"` as an SPDX string
-  (PEP 639). setuptools 76 refuses the file.
-- Docs: THREAT_MODEL describes the claimed-field problem in plain words
-  instead of an undefined label, and states what the ledger holds today
-  (proposal text, derived form, reasons, digests, sizes; never raw bytes of
-  an oversized or dropped value; never keys).
-- ROADMAP 0.4: the export uses a field allowlist that leaves out the
-  proposal text and the derived amount and counterparty. ROADMAP 0.10:
-  filtering by judge needs per-judge ballot records (judge id, vote, capped
-  error; never rationale text), which the ledger does not hold today.
-  ROADMAP 1.0: no unresolved Medium or higher findings, matching the ground
-  rules. Generic spec field types moved here from CHANGES as planned after
-  1.0, not scheduled. SCOPE and THREAT_MODEL planned sections match.
-- CHANGES: the #27 entry names `ballot.error` (`QuorumResult.to_record`),
-  not the path_b ledger entry. The Cyber fail-closed pass section names tag
-  `v0.2.0` and drops the "left open" clause. 0.2.0 now comes before 0.2.1.
-  The proxy troubleshooting row matches the real message ("local or
-  unrecognized proxy or daemon").
-- AGENTS.md: security review from the maintainer; two more fail-closed
-  defaults (no judge may be the monitored agent; the gateway never mints);
-  CHANGES.md with every commit; SECURITY, CONTRIBUTING, and AGENTS added to
-  the files to update when a claim changes (also in CONTRIBUTING.md).
-- SECURITY.md: report through GitHub private vulnerability reporting
-  (Security tab, "Report a vulnerability"). In scope adds a judge that is
-  the monitored agent being accepted at start-up.
-- llms.txt: test count is 362.
-- README layout table: rows for `action.py`, `agent_meta.py`,
-  `canonical.py`, `constitution.py`, and `testing.py`.
-- Comments and docstrings no longer cite spec or disclosure section
-  numbers from a document outside this repository (`action.py`,
-  `quorum.py`, `judges/base.py`, `judges/config.py`). No behavior change.
-  `QuorumPolicy.section4` keeps its name.
-- Test skip messages name the right package: `pip install
-  two-key-concept[yaml]`.
-- CHANGES: the 0.1.x entry about comments no longer names the outside
-  notes files. The Cyber fail-closed pass section is titled for `v0.2.0`
-  and sits before 0.2.1.
-- README roadmap table: a row for generic spec field types (after 1.0, not
-  scheduled).
-
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.
@@ -528,3 +474,58 @@ change. Not published to PyPI. `v0.2.0` stays on `2f756ac` and is not moved.
 - README, AGENTS.md, and llms.txt name tag `v0.2.1` and install from
   `@v0.2.1`. The 0.2.0 README still said the package was untagged on
   `working`.
+
+## Unreleased — 2026-10-08
+
+On branch `working`. Not tagged. Version unchanged.
+
+- **#29** — Credential and start-up identity errors no longer use raw
+  `type(e).__name__`. `CallbackTokenProvider.get_token` and
+  `identity._secret_from` use `type_tag(e)` (at most 32 characters). The
+  LLM judge `credential:` abstain is capped with `cap_ledger_text`. Tests
+  added in `tests/test_ledger_error_cap.py`.
+- Module docstrings and comments no longer cite notes or a repository
+  outside this one (`credentials.py`, `llm.py`, `base.py`, `ollama.py`,
+  `quorum.py`, `action.py`, `identity.py`, `core.py`, `strict.py`). No
+  behavior change.
+- `pyproject.toml` build requirement raised to `setuptools>=77.0`, the
+  first release that accepts `license = "Apache-2.0"` as an SPDX string
+  (PEP 639). setuptools 76 refuses the file.
+- Docs: THREAT_MODEL describes the claimed-field problem in plain words
+  instead of an undefined label, and states what the ledger holds today
+  (proposal text, derived form, reasons, digests, sizes; never raw bytes of
+  an oversized or dropped value; never keys).
+- ROADMAP 0.4: the export uses a field allowlist that leaves out the
+  proposal text and the derived amount and counterparty. ROADMAP 0.10:
+  filtering by judge needs per-judge ballot records (judge id, vote, capped
+  error; never rationale text), which the ledger does not hold today.
+  ROADMAP 1.0: no unresolved Medium or higher findings, matching the ground
+  rules. Generic spec field types moved here from CHANGES as planned after
+  1.0, not scheduled. SCOPE and THREAT_MODEL planned sections match.
+- CHANGES: the #27 entry names `ballot.error` (`QuorumResult.to_record`),
+  not the path_b ledger entry. The Cyber fail-closed pass section names tag
+  `v0.2.0` and drops the "left open" clause. 0.2.0 now comes before 0.2.1.
+  The proxy troubleshooting row matches the real message ("local or
+  unrecognized proxy or daemon").
+- AGENTS.md: security review from the maintainer; two more fail-closed
+  defaults (no judge may be the monitored agent; the gateway never mints);
+  CHANGES.md with every commit; SECURITY, CONTRIBUTING, and AGENTS added to
+  the files to update when a claim changes (also in CONTRIBUTING.md).
+- SECURITY.md: report through GitHub private vulnerability reporting
+  (Security tab, "Report a vulnerability"). In scope adds a judge that is
+  the monitored agent being accepted at start-up.
+- llms.txt: test count is 362.
+- README layout table: rows for `action.py`, `agent_meta.py`,
+  `canonical.py`, `constitution.py`, and `testing.py`.
+- Comments and docstrings no longer cite spec or disclosure section
+  numbers from a document outside this repository (`action.py`,
+  `quorum.py`, `judges/base.py`, `judges/config.py`). No behavior change.
+  `QuorumPolicy.section4` keeps its name.
+- Test skip messages name the right package: `pip install
+  two-key-concept[yaml]`.
+- CHANGES: the 0.1.x entry about comments no longer names the outside
+  notes files. The Cyber fail-closed pass section is titled for `v0.2.0`
+  and sits before 0.2.1.
+- README roadmap table: a row for generic spec field types (after 1.0, not
+  scheduled).
+- CHANGES: this section moved to the end, so the log stays oldest first.
