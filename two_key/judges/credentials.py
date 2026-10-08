@@ -1,9 +1,7 @@
 """Credential providers for Path B judge connectors.
 
-This follows the author's conception (CONCEPTION_NOTES.md entry 1 in
-Insomniac-VibeLabs/two-key, not in this repository): judges
-connect to whichever AI the user picks, by "api or username/password or
-single sign on login".
+Judges connect to whichever AI the user picks, by "api or username/password
+or single sign on login".
 
 What is implemented:
 - ``EnvApiKey``: an API key read from an environment variable at call

@@ -34,9 +34,7 @@ Fixes from the original prototype (see CHANGES.md):
   ``timeout_seconds=None``, so a deployment always has a hard deadline. Per-request
   HTTP timeouts are still set on each LLM judge.
 
-Quorum protocol specifics. The prior-art memo is not stored in this
-repository or in two-key. The decision record is CONCEPTION_NOTES.md
-Entry 2 in Insomniac-VibeLabs/two-key:
+Quorum protocol specifics:
 - Vendor heterogeneity: ``check_judge_set`` runs when ``TwoKey`` starts, and
   again inside ``convene``. The default floor is one vendor and no local
   judge. ``QuorumPolicy.high_assurance`` is >= 2 vendors, >= 1 local judge,

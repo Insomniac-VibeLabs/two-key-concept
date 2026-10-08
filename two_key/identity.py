@@ -74,7 +74,7 @@ Refusals, judge against agent (all hard, no opt-out), message prefix
   endpoint itself, or ollama.com for a ``-cloud`` model
   (``same_model_same_upstream``). Declared tenants do not lift this: two
   accounts on one upstream serving one model are still the same model
-  from the same provider, as in two-key
+  from the same provider
 - a shared tenant id (same Azure resource or deployment, OpenAI organization
   or project, Bedrock account in the same region, Vertex project, or a
   declared id on the same host)
