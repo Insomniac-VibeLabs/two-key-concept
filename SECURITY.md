@@ -1,8 +1,9 @@
 # Security
 
 This is a prototype. Report vulnerabilities privately to the repository
-admins of Insomniac-VibeLabs. Do not open a public issue for an unfixed
-security bug.
+admins of Insomniac-VibeLabs: open the repository's Security tab and choose
+"Report a vulnerability" (GitHub private vulnerability reporting). Do not
+open a public issue for an unfixed security bug.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.
@@ -15,6 +16,7 @@ is how to report a vulnerability. It is not the model.
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - A redeeming gateway that can mint a token it will accept
+- A judge that is the monitored agent being accepted at start-up
 
 ## Out of scope for this repository
 

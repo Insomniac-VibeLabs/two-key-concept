@@ -25,7 +25,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
-- Update `CHANGES.md` when behavior or configuration changes. Read
+- Update `CHANGES.md` with every commit. Read
   `CHANGES.md` "Upgrading from 0.1.12" before changing 0.2.0 config shapes.
 
 ## Install and version matrix
@@ -55,7 +55,8 @@ Git install:
   network-free; use `two_key.testing` doubles only where the docs allow.
 - When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
   `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
-  `docs/SCOPE.md`, `CHANGES.md`, and `llms.txt` as needed.
+  `docs/SCOPE.md`, `CHANGES.md`, `SECURITY.md`, `CONTRIBUTING.md`,
+  `AGENTS.md`, and `llms.txt` as needed.
 - When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
   in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
@@ -69,7 +70,7 @@ live outside the ledger directory. The gateway must verify only; it must not
 mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
-agent identity checks: consult the team's Cybersecurity Practitioner. Report
+agent identity checks: get a security review from the maintainer. Report
 vulnerabilities per [SECURITY.md](SECURITY.md); do not open a public issue for
 an unfixed security bug.
 
@@ -85,5 +86,7 @@ an unfixed security bug.
   `QuorumPolicy.high_assurance` / `profile: high_assurance` adds two vendors,
   one local judge, and a local yes.
 - `tool_specs` is required. A disagreeing claim is a deny.
+- No judge may be the monitored agent.
+- The gateway verifies only; it never mints.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.
