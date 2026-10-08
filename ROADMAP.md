@@ -14,10 +14,11 @@ flowchart LR
   p1 --> p2["0.4<br/>Ledger export<br/>for SIEM"]
   p2 --> p3["0.5<br/>DLP and AV hooks"]
   p3 --> p4["0.6<br/>MCP adapter"]
-  p4 --> p5["0.7<br/>Post-quantum<br/>signatures"]
-  p5 --> p6["0.8<br/>FIPS approved<br/>mode"]
-  p6 --> p7["0.9<br/>Local GUI"]
-  p7 --> p8["1.0<br/>Review and release"]
+  p4 --> p5["0.7<br/>PKI and certificate<br/>recovery"]
+  p5 --> p6["0.8<br/>Post-quantum<br/>signatures"]
+  p6 --> p7["0.9<br/>FIPS approved<br/>mode"]
+  p7 --> p8["0.10<br/>Local GUI"]
+  p8 --> p9["1.0<br/>Review and release"]
 ```
 
 ## Ground rules
@@ -30,7 +31,7 @@ flowchart LR
   [THREAT_MODEL.md](docs/THREAT_MODEL.md) before it is called done.
 - Tests run in CI with free tooling. No phase depends on a paid service.
 - Every signed or encrypted format carries a version and an algorithm
-  identifier from 0.3 onward. That lets 0.7 add post-quantum keys without
+  identifier from 0.3 onward. That lets 0.8 add post-quantum keys without
   breaking existing ledgers or backups.
 
 ## 0.2.x: Baseline
@@ -47,14 +48,15 @@ start, and a lost ledger key leaves the log unreadable.
 - Encrypted, passphrase-protected export and restore of this package's own
   keys: principal, capability, ledger, and witness.
 - The key derivation function is named in the bundle. A PBKDF2-based option
-  is included so 0.8 can use only approved algorithms.
+  is included so 0.9 can use only approved algorithms.
 - A verify command that restores into a temporary ledger and checks
   fingerprints.
 - The ledger key and the witness key are kept in separate bundles.
 - A recovery runbook and a table of what each lost key means.
 - Tests: restore, wrong passphrase, tampered bundle.
 
-Not in scope: PKI or X.509 identities and seed-phrase backup.
+Not in scope here: PKI and certificate identities (see 0.7) and
+seed-phrase backup.
 
 ## 0.4: Ledger export for SIEM
 
@@ -91,7 +93,46 @@ Not in scope: PKI or X.509 identities and seed-phrase backup.
 - The proxy adds a trust boundary: an agent that can reach the MCP server
   directly bypasses it. THREAT_MODEL.md says so.
 
-## 0.7: Post-quantum signatures
+## 0.7: PKI and certificate recovery
+
+Today identities are bare keys. The principal, witness, capability, and agent
+keys have no certificate, no chain, and no expiry or revocation. This phase
+adds X.509 identities for personal and enterprise use, and a way to recover
+from a lost or compromised certificate. It builds on the key backup from 0.3.
+
+- Certificate identities for the principal, the witness, the capability
+  issuer, and optionally agents. A certificate binds a name and a validity
+  period to a key the package already uses. Existing bare-key setups keep
+  working.
+- Two shapes. Personal: one operator with a small local certificate authority
+  or a self-signed root, built on the X.509 support in `cryptography`.
+  Enterprise: an existing CA issues the certificates, and the package
+  validates the chain against configured trust anchors.
+- Validation covers chain building to a trust anchor, validity period, key
+  usage, and revocation. Revocation is a signed revocation list that is also
+  recorded in the ledger. Online checks such as OCSP come later.
+- The certificate identity is recorded with the constitution and ledger head
+  signatures, so an audit shows which identity signed what.
+- Issuance, renewal, revocation, and recovery are ledger events. They carry
+  digests and subject names, never private keys, and they reach the SIEM
+  export from 0.4.
+- Certificate recovery, personal: the 0.3 backup bundle also holds the
+  certificate and chain, and a random recovery key (not a seed phrase),
+  stored offline, unlocks it. Recovery restores the key and certificate, or
+  re-issues from the local CA and revokes the old certificate.
+- Certificate recovery, enterprise: the recovery key is split k-of-n among
+  named custodians, using a vetted library rather than our own scheme.
+  Recovery needs k custodians, is a ledger event, and ends with the old
+  certificate revoked and a new one issued. Dual control for CA key use is
+  optional.
+- A lost CA key is the worst case. Document and test a root rollover: a new
+  root, cross-signing, and re-issue.
+- A key-provider interface, so an OS keystore or HSM can be added later.
+  Direct HSM integration is not part of this phase.
+- Tests: expiry, a revoked certificate, a wrong chain, wrong key usage,
+  recovery with k-1 and with k shares, and a tampered bundle.
+
+## 0.8: Post-quantum signatures
 
 Today every signature is Ed25519, which a large quantum computer could
 forge. AES-256-GCM and SHA-256 are not the concern at these sizes. The
@@ -108,9 +149,12 @@ Capability tokens live at most 300 seconds, so they come last.
   versioned formats from 0.3.
 - Decide separately whether tokens go hybrid, since they add size on every
   call.
+- Certificates from 0.7 follow the same rule. Whether to issue hybrid or
+  post-quantum certificates depends on the standards and library support at
+  the time, and is decided then.
 - Existing 0.2.x ledgers stay readable, with a documented migration.
 
-## 0.8: FIPS approved mode
+## 0.9: FIPS approved mode
 
 The goal is to run on a validated cryptographic module, not to claim that
 this package is validated. The docs say "runs on a FIPS 140-3 validated
@@ -119,9 +163,11 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
 - An opt-in mode that refuses to start unless the `cryptography` library
   runs on a FIPS 140-3 validated module (an OpenSSL FIPS provider) in
   approved mode.
-- An inventory of every algorithm the package uses. In approved mode,
+- An inventory of every algorithm the package uses, including certificate
+  signatures and the method used to split recovery keys. In approved mode,
   anything outside the approved set is refused, for example a non-PBKDF2
-  key derivation function.
+  key derivation function. Whether split-key recovery is allowed in approved
+  mode is an open question, decided when the mode is built.
 - Ed25519 is approved under FIPS 186-5, but support depends on the validated
   module. The startup check confirms it before allowing the mode.
 - The module's certificate number and version are recorded in
@@ -133,7 +179,7 @@ module in approved mode", never "FIPS compliant" or "FIPS validated".
 - A document on how to deploy it and what the claim does and does not
   cover.
 
-## 0.9: Local GUI for configuration and ledger auditing
+## 0.10: Local GUI for configuration and ledger auditing
 
 A graphical front end so the package can be configured and audited without
 hand-editing YAML and reading JSON. It is built last, on top of the stable
@@ -154,6 +200,9 @@ CLI and file formats, so it adds no new logic of its own.
   codes leave the screen, not argument values.
 - Key and backup status: fingerprints, backup age, and a prompt to run the
   verify command from 0.3. It does not display key material.
+- Certificate status: validity, expiry warnings, and revocation, plus a guided
+  recovery workflow that runs the 0.7 recovery commands and never displays
+  key material.
 - Keep dependencies small, with static assets and no external network calls.
 - The 1.0 community review covers the GUI. It is the first component that
   displays decrypted ledger content.
@@ -175,4 +224,7 @@ CLI and file formats, so it adds no new logic of its own.
 - A hosted, remote, or multi-user GUI, and a GUI that holds the signing key.
 - A CMVP validation of this package, and any claim that it is "FIPS
   compliant" or "FIPS validated".
-- PKI, permissioned-chain anchoring, and seed phrases.
+- Permissioned-chain anchoring and seed phrases.
+- A general-purpose certificate authority product, and direct HSM integration.
+  The personal CA is minimal, and the key-provider interface leaves room for
+  an HSM later.
