@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 from .transport import pooled_transport
 
 from ..action import Action
-from ..agent_meta import type_tag
+from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge
 from .credentials import CredentialError, CredentialProvider, NoCredential
@@ -214,7 +214,7 @@ class LLMJudge(Judge):
         try:
             headers = self._auth_headers()
         except (CredentialError, NotImplementedError, ValueError) as e:
-            return self.abstain(f"credential: {e}")
+            return self.abstain(cap_ledger_text(f"credential: {e}"))
         sessions = {agent_session} if isinstance(agent_session, str) else set(agent_session or ())
         sessions = {s.strip() for s in sessions if isinstance(s, str)}   # as for fingerprints
         sessions.discard("")

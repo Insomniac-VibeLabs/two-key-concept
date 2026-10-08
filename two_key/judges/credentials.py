@@ -28,6 +28,8 @@ import abc
 import os
 from typing import Callable
 
+from ..agent_meta import type_tag
+
 
 class CredentialError(RuntimeError):
     """A credential could not be obtained. The judge abstains (fail closed)."""
@@ -110,7 +112,7 @@ class CallbackTokenProvider(CredentialProvider):
         try:
             t = self._fn()
         except Exception as e:
-            raise CredentialError(f"token callback failed: {type(e).__name__}") from e
+            raise CredentialError(f"token callback failed: {type_tag(e)}") from e
         if not t or not isinstance(t, str):
             raise CredentialError("token callback returned no token")
         return t

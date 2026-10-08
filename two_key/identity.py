@@ -117,6 +117,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
+from .agent_meta import type_tag
 from .netloc import fold_model_id, host_is_local, host_is_loopback, model_is_cloud
 
 FINGERPRINT_DOMAIN = b"two-key/credential-fingerprint/1\x00"
@@ -671,7 +672,7 @@ def _secret_from(credential: Any) -> str:
     try:
         token = credential.get_token()
     except Exception as e:
-        raise IdentityError(f"credential could not be read at start-up ({type(e).__name__}); "
+        raise IdentityError(f"credential could not be read at start-up ({type_tag(e)}); "
                             "Two-Key cannot show it differs from the monitored agent's") from None
     if not token:
         raise IdentityError("credential is empty at start-up")

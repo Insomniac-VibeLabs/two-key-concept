@@ -346,5 +346,80 @@ class LlmAbstainTypeTag(unittest.TestCase):
         self.assertLess(len(b.error), 80)
 
 
+class CredentialErrorTypeName(unittest.TestCase):
+    """#29: credential and start-up identity errors use type_tag, and the LLM credential abstain is capped."""
+
+    HUGE = "C" * 5000
+
+    def _raiser(self, cls):
+        def fn():
+            raise cls("secret-free message")
+        return fn
+
+    def test_token_callback_huge_class_name_is_bounded(self):
+        from two_key.judges.credentials import CallbackTokenProvider, CredentialError
+
+        cls = type(self.HUGE, (RuntimeError,), {})
+        with self.assertRaises(CredentialError) as cm:
+            CallbackTokenProvider(self._raiser(cls)).get_token()
+        msg = str(cm.exception)
+        label = msg.removeprefix("token callback failed: ")
+        self.assertLessEqual(len(label), MAX_TYPE_TAG_CHARS)
+        self.assertNotIn(self.HUGE, msg)
+
+    def test_secret_from_huge_class_name_is_bounded(self):
+        from two_key.identity import IdentityError, _secret_from
+        from two_key.judges.credentials import CredentialProvider
+
+        cls = type(self.HUGE, (RuntimeError,), {})
+
+        class Bad(CredentialProvider):
+            kind = "custom"
+
+            def get_token(self):
+                raise cls("nope")
+
+        with self.assertRaises(IdentityError) as cm:
+            _secret_from(Bad())
+        msg = str(cm.exception)
+        self.assertNotIn(self.HUGE, msg)
+        self.assertIn("(" + "C" * MAX_TYPE_TAG_CHARS + ")", msg)
+        self.assertLess(len(msg), 200)
+
+    def test_ordinary_names_unchanged(self):
+        from two_key.identity import IdentityError, _secret_from
+        from two_key.judges.credentials import CallbackTokenProvider, CredentialError
+
+        with self.assertRaises(CredentialError) as cm:
+            CallbackTokenProvider(self._raiser(ValueError)).get_token()
+        self.assertEqual(str(cm.exception), "token callback failed: ValueError")
+        with self.assertRaises(IdentityError) as cm:
+            _secret_from(CallbackTokenProvider(self._raiser(ValueError)))
+        self.assertIn("(CredentialError)", str(cm.exception))
+
+    def test_llm_credential_abstain_is_capped(self):
+        from two_key.judges.credentials import CredentialError, CredentialProvider
+        from two_key.judges.ollama import OllamaJudge
+
+        class Huge(CredentialProvider):
+            kind = "custom"
+
+            def get_token(self):
+                raise CredentialError("x" * 10000)
+
+        def transport(url, headers, body, timeout):  # never reached
+            raise AssertionError("no network")
+
+        j = OllamaJudge("local", "ollama", "qwen2.5:7b", credential=Huge(), transport=transport)
+        j.auth_header = "bearer"
+        b = j.score_bound("Searching is fine.", SEARCH, "look", None)
+        self.assertEqual(b.vote, "abstain")
+        self.assertTrue(b.error.startswith("credential: xxx"))
+        self.assertIn("…sha256:", b.error)
+        self.assertNotIn("x" * (MAX_LEDGER_ERROR_CHARS + 1), b.error)
+        self.assertEqual(b.error, cap_ledger_text("credential: " + "x" * 10000))
+        self.assertLess(len(b.error), MAX_LEDGER_ERROR_CHARS + 80)
+
+
 if __name__ == "__main__":
     unittest.main()

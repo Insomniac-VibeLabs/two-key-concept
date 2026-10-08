@@ -1,5 +1,15 @@
 # Changes
 
+## Unreleased — 2026-10-08
+
+On branch `working`. Not tagged. Version unchanged.
+
+- **#29** — Credential and start-up identity errors no longer use raw
+  `type(e).__name__`. `CallbackTokenProvider.get_token` and
+  `identity._secret_from` use `type_tag(e)` (at most 32 characters). The
+  LLM judge `credential:` abstain is capped with `cap_ledger_text`. Tests
+  added in `tests/test_ledger_error_cap.py`.
+
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.
