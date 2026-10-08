@@ -98,8 +98,9 @@ class Judge(abc.ABC):
     # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
     @property
     def vendor(self) -> str:
-        """Deprecated name of ``maker`` (through 0.2.1)."""
-        return self.maker
+        """Deprecated name of ``maker`` (through 0.2.1). Reads the label directly, not ``maker``, so an
+        old subclass whose ``vendor`` calls ``super().vendor`` does not recurse."""
+        return getattr(self, "_maker", None) or self.provider
 
     @vendor.setter
     def vendor(self, value: str) -> None:

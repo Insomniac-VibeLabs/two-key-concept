@@ -216,7 +216,8 @@ def rename_min_vendors(kw: Mapping) -> dict:
     kw = dict(kw)
     if "min_vendors" in kw:
         if "min_makers" in kw:
-            raise QuorumConfigError("give min_makers or the deprecated min_vendors, not both")
+            raise QuorumConfigError("give min_makers or the deprecated min_vendors, not both "
+                                    "(dataclasses.replace passes min_makers; use min_makers= there)")
         warn_renamed("min_vendors", "min_makers")
         kw["min_makers"] = kw.pop("min_vendors")
     return kw
@@ -339,11 +340,12 @@ def _proposal_for(j: Judge, proposal: str, policy: QuorumPolicy) -> str:
 
 def _accepted(fn, kw: Mapping) -> dict:
     """The keyword arguments in ``kw`` that ``fn`` takes, read from its signature. Asking the signature, not
-    retrying on TypeError, keeps a TypeError raised inside a judge an abstention, never a call without the session."""
+    retrying on TypeError, keeps a TypeError raised inside a judge an abstention, never a call without the session.
+    A signature that cannot be read gets every keyword: if the judge does not take them, it abstains."""
     try:
         params = list(inspect.signature(fn).parameters.values())
     except (TypeError, ValueError):
-        return {}
+        return dict(kw)
     if any(p.kind is p.VAR_KEYWORD for p in params):
         return dict(kw)
     names = {p.name for p in params}

@@ -39,7 +39,7 @@ from ..action import Action
 from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge, maker_from_vendor
-from .credentials import CredentialError, CredentialProvider, NoCredential
+from .credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
 from ..identity import endpoint_key
 from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
@@ -197,7 +197,7 @@ class LLMJudge(Judge):
         if self.auth_header == "bearer":
             return {"Authorization": f"Bearer {token}"}
         if self.auth_header == "basic":
-            return {"Authorization": "Basic " + base64.b64encode(token.encode("utf-8")).decode("ascii")}
+            return basic_authorization(token)
         if self.auth_header in ("x-api-key", "x-goog-api-key"):
             return {self.auth_header: token}
         raise ValueError(f"unknown auth_header {self.auth_header!r}")

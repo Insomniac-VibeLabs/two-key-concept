@@ -126,6 +126,16 @@ class OldNames(unittest.TestCase):
         j.maker = "override"
         self.assertEqual(j.maker, "override")
 
+    def test_an_old_vendor_override_that_calls_super_does_not_recurse(self):
+        from two_key.testing import FixedJudge
+
+        class Old(FixedJudge):
+            @property
+            def vendor(self):
+                return super().vendor.upper()
+        self.assertEqual(Old("a", "yes").maker, "TEST-DOUBLE")
+        self.assertEqual(Old("a", "yes", "acme").maker, "ACME")
+
     def test_config_accepts_old_keys_with_a_note(self):
         cfg = {"judges": [judge_spec("a", vendor="openai"), judge_spec("b", maker="anthropic")],
                "quorum": {"min_vendors": 2, "required_yes": 2}}

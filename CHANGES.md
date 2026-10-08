@@ -665,4 +665,48 @@ On branch `working`. Not tagged. Version unchanged.
   then append a `manual_recovery` entry and checkpoint. Checked against a
   ledger with four uncovered entries and a torn line. A recovery command is
   still open.
-- llms.txt: test count is 389.
+- llms.txt: test count is 394.
+- Code review of `working` against `main` (decision 4, the code-review
+  skill). Fixed:
+  - A credential the connector never sends no longer counts as a
+    credential. A judge with `auth_header: none` (an Ollama judge's
+    default) and an `ollama` agent without Basic auth are fingerprinted
+    keyless, so a dummy key on one of them cannot get a keyless judge past
+    the keyless-agent refusal on the same daemon.
+  - A configured agent credential that cannot be read at start-up refuses
+    for a local agent too (it used to count as keyless), as the docs say.
+  - A judge class written before the rename whose `vendor` property calls
+    `super().vendor` no longer recurses: the base `vendor` alias reads the
+    label directly.
+  - A `score_bound` whose signature cannot be read gets `agent_session` and
+    `agent_endpoints`; if it does not take them, it abstains. It used to be
+    called without them, skipping the reused-session check.
+  - An `unresolved_identity` warning is printed and recorded once per
+    identity, not once per agent and judge pair. Its record has a `side`
+    key (`agent` or `judge`).
+  - `monitored_agent_required` names `username_env` with `password_env`.
+    The identity docstring no longer says a shared route is refused.
+  - `AgentDeclaration` reads a username and password with
+    `BasicAuthCredential`, as a judge does, so the two fingerprints cannot
+    drift. One `basic_authorization` helper builds the header for judges and
+    agents.
+  - The new tests restore environment variables they set, instead of
+    deleting them.
+  - Removed from `two_key.identity`, unused after the rule change:
+    `distinct_tenants`, `same_model_overlap`, `TENANT_OPTIN_WARNING`,
+    `TENANT_OPTIN_FLAG`. `TENANT_OPTIN_DEPRECATED` is the message now.
+  - `dataclasses.replace(policy, min_vendors=...)` is refused (`not both`),
+    because `replace` passes the current `min_makers` too. Use
+    `min_makers=` with `replace`. The error says so. `QuorumPolicy(
+    min_vendors=...)` still works.
+
+  Not changed, by decision:
+  - The call-time reused-session check is address-aware, per the owner's
+    rule (the same credential and the same address). If `monitored_agent`
+    names the wrong address, neither the start-up check nor the call-time
+    check sees a judge that uses the agent's session on the real one.
+  - A legacy subclass with a class attribute `vendor = ...` and an explicit
+    `maker=` reads its own `.vendor`; `.maker`, the floor, and `describe()`
+    use `maker=`.
+  - The `score_bound` signature is read on each call. Judge calls are
+    network-bound, so a cache is not worth its code.

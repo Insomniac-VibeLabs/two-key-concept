@@ -172,8 +172,8 @@ class TwoKey:
         """Refuse to start if any judge could be the monitored agent. See identity.py."""
         if monitored_agent is None:
             raise TwoKeyConfigError("monitored_agent_required: declare the monitored agent (monitored_agent= "
-                                    "with model, provider, base_url, and credential_env or credential: none) "
-                                    "whenever judges are configured")
+                                    "with model, provider, base_url, and credential_env, username_env with "
+                                    "password_env, or credential: none) whenever judges are configured")
         decls = monitored_agent if isinstance(monitored_agent, (list, tuple)) else [monitored_agent]
         # A placeholder in-process agent proves nothing about a real judge, so it is accepted only
         # when every judge is a test double too (an offline test). With a real judge, declare the real agent.

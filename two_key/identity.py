@@ -42,9 +42,9 @@ Each judge and agent is resolved to:
   loopback or private host is itself. An unrecognized host or router that
   cannot be resolved from the model id stays **unresolved**. Upstream labels
   are normalized (``host`` or ``host:port``, default port removed). A shared
-  maker upstream is allowed; the same *model* reaching the same route is not
-  (see ``routes``).
-- ``routes``: where the model is actually served, for the same-model check:
+  maker upstream is not compared; the same *model* reaching the same route
+  is warned (see ``routes``).
+- ``routes``: where the model is actually served, for the same-model warning:
   the endpoint, every declared ``upstream:``, and ``ollama.com`` for an Ollama
   cloud model.
 - ``tenant``: account ids, each scoped by provider family, from what the
@@ -688,8 +688,11 @@ def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     if not isinstance(model, str) or not model or not isinstance(base_url, str) or not base_url:
         raise IdentityError(f"judge {jid!r} declares no model and base_url; Two-Key cannot show it is not "
                             "the monitored agent")
+    # A connector that never sends its credential (auth_header: none, an Ollama judge's default) reaches its
+    # address keyless, so it is fingerprinted keyless, whatever credential is configured.
+    credential = None if getattr(judge, "auth_header", None) == "none" else getattr(judge, "credential", None)
     try:
-        fp = credential_fingerprint(_secret_from(getattr(judge, "credential", None)), fp_key)
+        fp = credential_fingerprint(_secret_from(credential), fp_key)
     except IdentityError as e:
         raise IdentityError(f"judge {jid!r}: {e}") from None
     tenant = validate_tenant(getattr(judge, "tenant", None), f"judge {jid!r}")
@@ -764,14 +767,12 @@ class AgentDeclaration:
         self.validate(allow_in_process=allow_in_process)
         fps = {credential_fingerprint(s, fp_key) for s in extra_secrets if s}
         if self.username_env is not None:
-            user, password = os.environ.get(self.username_env), os.environ.get(self.password_env)
-            if not user or not password:
-                missing = self.username_env if not user else self.password_env
-                raise IdentityError(f"monitored_agent {self.id!r}: {missing} is not set")
-            if ":" in user:
-                raise IdentityError(f"monitored_agent {self.id!r}: the username in {self.username_env} must not "
-                                    "contain ':' (HTTP Basic)")
-            fps.add(credential_fingerprint(f"{user}:{password}", fp_key))   # the pair, as a judge's is
+            from .judges.credentials import BasicAuthCredential, CredentialError
+            try:   # the pair, read exactly as a judge's is, so the two fingerprints match
+                pair = BasicAuthCredential(self.username_env, self.password_env).get_token()
+            except CredentialError as e:
+                raise IdentityError(f"monitored_agent {self.id!r}: {e}") from None
+            fps.add(credential_fingerprint(pair, fp_key))
         elif self.credential_env is not None:
             value = os.environ.get(self.credential_env) if isinstance(self.credential_env, str) else None
             if not value:
@@ -792,13 +793,15 @@ class AgentDeclaration:
 
 
 def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
-    """A MonitoredAgent from agents.yaml is operator configuration too."""
-    secret = ""
+    """A MonitoredAgent from agents.yaml is operator configuration too. Fingerprinted by what it sends: an
+    Ollama agent sends no key unless it uses Basic auth, so it is keyless whatever key is configured."""
+    credential = getattr(agent, "credential", None)
+    if getattr(agent, "kind", None) == "ollama" and getattr(credential, "kind", None) != "basic":
+        credential = None
     try:
-        secret = _secret_from(getattr(agent, "credential", None))
+        secret = _secret_from(credential)
     except IdentityError:
-        if agent.is_cloud():
-            raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
+        raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
     return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {credential_fingerprint(secret, fp_key)},
                      getattr(agent, "provider", None),
                      validate_tenant(getattr(agent, "tenant", None), f"agent {agent.agent_id!r}"),
@@ -828,7 +831,6 @@ class SeparationReport:
                 "judges": [j.to_record() for j in self.judges]}
 
 
-TENANT_OPTIN_FLAG = "allow_same_model_distinct_tenant"
 TENANT_OPTIN_DEPRECATED = ("two-key: allow_same_model_distinct_tenant is deprecated and has no effect: a judge is "
                            "refused only when it uses the monitored agent's credential on the agent's address")
 
@@ -890,6 +892,7 @@ def separation_warnings(agent: ResolvedIdentity, judge: ResolvedIdentity) -> lis
         if side.unresolved:
             add("unresolved_identity", f"the {label} upstream is unresolved (an unrecognized router or host, or a "
                                        "local proxy with no recognizable model maker; declare upstream:)")
+            out[-1]["side"] = label   # about one identity, so check_separation reports it once
     return out
 
 
@@ -902,7 +905,8 @@ def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[Resolv
     note on stderr when set."""
     if not agents:
         raise IdentityError("monitored_agent_required: declare the monitored agent (monitored_agent: model, provider, base_url, "
-                            "credential_env) whenever judges are configured")
+                            "and credential_env, username_env with password_env, or credential: none) whenever "
+                            "judges are configured")
     if allow_same_provider_judge:
         warn_allow_same_provider_judge()
     optin = allow_same_model_distinct_tenant is True
@@ -911,7 +915,15 @@ def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[Resolv
     refusals = [r for a in agents for j in judges if (r := compare(a, j))]
     if refusals:
         raise IdentityError("judge_matches_agent: a judge is the monitored agent: " + "; ".join(refusals))
-    found = tuple(w for a in agents for j in judges for w in separation_warnings(a, j))
+    found, reported = [], set()
+    for w in (w for a in agents for j in judges for w in separation_warnings(a, j)):
+        if "side" in w:
+            key = (w["check"], w["side"], w[w["side"]])
+            if key in reported:
+                continue
+            reported.add(key)
+        found.append(w)
+    found = tuple(found)
     for w in found:
         print(f"two-key: WARNING: judge {w['judge']!r} vs agent {w['agent']!r}: {w['detail']} ({w['check']}); "
               "allowed and recorded in constitution_loaded", file=sys.stderr)

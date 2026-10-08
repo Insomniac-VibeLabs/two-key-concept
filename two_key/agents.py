@@ -11,7 +11,6 @@ The request shapes match the judge connectors. No vendor SDK and no streaming.
 
 from __future__ import annotations
 
-import base64
 import json
 import time
 import urllib.error
@@ -22,7 +21,7 @@ from urllib.parse import urlparse
 
 from .derive import MAX_ARGS_BYTES
 from .judges.config import JudgeConfigError, build_credential
-from .judges.credentials import CredentialError, CredentialProvider, NoCredential
+from .judges.credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
 from .judges.llm import LOOPBACK
 from .judges.transport import pooled_transport
 from .netloc import model_is_cloud
@@ -185,7 +184,7 @@ class MonitoredAgent:
     def _headers(self) -> dict:
         token = self.credential_token()
         if getattr(self.credential, "kind", None) == "basic":    # username:password, HTTPS only (see __init__)
-            h = {"Authorization": "Basic " + base64.b64encode(token.encode("utf-8")).decode("ascii")} if token else {}
+            h = basic_authorization(token) if token else {}
             if self.kind == "anthropic":
                 h["anthropic-version"] = "2023-06-01"
             return h

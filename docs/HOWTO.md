@@ -156,6 +156,9 @@ monitored agent. That takes both of these:
   Two keyless sides on one address, such as two models on one local Ollama
   daemon, have nothing to tell them apart, so they are refused whatever their
   models. Give the judge its own daemon or port, or its own credential.
+  A side counts as keyless when it sends no credential, whatever is
+  configured: a judge with `auth_header: none` (an Ollama judge's default)
+  and an `ollama` agent without Basic auth send none.
 
 Everything else starts: any model, any vendor, any route, the same provider,
 the same model through another endpoint, and the same address with a
@@ -181,8 +184,9 @@ are recorded in `quorum_policy` (and so in `policy_digest`), and have no
 effect: nothing they used to lift is refused any more. A misspelled quorum
 key is still refused as `unknown quorum keys`.
 
-Judge credentials are read at startup for this check, so a judge key that
-cannot be read refuses to start. The result is the `judge_agent_separation`
+Judge and agent credentials are read at startup for this check, so a
+configured key that cannot be read refuses to start, for a local agent as
+well as a cloud one. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
 `identities_digest`. The entry also holds the full quorum policy
@@ -200,9 +204,12 @@ when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
 A judge whose credential equals that session (whitespace stripped, a
 username and password compared as their pair) and that connects to a
 declared agent's address abstains with `cloud_judge_reused_agent_session`,
-and the round denies. This is the start-up rule again, at call time. A
-judge called directly through `convene` without the agents' addresses keeps
-the stricter check: any judge presenting the session abstains.
+and the round denies. This is the start-up rule again, at call time, so it
+relies on `monitored_agent:` naming the address the agent really uses: a
+judge with the agent's session on an address you did not declare is not
+caught by either check. A judge called directly through `convene` without
+the agents' addresses keeps the stricter check: any judge presenting the
+session abstains.
 
 The in-process placeholder agent `two_key.testing.TEST_AGENT` is accepted
 only with `allow_test_doubles=True` and only when every judge is a test

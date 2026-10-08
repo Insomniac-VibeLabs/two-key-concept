@@ -26,6 +26,7 @@ Secrets are never hardcoded, logged, or written to the ledger, and
 from __future__ import annotations
 
 import abc
+import base64
 import os
 from typing import Callable
 
@@ -145,3 +146,8 @@ class BasicAuthCredential(CredentialProvider):
 
     def __repr__(self) -> str:
         return f"<BasicAuthCredential user={self.username_var} password={self.password_var} [redacted]>"
+
+
+def basic_authorization(pair: str) -> dict:
+    """The HTTP Basic ``Authorization`` header for a ``username:password`` pair (HTTPS only; callers check)."""
+    return {"Authorization": "Basic " + base64.b64encode(pair.encode("utf-8")).decode("ascii")}

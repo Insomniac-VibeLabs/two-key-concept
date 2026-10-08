@@ -19,8 +19,8 @@ from two_key.action import normalize_action
 from two_key.agents import AgentConfigError, MonitoredAgent, load_agents
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
-from two_key.identity import (AgentDeclaration, IdentityError, check_separation, compare, judge_identity,
-                              separation_warnings)
+from two_key.identity import (AgentDeclaration, IdentityError, check_separation, compare, configured_agent_identity,
+                              judge_identity, separation_warnings)
 from two_key.judges.base import Ballot, Judge
 from two_key.judges.config import JudgeConfigError, build_credential, load_config
 from two_key.judges.credentials import BasicAuthCredential, CredentialError, StaticToken
@@ -43,8 +43,10 @@ def side(model, base_url, key=None, jid="j", credential=None):
 class EnvVars(unittest.TestCase):
     def setenv(self, **values):
         for k, v in values.items():
+            old = os.environ.get(k)
             os.environ[k] = v
-            self.addCleanup(os.environ.pop, k, None)
+            self.addCleanup(lambda k=k, old=old: os.environ.pop(k, None) if old is None
+                            else os.environ.__setitem__(k, old))
 
 
 class Rule(EnvVars):
@@ -84,6 +86,38 @@ class Rule(EnvVars):
         self.assertIn("same_address_one_side_keyless", [w["check"] for w in separation_warnings(a, one)])
         other_daemon = judge_identity(side("qwen2.5:7b", "http://localhost:11435"), FP)
         self.assertIsNone(compare(a, other_daemon))
+
+    def test_a_credential_the_connector_never_sends_is_keyless(self):
+        self.setenv(RULE_UNSENT="dummy")
+        a = AgentDeclaration.from_mapping({"id": "agent", "model": "llama3.1:8b", "provider": "ollama",
+                                           "base_url": "http://localhost:11434", "credential": "none"}).resolve(fp_key=FP)
+        cred = build_credential({"type": "env", "var": "RULE_UNSENT"})
+        unsent = OllamaJudge("o", "ollama", "llama3.1:8b", "http://localhost:11434", cred)   # auth_header: none
+        self.assertEqual(unsent._auth_headers(), {})
+        self.assertRegex(compare(a, judge_identity(unsent, FP)), "no credential on either side")
+        sent = OllamaJudge("o", "ollama", "llama3.1:8b", "http://localhost:11434", cred, auth_header="bearer")
+        self.assertIsNone(compare(a, judge_identity(sent, FP)))
+
+    def test_a_configured_agent_is_fingerprinted_by_what_it_sends(self):
+        self.setenv(RULE_UNSENT="dummy")
+        os.environ.pop("RULE_NEVER_SET", None)
+        cred = build_credential({"type": "env", "var": "RULE_UNSENT"})
+        ollama = MonitoredAgent("local", "local", "llama3.1:8b", "http://localhost:11434", "local", cred, kind="ollama")
+        self.assertEqual(ollama._headers(), {})
+        self.assertEqual(configured_agent_identity(ollama, FP).credentials, frozenset({"none"}))
+        unreadable = MonitoredAgent("gw", "openai", "m", "https://localhost:8443/v1", "local",
+                                    build_credential({"type": "env", "var": "RULE_NEVER_SET"}), kind="openai_compatible")
+        with self.assertRaisesRegex(IdentityError, "credential could not be read at start-up"):
+            configured_agent_identity(unreadable, FP)
+
+    def test_an_unresolved_identity_is_warned_once(self):
+        a = self.agent(base_url="https://llm.corp.example/v1", model="agent-model")
+        judges = [judge_identity(side("claude-sonnet-4-5", "https://api.anthropic.com", f"k{i}", jid=f"j{i}"), FP)
+                  for i in range(3)]
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            report = check_separation([a], judges)
+        self.assertEqual([w["check"] for w in report.warnings], ["unresolved_identity"])
+        self.assertEqual(err.getvalue().count("(unresolved_identity)"), 1)
 
     def test_refusal_message_and_warnings_are_raised_and_printed(self):
         a = self.agent()
@@ -233,6 +267,17 @@ class ScoreOne(unittest.TestCase):
         self.assertEqual(_score_one(Old(), "c", SEARCH, "", None, "s", eps).vote, "yes")
         self.assertEqual(_score_one(Any(), "c", SEARCH, "", None, "s", eps).vote, "yes")
         self.assertEqual(seen, {"old": "s", "any": {"agent_session": "s", "agent_endpoints": eps}})
+
+    def test_an_unreadable_signature_gets_every_keyword(self):
+        from two_key.quorum import _accepted
+
+        class Opaque:
+            __signature__ = "not a signature"   # inspect.signature raises TypeError
+
+            def __call__(self, *a, **kw):
+                return kw
+        kw = {"agent_session": "s", "agent_endpoints": frozenset({"x:443"})}
+        self.assertEqual(_accepted(Opaque(), kw), kw)
 
 
 class EndToEnd(EnvVars):
