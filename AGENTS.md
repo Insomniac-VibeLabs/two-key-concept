@@ -83,8 +83,8 @@ an unfixed security bug.
 - JSON/YAML inputs refuse duplicate keys. Oversized or malformed calls deny
   before either path.
 - Default quorum needs one judge and has no diversity floors;
-  `QuorumPolicy.high_assurance` / `profile: high_assurance` adds two vendors,
-  one local judge, and a local yes.
+  `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
+  two makers (`min_makers`), one local judge, and a local yes.
 - `tool_specs` is required. A disagreeing claim is a deny.
 - No judge may be the monitored agent.
 - The gateway verifies only; it never mints.

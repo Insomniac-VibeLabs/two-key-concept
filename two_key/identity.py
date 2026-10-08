@@ -682,9 +682,10 @@ def _secret_from(credential: Any) -> str:
 def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     jid = str(getattr(judge, "judge_id", "?"))
     if getattr(judge, "is_test_double", False) and not getattr(judge, "base_url", None):
-        vendor = str(getattr(judge, "vendor", None) or getattr(judge, "provider", "test-double"))
+        maker = str(getattr(judge, "maker", None) or getattr(judge, "vendor", None)
+                    or getattr(judge, "provider", "test-double"))
         return ResolvedIdentity("judge", jid, f"test-double/{jid}", f"test-double/{jid}",
-                                f"{IN_PROCESS}:{jid}", frozenset({f"{IN_PROCESS}:{vendor}"}), None,
+                                f"{IN_PROCESS}:{jid}", frozenset({f"{IN_PROCESS}:{maker}"}), None,
                                 frozenset({NO_CREDENTIAL}), getattr(judge, "provider", None))
     model, base_url = getattr(judge, "model", None), getattr(judge, "base_url", None)
     if not isinstance(model, str) or not model or not isinstance(base_url, str) or not base_url:

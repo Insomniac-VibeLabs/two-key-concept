@@ -70,8 +70,9 @@ the code wins, then this file should be corrected.
 - An allow when either path denies or does not answer. A missing, malformed,
   or timed-out ballot is an abstention, not a yes. A ballot that names
   another judge abstains (`judge_id_mismatch`). The default needs one judge
-  and has no diversity floors. `QuorumPolicy.high_assurance()` sets two
-  vendors, one local judge, and a yes from a local judge;
+  and has no diversity floors. `QuorumPolicy.high_assurance()` needs judges
+  from two model makers (the operator's `maker:` labels, not verified), one
+  local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
   still not a skip. `min_distinct_providers` still defaults to 1.
 - A judge that is the monitored agent: the same credential, a shared tenant
@@ -298,7 +299,7 @@ above in the release that ships it.
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
-- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), vendor names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
+- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; HMAC credential fingerprints; local means the loopback, RFC 1918, or fc00::/7 allowlist.

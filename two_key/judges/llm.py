@@ -37,7 +37,7 @@ from .transport import pooled_transport
 from ..action import Action
 from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
-from .base import Ballot, Judge
+from .base import Ballot, Judge, maker_from_vendor
 from .credentials import CredentialError, CredentialProvider, NoCredential
 from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
@@ -138,10 +138,11 @@ class LLMJudge(Judge):
     def __init__(self, judge_id: str, provider: str, model: str, base_url: str,
                  credential: CredentialProvider | None = None, *, timeout: float = 30.0,
                  transport: Transport | None = None, auth_header: str | None = None,
-                 allow_insecure_http: bool = False, vendor: str | None = None,
+                 allow_insecure_http: bool = False, maker: str | None = None,
                  local_weights: bool | None = None, weights_sha256: str | None = None,
                  echo_binding: bool = False, ballot_key: str | None = None, ballot_key_env: str | None = None,
-                 receives_proposal: bool = False):
+                 receives_proposal: bool = False, vendor: str | None = None):
+        maker = maker_from_vendor(maker, vendor)
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -155,8 +156,8 @@ class LLMJudge(Judge):
         self.timeout = timeout
         self.transport = transport or pooled_transport
         self.auth_header = auth_header or self.default_auth_header
-        if vendor:
-            self.vendor = vendor
+        if maker:
+            self.maker = maker
         if local_weights is not None:
             self.local_weights = bool(local_weights)
         self.weights_sha256 = weights_sha256

@@ -216,7 +216,7 @@ double (`in_process_agent_refused`).
 
 ## Quorum policy
 
-The default needs one judge and has no diversity floors: `min_vendors: 1`,
+The default needs one judge and has no diversity floors: `min_makers: 1`,
 `min_local_judges: 0`, `require_local_yes: false`. When `required_yes` is
 not set (in `QuorumPolicy()`, the quorum block, or `TwoKey` with no policy),
 it is `min(2, number of judges)`.
@@ -225,13 +225,25 @@ same floor values but defaults `required_yes` to 2. Prefer `QuorumPolicy()`
 (or omit / set `required_yes` to `null`) for the one-judge default threshold.
 
 `profile: high_assurance` in the quorum block, or
-`QuorumPolicy.high_assurance()`, turns on two vendors, one local judge, and
-a yes from a local judge. Use it for destructive, irreversible, financial,
-or external-send tools. `examples/judges.yaml` meets it with the cloud hooks
-plus local Qwen. Other quorum keys still apply on top of the profile.
-`require_local_yes: true` with no local judge does not start
-(`require_local_yes_without_local_judge`). Vendor names are compared after
-NFKC and case folding, so `OpenAI` and `openai` are one vendor.
+`QuorumPolicy.high_assurance()`, needs judges from at least two makers
+(`min_makers: 2`), at least one local judge, and a yes from a local judge.
+Use it for destructive, irreversible, financial, or external-send tools.
+`examples/judges.yaml` meets it with the cloud hooks plus local Qwen. Other
+quorum keys still apply on top of the profile. `require_local_yes: true`
+with no local judge does not start
+(`require_local_yes_without_local_judge`).
+
+A judge's maker is who made the judge's model, as the operator labels it:
+the per-judge `maker:` key, or its `provider` when `maker:` is omitted. It
+is not verified. It counts only the judges against each other. The
+judge-is-not-the-agent check above never compares it with the monitored
+agent. Maker names are compared after NFKC and case folding, so
+`OpenAI` and `openai` are one maker. `min_distinct_providers` is a separate
+count: the `provider` labels of the judges that returned a valid ballot.
+Through 0.2.1 these keys were `vendor:` and `min_vendors:`. Both still load
+and print `two-key: vendor is deprecated; use maker (same meaning)` (or the
+`min_vendors` line) on stderr; giving the old and the new name together is
+refused.
 
 `TwoKey` does not start with no judge, with `timeout_seconds: null` (Path B
 needs a hard deadline), or with two judges that share an id

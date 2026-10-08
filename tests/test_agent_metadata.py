@@ -39,7 +39,7 @@ def _engine(tmp, votes=("yes", "yes")):
     key = generate_private_key()
     env = sign_constitution(PROSE, RULES, key, SPECS)
     ledger = Ledger(Path(tmp, "ledger"), key)
-    judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", vendor=f"v{i}", local_weights=(i == 0))
+    judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", maker=f"v{i}", local_weights=(i == 0))
               for i, vote in enumerate(votes)]
     tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
                 private_key=key, quorum=QuorumPolicy(required_yes=len(votes)),

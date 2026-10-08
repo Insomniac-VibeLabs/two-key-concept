@@ -16,13 +16,15 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(362 tests, no network).
+(377 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
 malformed call is an early deny before either path). The default needs one judge and has no diversity
 floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
-(profile: high_assurance) sets 2 vendors, 1 local judge, and a local yes.
+(profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
+label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
+and a local yes. vendor/min_vendors are deprecated aliases (through 0.2.1).
 TwoKey needs monitored_agent, declared by the operator. It refuses a judge
 that is the same agent: same credential fingerprint (HMAC, per-install key),
 shared tenant id, same model on the same endpoint or upstream (even with

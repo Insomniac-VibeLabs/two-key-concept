@@ -43,8 +43,8 @@ class Impersonation(unittest.TestCase):
         self.assertEqual((q.passed, q.reason), (False, "insufficient_distinct_providers:1<2"))
 
     def test_honest_judges_still_pass(self):
-        loc = FixedJudge("local", "yes", provider="ollama", vendor="ollama", local_weights=True)
-        q = convene([loc, FixedJudge("c", "yes", provider="anthropic", vendor="anthropic")], "c", SEARCH, "p",
+        loc = FixedJudge("local", "yes", provider="ollama", maker="ollama", local_weights=True)
+        q = convene([loc, FixedJudge("c", "yes", provider="anthropic", maker="anthropic")], "c", SEARCH, "p",
                     QuorumPolicy.high_assurance(required_yes=2))
         self.assertTrue(q.passed, q.reason)
 

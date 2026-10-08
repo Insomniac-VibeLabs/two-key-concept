@@ -47,9 +47,12 @@ is going, see [ROADMAP.md](ROADMAP.md).
    must not be the monitored agent. A missing, malformed, errored, or
    timed-out ballot does not count as yes. The default policy has no
    diversity floors. `QuorumPolicy.high_assurance()` (or
-   `profile: high_assurance` in judges.yaml) turns on two vendors, one local
-   judge, and a yes from that local judge; use it for destructive,
-   irreversible, financial, or external-send tools. `require_local_yes`
+   `profile: high_assurance` in judges.yaml) needs judges from at least two
+   model makers, at least one local judge, and a yes from a local judge; use
+   it for destructive, irreversible, financial, or external-send tools. A
+   judge's maker is who made its model, as the operator labels it (`maker:`,
+   default: its `provider`). It is not verified, and it is a rule about the
+   judges only: it is never compared with the monitored agent. `require_local_yes`
    with no local judge does not start. A judge is local only when it says
    so (`local_weights: true`) and its `base_url` host is on an allowlist:
    loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
@@ -95,7 +98,7 @@ flowchart TD
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
-  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B convene<br/>default: one judge, T-of-N<br/>high_assurance: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
+  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
   judgeText --> pathB
   declared["monitored_agent<br/>declared by the operator"] -->|"start-up: judge is not the agent"| judges
   session["agent_session<br/>must not be a judge API key"] --> pathB

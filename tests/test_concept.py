@@ -47,7 +47,7 @@ def _engine(tmp, votes=("yes", "yes"), quorum=None):
     key = generate_private_key()
     env = sign_constitution(PROSE, RULES, key, SPECS)
     ledger = Ledger(Path(tmp, "ledger"), key)
-    judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", vendor=f"v{i}", local_weights=(i == 0))
+    judges = [FixedJudge(f"j{i}", vote, provider=f"p{i}", maker=f"v{i}", local_weights=(i == 0))
               for i, vote in enumerate(votes)]
     tk = TwoKey(ledger, key.public_key(), verify_signed(env, key.public_key()), judges,
                 private_key=key, quorum=quorum or QuorumPolicy(required_yes=len(votes)),
@@ -264,8 +264,8 @@ class ConceptTests(unittest.TestCase):
             from two_key.constitution import save_envelope
             save_private_key(Path(tmp, "principal.pem"), key)
             save_envelope(Path(tmp, "c.json"), sign_constitution(PROSE, RULES, key, SPECS))
-            judges = [FixedJudge("a", "yes", provider="p0", vendor="v0", local_weights=True),
-                      FixedJudge("b", "yes", provider="p1", vendor="v1")]
+            judges = [FixedJudge("a", "yes", provider="p0", maker="v0", local_weights=True),
+                      FixedJudge("b", "yes", provider="p1", maker="v1")]
             with self.assertRaises(SystemExit):
                 main(["authorize", "--allow-test-doubles"])
             buf = io.StringIO()
@@ -352,15 +352,15 @@ class ConceptTests(unittest.TestCase):
 
     def test_one_judge_default_and_high_assurance_opt_in(self):
         policy = QuorumPolicy()
-        self.assertEqual(policy.min_vendors, 1)
+        self.assertEqual(policy.min_makers, 1)
         self.assertEqual(policy.min_local_judges, 0)
         self.assertFalse(policy.require_local_yes)
         self.assertFalse(policy.require_path_a_first)
         self.assertEqual(QuorumPolicy.without_diversity_floors(required_yes=2), QuorumPolicy(required_yes=2))
         strict = QuorumPolicy.high_assurance()
-        self.assertEqual((strict.min_vendors, strict.min_local_judges, strict.require_local_yes), (2, 1, True))
-        same = [FixedJudge("a", "yes", provider="p", vendor="v"),
-                FixedJudge("b", "yes", provider="p", vendor="v")]
+        self.assertEqual((strict.min_makers, strict.min_local_judges, strict.require_local_yes), (2, 1, True))
+        same = [FixedJudge("a", "yes", provider="p", maker="v"),
+                FixedJudge("b", "yes", provider="p", maker="v")]
         with tempfile.TemporaryDirectory() as tmp:
             key = generate_private_key()
             env = sign_constitution(PROSE, RULES, key, SPECS)
@@ -386,8 +386,8 @@ class ConceptTests(unittest.TestCase):
         from two_key.judges.config import load_config
         judge = {"id": "l", "type": "ollama", "model": "qwen2.5:7b"}
         _, policy = load_config({"judges": [judge]})
-        self.assertEqual((policy.required_yes, policy.min_vendors, policy.require_local_yes), (1, 1, False))
-        with self.assertRaisesRegex(JudgeConfigError, "insufficient_vendors:1<2"):
+        self.assertEqual((policy.required_yes, policy.min_makers, policy.require_local_yes), (1, 1, False))
+        with self.assertRaisesRegex(JudgeConfigError, "insufficient_makers:1<2"):
             load_config({"judges": [judge], "quorum": {"profile": "high_assurance", "required_yes": 1}})
         with self.assertRaisesRegex(JudgeConfigError, "quorum profile must be one of"):
             load_config({"judges": [judge], "quorum": {"profile": "paranoid"}})

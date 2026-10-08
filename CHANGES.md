@@ -391,7 +391,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `Path B needs a hard deadline` / `timeout_seconds must be a positive number` | `timeout_seconds: null` | Set a number of seconds |
 | `duplicate_judge_id:` | Two judges share an id, or an id is empty | Make ids unique |
 | `judge set is not heterogeneous enough: require_local_yes_without_local_judge` | `require_local_yes` with no local judge | Add a loopback/private judge with local weights, or drop the flag |
-| `judge set is not heterogeneous enough: insufficient_vendors` / `insufficient_local_judges` | `high_assurance` floors not met (vendors now compare case-insensitively) | Add a vendor or a local judge, or leave the default profile |
+| `judge set is not heterogeneous enough: insufficient_makers` (`insufficient_vendors` through 0.2.1) / `insufficient_local_judges` | `high_assurance` floors not met (makers compare case-insensitively) | Add a judge whose model has another maker (`maker:`), or a local judge, or leave the default profile |
 | `unknown top-level key(s)` | A typo such as `quorm`, or a key other than `judges`, `quorum`, `monitored_agent` (agents.yaml: `agents`) | Fix the key |
 | `duplicate key '<k>'` | A key repeated in one JSON/YAML mapping (config, rules, constitution, `--args`) | Keep one |
 | `non-standard JSON constant` | `NaN` or `Infinity` in JSON | Use a finite number |
@@ -408,7 +408,8 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `environment variable NAME is not set` | `--agent-session-env` names an unset variable | Export it |
 
 `allow_same_provider_judge is deprecated and has no effect` is a warning
-on stderr, not a refusal.
+on stderr, not a refusal. So are `vendor is deprecated; use maker` and
+`min_vendors is deprecated; use min_makers` (after 0.2.1).
 
 #### Troubleshooting: denies
 
@@ -514,7 +515,7 @@ On branch `working`. Not tagged. Version unchanged.
 - SECURITY.md: report through GitHub private vulnerability reporting
   (Security tab, "Report a vulnerability"). In scope adds a judge that is
   the monitored agent being accepted at start-up.
-- llms.txt: test count is 362.
+- llms.txt: test count is 377 (362 before #42 and #44).
 - README layout table: rows for `action.py`, `agent_meta.py`,
   `canonical.py`, `constitution.py`, and `testing.py`.
 - Comments and docstrings no longer cite spec or disclosure section
@@ -536,3 +537,47 @@ On branch `working`. Not tagged. Version unchanged.
   never evicted. The lock files under `<ledger>.redeem-locks/` are unchanged
   (one per jti, never deleted); HOWTO lists that as an open item. Tests in
   `tests/test_gateway_locks.py`.
+- **#44** — "vendor" is renamed "maker" in code, config, and docs. A
+  judge's maker is who made its model, as the operator labels it (default:
+  its `provider`). It is not verified, and it is a rule about the judges
+  only: the judge-is-not-the-agent check never compares it (an in-process
+  test double's identity record still carries it as a label, as before).
+  - Per-judge key `vendor:` → `maker:`; `Judge.vendor` → `Judge.maker`;
+    the `vendor=` argument of `LLMJudge` and `FixedJudge` → `maker=`;
+    `Judge.describe()` key `vendor` → `maker`. A judge class written
+    before the rename that overrides `vendor`, or a duck-typed judge with
+    only a `vendor` attribute, keeps that label as its maker, so the floor
+    does not change under it.
+  - Quorum key and field `min_vendors` → `min_makers`.
+  - Start-up refusal and deny `insufficient_vendors:<n><<k>` →
+    `insufficient_makers:<n><<k>`.
+  - `QuorumPolicy.to_record()` writes `min_makers`, so `policy_digest`
+    changes for the same settings. Each `constitution_loaded` stores the
+    policy it hashed, and `audit.check_decision_digests` recomputes from
+    that stored record, so older ledgers still check clean. Load writes a
+    new `constitution_loaded`, which already ends outstanding tokens.
+  - The judge-is-not-the-agent rule is unchanged. The issue's question of
+    loosening it is not decided here.
+  - README Path B diagram box rewritten: judges vote; 1+ judge;
+    `required_yes`, default `min(2, judges)`; runs even when Path A
+    denies; `high_assurance` adds 2+ makers, 1+ local judge, and a local
+    yes. HOWTO defines "maker" once, next to `min_distinct_providers`.
+    The other "vendor" wording (the cloud vendors that receive data, a
+    recognized vendor host, a vendor-hosted agent, no vendor SDK) means
+    the company that hosts a model and is unchanged.
+  - Tests: `tests/test_vendor_case.py` is `tests/test_maker_case.py`, with
+    tests for the old names.
+
+  Upgrading from 0.2.1:
+
+  1. Rename `vendor:` to `maker:` on each judge and `min_vendors:` to
+     `min_makers:` in the quorum block. The old names still load, print
+     one deprecation line each on stderr, and mean the same. Giving the
+     old and new name together is refused (`not both`).
+  2. In Python, use `maker=`, `.maker`, and `min_makers=`. `vendor=`,
+     `.vendor`, `min_vendors=`, and `.min_vendors` still work as
+     deprecated aliases.
+  3. Alerts or scripts that match `insufficient_vendors` should match
+     `insufficient_makers`.
+  4. `policy_digest` values after the upgrade differ from before it for
+     the same settings. Compare digests within one `constitution_loaded`.

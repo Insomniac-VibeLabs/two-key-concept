@@ -7,8 +7,11 @@ reported as an ``abstain`` ballot with ``error`` set, and abstentions never
 count toward "yes" (fail closed).
 
 Quorum protocol specifics (the section-4 profile):
-* ``vendor`` and ``local_weights`` describe the judge so that the judge set
-  can be checked for vendor heterogeneity (quorum.check_judge_set). Whether
+* ``maker`` and ``local_weights`` describe the judge so that the judge set
+  can be checked for maker heterogeneity (quorum.check_judge_set). ``maker``
+  is who made the judge's model, as the operator labels it (default:
+  ``provider``). It is not verified, and the judge-is-not-the-agent check
+  never compares it. ``vendor`` is its deprecated name (through 0.2.1). Whether
   a judge is local is ``is_local()``: the declared flag AND a loopback or
   private endpoint host. The flag alone never makes a judge local;
 * ballots are bound to H(action record) and H(constitution). The convenor
@@ -20,6 +23,7 @@ Quorum protocol specifics (the section-4 profile):
 from __future__ import annotations
 
 import abc
+import sys
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
@@ -53,6 +57,21 @@ class Ballot:
         return self.vote in ("yes", "no")
 
 
+def warn_renamed(old: str, new: str) -> None:
+    """One stderr line for a name that still works but was renamed (``vendor`` is now ``maker``)."""
+    print(f"two-key: {old} is deprecated; use {new} (same meaning)", file=sys.stderr)
+
+
+def maker_from_vendor(maker: str | None, vendor: str | None) -> str | None:
+    """The ``maker`` argument, or the deprecated ``vendor`` one. Both at once is refused."""
+    if vendor is None:
+        return maker
+    if maker is not None:
+        raise ValueError("give maker or the deprecated vendor, not both")
+    warn_renamed("vendor", "maker")
+    return vendor
+
+
 class Judge(abc.ABC):
     """Abstract Path B judge."""
 
@@ -62,13 +81,26 @@ class Judge(abc.ABC):
     weights_sha256: str | None = None  # optional identifier of that weight file (recorded, not verified)
 
     @property
+    def maker(self) -> str:
+        """Who made the judge's model, for the ``min_makers`` floor. Operator label, not verified.
+        Defaults to ``provider``."""
+        m = getattr(self, "_maker", None)
+        if not m and type(self).vendor is not Judge.vendor:
+            m = self.vendor     # a subclass written before the rename still overrides vendor
+        return m or self.provider
+
+    @maker.setter
+    def maker(self, value: str) -> None:
+        self._maker = value
+
+    @property
     def vendor(self) -> str:
-        """Model vendor used for heterogeneity checks. Defaults to ``provider``."""
-        return getattr(self, "_vendor", None) or self.provider
+        """Deprecated name of ``maker`` (through 0.2.1)."""
+        return self.maker
 
     @vendor.setter
     def vendor(self, value: str) -> None:
-        self._vendor = value
+        self.maker = value
 
     @abc.abstractmethod
     def score(self, constitution_text: str, action: Action, proposal: str) -> Ballot:
@@ -90,7 +122,7 @@ class Judge(abc.ABC):
         return bool(getattr(self, "is_test_double", False)) and bool(self.local_weights)
 
     def describe(self) -> dict:
-        d = {"id": self.judge_id, "provider": self.provider, "vendor": self.vendor,
+        d = {"id": self.judge_id, "provider": self.provider, "maker": self.maker,
              "local_weights": bool(self.local_weights), "local": bool(self.is_local())}
         if self.weights_sha256:
             d["weights_sha256"] = self.weights_sha256

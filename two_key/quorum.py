@@ -14,13 +14,16 @@ Fixes from the original prototype (see CHANGES.md):
   never counts as "yes".
 - ``min_distinct_providers`` counts providers among responding ballots.
   It still defaults to 1, so that check is not a floor by itself.
-- The default needs one judge: ``min_vendors=1``, ``min_local_judges=0``,
+- The default needs one judge: ``min_makers=1``, ``min_local_judges=0``,
   ``require_local_yes=False``. The owner's rule is at least one judge, and
   that judge must not be the monitored agent. The diversity floors are
   opt-in: ``QuorumPolicy.high_assurance()`` (or ``profile: high_assurance``
-  in judges.yaml) sets at least two vendors, at least one local judge, and a
-  yes from a local judge (``require_local_yes``). It is recommended for
-  destructive, irreversible, financial, or external-send tools.
+  in judges.yaml) needs judges from at least two model makers, at least one
+  local judge, and a yes from a local judge (``require_local_yes``). It is
+  recommended for destructive, irreversible, financial, or external-send
+  tools. A judge's maker is the operator's ``maker:`` label for who made its
+  model (default: its ``provider``). It is not verified, and it is never
+  compared with the monitored agent (identity.py does that).
   ``require_local_yes`` with no local judge in the set is a configuration
   error at start-up and a deny in ``convene``.
   ``QuorumPolicy.without_diversity_floors`` still works and now builds the
@@ -35,13 +38,16 @@ Fixes from the original prototype (see CHANGES.md):
   HTTP timeouts are still set on each LLM judge.
 
 Quorum protocol specifics:
-- Vendor heterogeneity: ``check_judge_set`` runs when ``TwoKey`` starts, and
-  again inside ``convene``. The default floor is one vendor and no local
-  judge. ``QuorumPolicy.high_assurance`` is >= 2 vendors, >= 1 local judge,
+- Maker heterogeneity: ``check_judge_set`` runs when ``TwoKey`` starts, and
+  again inside ``convene``. The default floor is one maker and no local
+  judge. ``QuorumPolicy.high_assurance`` is >= 2 makers, >= 1 local judge,
   and ``require_local_yes``. ``QuorumPolicy.section4`` is that floor plus
   ``require_path_a_first``, which ``TwoKey.authorize`` still does not read.
   With ``heterogeneity_scope="responding"`` the same floor also applies to the
   judges that actually returned valid ballots.
+- ``min_vendors`` (the judge key ``vendor``) is the name through 0.2.1. It is
+  still accepted as a deprecated alias of ``min_makers`` and prints a note on
+  stderr. ``to_record`` writes ``min_makers``.
 - Availability floor K (``min_responding``) distinct from the approval
   threshold T (``required_yes``): fewer than K valid ballots is a deny
   *without counting*. The result then has ``counted=False`` and no yes/no
@@ -65,6 +71,7 @@ Quorum protocol specifics:
 
 from __future__ import annotations
 
+import functools
 import threading
 import time
 import unicodedata
@@ -73,7 +80,7 @@ from typing import Mapping, Sequence
 
 from .action import Action
 from .agent_meta import exception_ledger_error
-from .judges.base import Ballot, Judge
+from .judges.base import Ballot, Judge, warn_renamed
 
 
 class QuorumConfigError(ValueError):
@@ -88,7 +95,7 @@ class QuorumPolicy:
     timeout_seconds: float | None = 45.0  # overall deadline; None (no deadline) is refused by TwoKey
     parallel: bool = True
     # One judge is enough by default. QuorumPolicy.high_assurance() opts in to the diversity floors.
-    min_vendors: int = 1
+    min_makers: int = 1                         # distinct judge model makers (Judge.maker labels)
     min_local_judges: int = 0
     heterogeneity_scope: str = "selection"      # selection | responding
     judge_inputs: str = "record_only"           # record_only | record_and_proposal
@@ -122,10 +129,10 @@ class QuorumPolicy:
             raise QuorumConfigError("timeout_seconds must be a positive number or None")
         if not isinstance(self.parallel, bool):
             raise QuorumConfigError("parallel must be a boolean")
-        for name in ("min_vendors", "min_local_judges"):
+        for name in ("min_makers", "min_local_judges"):
             v = getattr(self, name)
-            if isinstance(v, bool) or not isinstance(v, int) or v < (1 if name == "min_vendors" else 0):
-                raise QuorumConfigError(f"{name} must be an integer >= {1 if name == 'min_vendors' else 0}")
+            if isinstance(v, bool) or not isinstance(v, int) or v < (1 if name == "min_makers" else 0):
+                raise QuorumConfigError(f"{name} must be an integer >= {1 if name == 'min_makers' else 0}")
         if self.heterogeneity_scope not in ("selection", "responding"):
             raise QuorumConfigError("heterogeneity_scope must be 'selection' or 'responding'")
         if self.judge_inputs not in ("record_only", "record_and_proposal"):
@@ -143,23 +150,28 @@ class QuorumPolicy:
         if not isinstance(self.allow_same_provider_judge, bool):
             raise QuorumConfigError("allow_same_provider_judge must be a boolean")
 
+    @property
+    def min_vendors(self) -> int:
+        """Deprecated name of ``min_makers`` (through 0.2.1)."""
+        return self.min_makers
+
     @classmethod
     def high_assurance(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
-        """Opt-in diversity floors: >= 2 vendors, >= 1 local judge, and a yes from a local judge.
+        """Opt-in diversity floors: >= 2 makers, >= 1 local judge, and a yes from a local judge.
 
         Recommended for destructive, irreversible, financial, or external-send tools.
         This was the default in 0.1.12. The default is now one judge.
         """
-        base = {"min_vendors": 2, "min_local_judges": 1, "require_local_yes": True}
-        base.update(kw)
+        base = {"min_makers": 2, "min_local_judges": 1, "require_local_yes": True}
+        base.update(rename_min_vendors(kw))
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
     def without_diversity_floors(cls, required_yes: int = 2, min_responding: int | None = None,
                                  **kw) -> "QuorumPolicy":
-        """Compatibility name for the default floors: one vendor, no local judge required."""
-        base = {"min_vendors": 1, "min_local_judges": 0, "require_local_yes": False}
-        base.update(kw)
+        """Compatibility name for the default floors: one maker, no local judge required."""
+        base = {"min_makers": 1, "min_local_judges": 0, "require_local_yes": False}
+        base.update(rename_min_vendors(kw))
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
@@ -169,15 +181,15 @@ class QuorumPolicy:
         ``TwoKey.authorize`` still runs both paths; it does not read that flag.
         K and T remain the principal's choice.
         """
-        base = {"min_vendors": 2, "min_local_judges": 1, "judge_inputs": "record_only",
+        base = {"min_makers": 2, "min_local_judges": 1, "judge_inputs": "record_only",
                 "require_path_a_first": True, "require_local_yes": True}
-        base.update(kw)
+        base.update(rename_min_vendors(kw))
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     def to_record(self) -> dict:
         return {"required_yes": self.required_yes, "min_responding": self.effective_min_responding,
                 "min_distinct_providers": self.min_distinct_providers, "timeout_seconds": self.timeout_seconds,
-                "min_vendors": self.min_vendors, "min_local_judges": self.min_local_judges,
+                "min_makers": self.min_makers, "min_local_judges": self.min_local_judges,
                 "heterogeneity_scope": self.heterogeneity_scope, "judge_inputs": self.judge_inputs,
                 "ballot_binding": self.ballot_binding, "require_path_a_first": self.require_path_a_first,
                 "require_local_yes": self.require_local_yes,
@@ -194,6 +206,29 @@ class QuorumPolicy:
         if self.required_yes is not None:
             return self
         return replace(self, required_yes=max(1, min(2, n_judges)))
+
+
+def rename_min_vendors(kw: Mapping) -> dict:
+    """Map the deprecated ``min_vendors`` key to ``min_makers``. Both at once is refused."""
+    kw = dict(kw)
+    if "min_vendors" in kw:
+        if "min_makers" in kw:
+            raise QuorumConfigError("give min_makers or the deprecated min_vendors, not both")
+        warn_renamed("min_vendors", "min_makers")
+        kw["min_makers"] = kw.pop("min_vendors")
+    return kw
+
+
+def _accept_min_vendors(init):
+    # An __init__ wrapper rather than an InitVar: dataclasses.replace copies an InitVar's current value
+    # (here, the alias property) back in, which would undo a min_makers change.
+    @functools.wraps(init)
+    def __init__(self, *args, **kw):
+        init(self, *args, **rename_min_vendors(kw))
+    return __init__
+
+
+QuorumPolicy.__init__ = _accept_min_vendors(QuorumPolicy.__init__)
 
 
 @dataclass(frozen=True)
@@ -243,18 +278,18 @@ def _local(j) -> bool:
     return bool(is_local()) if callable(is_local) else False
 
 
-def _vendor(j) -> str:
-    """The vendor key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
-    "openai " are one vendor, not two."""
-    raw = str(getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
+def _maker(j) -> str:
+    """The maker key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
+    "openai " are one maker, not two."""
+    raw = str(getattr(j, "maker", None) or getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
     return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
 
 
 def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | None:
-    vendors = {_vendor(j) for j in judges}
+    makers = {_maker(j) for j in judges}
     local = sum(1 for j in judges if _local(j))
-    if len(vendors) < policy.min_vendors:
-        return f"insufficient_vendors:{len(vendors)}<{policy.min_vendors}"
+    if len(makers) < policy.min_makers:
+        return f"insufficient_makers:{len(makers)}<{policy.min_makers}"
     if local < policy.min_local_judges:
         return f"insufficient_local_judges:{local}<{policy.min_local_judges}"
     if policy.require_local_yes and local == 0:

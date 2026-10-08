@@ -43,8 +43,8 @@ class Locality(unittest.TestCase):
             self.assertFalse(j.is_local())
             self.assertTrue(j.is_cloud())
         floor = QuorumPolicy.high_assurance(required_yes=2)
-        remote = [OllamaJudge("c", "ollama", "m", base_url="https://ollama.com", local_weights=True, vendor="x"),
-                  FixedJudge("b", "yes", provider="p", vendor="y")]
+        remote = [OllamaJudge("c", "ollama", "m", base_url="https://ollama.com", local_weights=True, maker="x"),
+                  FixedJudge("b", "yes", provider="p", maker="y")]
         with self.assertRaisesRegex(QuorumConfigError, "insufficient_local_judges:0<1"):
             check_judge_set(remote, floor)
 
@@ -66,7 +66,7 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
         from two_key.keys import generate_private_key
         from two_key.ledger import Ledger
         from two_key.quorum import convene
-        js = [FixedJudge("a", "yes", provider="p1", vendor="v1"), FixedJudge("b", "yes", provider="p2", vendor="v2")]
+        js = [FixedJudge("a", "yes", provider="p1", maker="v1"), FixedJudge("b", "yes", provider="p2", maker="v2")]
         p = QuorumPolicy(required_yes=2, require_local_yes=True)
         with self.assertRaisesRegex(QuorumConfigError, "require_local_yes_without_local_judge"):
             check_judge_set(js, p)
@@ -87,8 +87,8 @@ class RequireLocalYesNeedsALocalJudge(unittest.TestCase):
 
     def test_local_judge_must_say_yes(self):
         from two_key.quorum import convene
-        js = [FixedJudge("l", "no", provider="pl", vendor="vl", local_weights=True),
-              FixedJudge("b", "yes", provider="p2", vendor="v2"), FixedJudge("c", "yes", provider="p3", vendor="v3")]
+        js = [FixedJudge("l", "no", provider="pl", maker="vl", local_weights=True),
+              FixedJudge("b", "yes", provider="p2", maker="v2"), FixedJudge("c", "yes", provider="p3", maker="v3")]
         q = convene(js, "c", A, "", QuorumPolicy(required_yes=2, require_local_yes=True))
         self.assertEqual((q.passed, q.reason), (False, "local_judge_required"))
 
@@ -111,7 +111,7 @@ class OllamaCloudModels(unittest.TestCase):
     def test_cloud_model_does_not_meet_high_assurance(self):
         o = OllamaJudge("o", "ollama", "gpt-oss:120b-cloud", base_url="http://127.0.0.1:11434")
         with self.assertRaisesRegex(QuorumConfigError, "insufficient_local_judges|require_local_yes_without_local_judge"):
-            check_judge_set([o, FixedJudge("b", "yes", provider="openai", vendor="openai")],
+            check_judge_set([o, FixedJudge("b", "yes", provider="openai", maker="openai")],
                             QuorumPolicy.high_assurance())
 
 

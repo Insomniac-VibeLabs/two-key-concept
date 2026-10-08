@@ -6,9 +6,9 @@ Format (see examples/judges.yaml):
       required_yes: 2          # k-of-n; omit for min(2, number of judges)
       min_responding: 2        # "K": minimum valid ballots
       min_distinct_providers: 1
-      # profile: high_assurance  # opt-in: 2 vendors, 1 local judge, require_local_yes
+      # profile: high_assurance  # opt-in: judges from 2 makers, 1 local judge, require_local_yes
       # Defaults shown (one judge is enough; see quorum.QuorumPolicy):
-      min_vendors: 1           # >= 2 with profile: high_assurance
+      min_makers: 1            # >= 2 with profile: high_assurance (min_vendors: deprecated alias)
       min_local_judges: 0      # >= 1 with profile: high_assurance
       require_local_yes: false # true with profile: high_assurance
       heterogeneity_scope: selection   # selection | responding
@@ -33,7 +33,7 @@ Format (see examples/judges.yaml):
         base_url: https://api.x.ai/v1
         model: REPLACE_WITH_MODEL
         auth: {type: env, var: XAI_API_KEY}
-        vendor: xai               # optional; defaults to provider
+        maker: xai                # optional; who made the model; defaults to provider (vendor: deprecated alias)
         local_weights: false      # optional; ollama defaults to true
         echo_binding: false       # optional; required true when ballot_binding: echo
 
@@ -70,15 +70,16 @@ ADAPTERS = {
 DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anthropic",
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
-              "max_tokens", "auth_header", "allow_insecure_http", "vendor", "local_weights", "weights_sha256",
+              "max_tokens", "auth_header", "allow_insecure_http", "maker", "vendor", "local_weights", "weights_sha256",
               "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort",
               "tenant", "upstream"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
-               "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
+               "min_makers", "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
                "allow_same_provider_judge", "allow_same_model_distinct_tenant"}
 TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
-# default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 vendors, 1 local, local yes).
+# default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 makers, 1 local, local yes).
+# vendor and min_vendors are the names through 0.2.1: still accepted, with a note on stderr.
 QUORUM_PROFILES = {"default", "high_assurance"}
 
 
@@ -139,7 +140,7 @@ def build_judge(spec: dict, transport=None) -> Judge:
         "credential": build_credential(spec.get("auth")), "transport": transport,
     }
     for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens",
-              "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal",
+              "maker", "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal",
               "response_format", "reasoning_effort"):
         if k in spec:
             kw[k] = spec[k]
