@@ -72,6 +72,7 @@ Quorum protocol specifics:
 from __future__ import annotations
 
 import functools
+import inspect
 import threading
 import time
 import unicodedata
@@ -109,9 +110,9 @@ class QuorumPolicy:
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
     tool_args_on_derive_deny: bool = False
-    # Logged opt-in, default off: allow a judge on the agent's own model and endpoint or upstream when both
-    # sides declare different tenants and both have different keys (identity.compare). Recorded in
-    # constitution_loaded as same_model_tenant_optin, part of the policy digest, warned on stderr.
+    # Deprecated, no effect (2026-10-08): a judge is refused only when it uses the monitored agent's credential
+    # on the agent's address (identity.compare), so there is nothing left for this flag to lift. Still accepted,
+    # recorded and part of the policy digest, with a note on stderr, so older configurations load.
     allow_same_model_distinct_tenant: bool = False
 
 
@@ -150,6 +151,7 @@ class QuorumPolicy:
         if not isinstance(self.allow_same_provider_judge, bool):
             raise QuorumConfigError("allow_same_provider_judge must be a boolean")
 
+    # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
     @property
     def min_vendors(self) -> int:
         """Deprecated name of ``min_makers`` (through 0.2.1)."""
@@ -208,6 +210,7 @@ class QuorumPolicy:
         return replace(self, required_yes=max(1, min(2, n_judges)))
 
 
+# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
 def rename_min_vendors(kw: Mapping) -> dict:
     """Map the deprecated ``min_vendors`` key to ``min_makers``. Both at once is refused."""
     kw = dict(kw)
@@ -219,6 +222,7 @@ def rename_min_vendors(kw: Mapping) -> dict:
     return kw
 
 
+# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
 def _accept_min_vendors(init):
     # An __init__ wrapper rather than an InitVar: dataclasses.replace copies an InitVar's current value
     # (here, the alias property) back in, which would undo a min_makers change.
@@ -281,6 +285,7 @@ def _local(j) -> bool:
 def _maker(j) -> str:
     """The maker key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
     "openai " are one maker, not two."""
+    # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
     raw = str(getattr(j, "maker", None) or getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
     return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
 
@@ -332,15 +337,27 @@ def _proposal_for(j: Judge, proposal: str, policy: QuorumPolicy) -> str:
     return ""
 
 
+def _accepted(fn, kw: Mapping) -> dict:
+    """The keyword arguments in ``kw`` that ``fn`` takes, read from its signature. Asking the signature, not
+    retrying on TypeError, keeps a TypeError raised inside a judge an abstention, never a call without the session."""
+    try:
+        params = list(inspect.signature(fn).parameters.values())
+    except (TypeError, ValueError):
+        return {}
+    if any(p.kind is p.VAR_KEYWORD for p in params):
+        return dict(kw)
+    names = {p.name for p in params}
+    return {k: v for k, v in kw.items() if k in names}
+
+
 def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
-               binding: Mapping[str, str] | None = None, agent_session: str | None = None) -> Ballot:
+               binding: Mapping[str, str] | None = None, agent_session: str | None = None,
+               agent_endpoints: frozenset[str] | None = None) -> Ballot:
     try:
         sb = getattr(j, "score_bound", None)
         if sb is not None:
-            try:
-                b = sb(constitution_text, action, proposal, binding, agent_session=agent_session)
-            except TypeError:
-                b = sb(constitution_text, action, proposal, binding)
+            kw = _accepted(sb, {"agent_session": agent_session, "agent_endpoints": agent_endpoints})
+            b = sb(constitution_text, action, proposal, binding, **kw)
         else:
             b = j.score(constitution_text, action, proposal)
         if not isinstance(b, Ballot) or b.vote not in ("yes", "no", "abstain"):
@@ -361,19 +378,20 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
 
 def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, proposal: str,
              policy: QuorumPolicy, binding: Mapping[str, str] | None = None,
-             agent_session: str | None = None) -> list[Ballot]:
+             agent_session: str | None = None, agent_endpoints: frozenset[str] | None = None) -> list[Ballot]:
     if not judges:
         return []
     if not policy.parallel and policy.timeout_seconds is None:
-        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session)
-                for j in judges]
+        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session,
+                           agent_endpoints) for j in judges]
     # One daemon thread per judge: a hung judge can neither delay the decision past the deadline
     # nor keep the process alive at exit (its HTTP timeout ends the thread eventually).
     results: list[Ballot | None] = [None] * len(judges)
     done = [threading.Event() for _ in judges]
 
     def run(i: int, j: Judge) -> None:
-        results[i] = _score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session)
+        results[i] = _score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding,
+                                agent_session, agent_endpoints)
         done[i].set()
 
     deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
@@ -405,10 +423,13 @@ def convene(
     binding: Mapping[str, str] | None = None,
     tool_args: Mapping | None = None,
     agent_session: str | None = None,
+    agent_endpoints: frozenset[str] | None = None,
 ) -> QuorumResult:
     """Convene the judges.
 
     ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (Two-Key always passes it).
+    ``agent_endpoints`` = the declared agents' normalized addresses (Two-Key passes them), for the judges'
+    runtime same-agent check.
     """
     policy = (policy or QuorumPolicy()).resolved(len(judges))
     k_floor = policy.effective_min_responding
@@ -425,7 +446,8 @@ def convene(
     selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
     if judges and not duplicate and selection is None:
         ballots = [_bind(b, binding, policy)
-                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
+                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session,
+                                      agent_endpoints)]
     responding = [b for b in ballots if b.responded]
     abstain = len(ballots) - len(responding)
 

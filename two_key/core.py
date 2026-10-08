@@ -7,7 +7,8 @@ Hosting (local or cloud) is recorded and never treated as trust.
 ``TwoKey`` refuses to start (``TwoKeyConfigError``) with no judge, with no
 Path B deadline, with duplicate judge ids, without an operator declaration
 of the monitored agent (``monitored_agent_required:``), or when a judge
-could be that agent (``judge_matches_agent:``; see identity.py).
+is that agent: the same address with the same credential, or with no
+credential on either side (``judge_matches_agent:``; see identity.py).
 """
 
 from __future__ import annotations
@@ -118,8 +119,11 @@ class TwoKey:
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
                                     "number, not None")
         check_judge_set(self.judges, self.quorum)
-        # Judge != monitored agent, from operator configuration only (identity.py).
+        # Judge != monitored agent, from operator configuration only (identity.py): refused on the same address
+        # with the same credential; likely accidents are warned on stderr and recorded below.
         self.separation = self._check_separation(monitored_agent, allow_test_doubles)
+        # The declared agents' addresses, for the judges' runtime session check (the same rule at call time).
+        self._agent_endpoints = frozenset(a.endpoint for a in self.separation.agents)
         # The resolved identities are written once, in constitution_loaded; every decision entry
         # carries the digest of the policy in effect (policy_digest) and of those identities (identities_digest).
         sep = self.separation.to_record()
@@ -157,8 +161,8 @@ class TwoKey:
             "capability_key_fingerprint": (None if self.issuer is None
                                            else capability_key_fingerprint(self.issuer.public_key)),
             "judge_agent_separation": sep,
-            # The logged opt-in (QuorumPolicy.allow_same_model_distinct_tenant), with both tenant labels of
-            # every judge it let through. Also in quorum_policy, so it is part of policy_digest.
+            # The deprecated opt-in (QuorumPolicy.allow_same_model_distinct_tenant), recorded as set. It lifts
+            # nothing now, so the pairs list is always empty; both keys stay so the entry keeps its shape.
             "same_model_tenant_optin": self.quorum.allow_same_model_distinct_tenant,
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
         })
@@ -337,7 +341,7 @@ class TwoKey:
         if _derive_deny(deny_reason) and not self.quorum.tool_args_on_derive_deny:
             judge_args = None
         quorum = convene(self.judges, self.compiled.judge_text, normalized, proposal,
-                         self.quorum, binding, judge_args, agent_session)
+                         self.quorum, binding, judge_args, agent_session, self._agent_endpoints)
         path_b_rec = {"passed": quorum.passed, "reason": quorum.reason,
                       "yes": quorum.yes, "no": quorum.no, "abstain": quorum.abstain}
         allowed = bool(path_a.allowed and quorum.passed and deny_reason is None)

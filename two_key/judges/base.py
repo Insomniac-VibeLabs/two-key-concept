@@ -62,6 +62,7 @@ def warn_renamed(old: str, new: str) -> None:
     print(f"two-key: {old} is deprecated; use {new} (same meaning)", file=sys.stderr)
 
 
+# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
 def maker_from_vendor(maker: str | None, vendor: str | None) -> str | None:
     """The ``maker`` argument, or the deprecated ``vendor`` one. Both at once is refused."""
     if vendor is None:
@@ -85,6 +86,7 @@ class Judge(abc.ABC):
         """Who made the judge's model, for the ``min_makers`` floor. Operator label, not verified.
         Defaults to ``provider``."""
         m = getattr(self, "_maker", None)
+        # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
         if not m and type(self).vendor is not Judge.vendor:
             m = self.vendor     # a subclass written before the rename still overrides vendor
         return m or self.provider
@@ -93,6 +95,7 @@ class Judge(abc.ABC):
     def maker(self, value: str) -> None:
         self._maker = value
 
+    # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
     @property
     def vendor(self) -> str:
         """Deprecated name of ``maker`` (through 0.2.1)."""

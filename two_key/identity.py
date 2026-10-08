@@ -1,9 +1,12 @@
 """
 Two-Key: a Path B judge must not be the monitored agent
 =======================================================
-The rule (the owner's, revised 2026-10-03): at least one judge, and no judge
-may be the *same agent* as the monitored agent. The same provider is allowed.
-``TwoKey`` checks it when it starts and refuses with ``TwoKeyConfigError``.
+The rule (the owner's, revised 2026-10-08): at least one judge, and no judge
+may be the *same specific agent* as the monitored agent. A judge may run any
+model from any vendor. It is the same agent only when it connects to the same
+address as the agent with the same credential. ``TwoKey`` checks it when it
+starts and refuses with ``TwoKeyConfigError``. The operator configures who the
+agent is; Two-Key refuses the same agent and makes likely accidents visible.
 
 The agent's identity comes only from operator configuration
 (``TwoKey(monitored_agent=...)``, the ``monitored_agent:`` block of
@@ -11,9 +14,11 @@ judges.yaml, and any configured ``agents``), never from anything the agent
 says about itself. The declaration names the model, the provider (recorded as
 a label, never compared), the endpoint ``base_url``, the credential (the
 name of the environment variable that holds the agent's key,
-``credential_env``, or ``credential: none`` for a keyless loopback agent),
-and optionally a ``tenant`` mapping (see below). If any required field is
-missing or cannot be read, Two-Key refuses to start.
+``credential_env``; the two variables that hold a username and password,
+``username_env`` and ``password_env``, sent as HTTP Basic over HTTPS only; or
+``credential: none`` for a keyless loopback agent), and optionally a
+``tenant`` mapping (see below). If any required field is missing or cannot
+be read, Two-Key refuses to start.
 
 Each judge and agent is resolved to:
 
@@ -56,49 +61,36 @@ Each judge and agent is resolved to:
   trailing whitespace stripped (``hmac-sha256:...``). The HMAC key is a
   random per-install secret, ``fingerprint.key`` beside the ledger key
   (``<ledger>.ledger-key/``, created once with O_EXCL, mode 0600), so a
-  ledger reader cannot test guessed keys against a fingerprint. Raw keys are never
-  stored or logged. ``none`` means the endpoint takes no key; two keyless
-  endpoints do not match on it.
+  ledger reader cannot test guessed keys against a fingerprint. A username and
+  password are fingerprinted as one ``username:password`` pair. Raw keys and
+  passwords are never stored or logged. ``none`` means the endpoint takes no
+  key.
 
-Refusals, judge against agent (all hard, no opt-out), message prefix
-``judge_matches_agent:``:
+Refusals, judge against agent, message prefix ``judge_matches_agent:``:
 
-- same credential fingerprint
-- either side unresolved (unknown identity fails closed)
-- same normalized model on the same normalized endpoint ``host:port``
-- same normalized model where either side is a loopback or private endpoint
-  (a proxy or daemon, keyed or not) with no declared ``upstream:``: it could
-  forward to the other side's provider and account, so upstream and tenant
-  are unknown
-- same normalized model with a shared route: a declared upstream, the
-  endpoint itself, or ollama.com for a ``-cloud`` model
-  (``same_model_same_upstream``). Declared tenants do not lift this: two
-  accounts on one upstream serving one model are still the same model
-  from the same provider
-- a shared tenant id (same Azure resource or deployment, OpenAI organization
-  or project, Bedrock account in the same region, Vertex project, or a
-  declared id on the same host)
+- the same address (normalized ``endpoint``, ``host:port``, every alias of
+  this machine folded to ``localhost``) and the same credential fingerprint:
+  an API token, a username/password pair, or any credential the agent
+  declares;
+- the same address with no credential on either side: Two-Key has nothing to
+  tell them apart by;
+- a judge or agent whose address or credential cannot be read at start-up.
 
-Allowed: the same provider or upstream with a different model, the same
-endpoint with a different model, the same model on a different endpoint
-in a different (or undeclared) tenant with a different key, a local proxy
-declaring a non-overlapping upstream (a different provider), and a different
-daemon (each declaring its own address). The same provider on another model
-or endpoint is allowed.
-``allow_same_provider_judge`` is a deprecated no-op.
+Everything else is allowed: any model, any vendor, any endpoint. Likely
+accidents are allowed with a warning on stderr, and every warning is
+recorded in ``constitution_loaded`` (``judge_agent_separation.warnings``):
+the same credential on a different address, one side without a credential on
+the same address, the same model on the same address, the same model through
+a shared route or through a local or unrecognized proxy with no declared
+``upstream:``, a shared tenant id, and an identity whose upstream cannot be
+resolved. Addresses are compared as configured; DNS names are not resolved.
 
-Logged opt-in, default off: ``allow_same_model_distinct_tenant: true`` in the
-quorum config lifts the same-endpoint and same-upstream refusals only when
-both sides declare a tenant, the scoped tenant ids are non-empty and share
-nothing, and both sides have keys with different fingerprints. A keyless
-side, an undeclared tenant, a local proxy with no declared upstream, or an
-unresolved side is still refused. When the flag is set, a warning goes to
-stderr, and ``constitution_loaded`` records ``same_model_tenant_optin: true``
-with both tenant labels of every pair it let through. The flag is part of
-the quorum policy, so it is in ``policy_digest``.
+``allow_same_model_distinct_tenant`` and ``allow_same_provider_judge`` are
+deprecated no-ops: nothing they used to lift is refused any more.
 
 The runtime check stays as a second layer: a judge whose credential equals
-the frozen agent session abstains with ``cloud_judge_reused_agent_session``.
+the frozen agent session, and that connects to one of the declared agents'
+addresses, abstains with ``cloud_judge_reused_agent_session``.
 """
 
 from __future__ import annotations
@@ -123,10 +115,14 @@ from .netloc import fold_model_id, host_is_local, host_is_loopback, model_is_clo
 FINGERPRINT_DOMAIN = b"two-key/credential-fingerprint/1\x00"
 NO_CREDENTIAL = "none"
 IN_PROCESS = "in-process"
-AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "tenant", "upstream"}
+AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credential", "username_env", "password_env",
+              "tenant", "upstream"}
 TENANT_KEYS = ("organization", "project", "account", "deployment")
-SEPARATION_CHECKS = ("same_credential", "unresolved_identity", "same_model_same_endpoint",
-                     "same_model_unknown_upstream", "same_model_same_upstream", "same_tenant")
+# What refuses a judge (the same specific agent), and what only warns (a likely accident, recorded).
+SEPARATION_RULE = "same_address_and_same_credential"
+SEPARATION_CHECKS = ("same_address_same_credential", "same_address_no_credential")
+SEPARATION_WARNINGS = ("same_credential_other_address", "same_address_one_side_keyless", "same_model_same_address",
+                       "same_model_shared_route", "same_model_unknown_proxy", "shared_tenant", "unresolved_identity")
 
 
 class IdentityError(ValueError):
@@ -682,6 +678,7 @@ def _secret_from(credential: Any) -> str:
 def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     jid = str(getattr(judge, "judge_id", "?"))
     if getattr(judge, "is_test_double", False) and not getattr(judge, "base_url", None):
+        # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
         maker = str(getattr(judge, "maker", None) or getattr(judge, "vendor", None)
                     or getattr(judge, "provider", "test-double"))
         return ResolvedIdentity("judge", jid, f"test-double/{jid}", f"test-double/{jid}",
@@ -712,6 +709,8 @@ class AgentDeclaration:
     id: str = "monitored-agent"
     tenant: Mapping[str, str] | None = None   # organization / project / account / deployment, if declared
     upstream: Any = None                      # operator-declared upstream host(s), for a proxy; not verified
+    username_env: str | None = None           # HTTP Basic over HTTPS: the variables holding the username
+    password_env: str | None = None           # and the password
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "AgentDeclaration":
@@ -723,6 +722,7 @@ class AgentDeclaration:
         return cls(model=data.get("model"), provider=data.get("provider"), base_url=data.get("base_url"),
                    credential_env=data.get("credential_env"), credential=data.get("credential"),
                    id=data.get("id") or "monitored-agent",
+                   username_env=data.get("username_env"), password_env=data.get("password_env"),
                    tenant=validate_tenant(data.get("tenant"), "monitored_agent") or None,
                    upstream=data.get("upstream"))
 
@@ -740,9 +740,19 @@ class AgentDeclaration:
             raise IdentityError(f"monitored_agent {self.id!r}: base_url must be an http(s) URL")
         if self.credential not in (None, NO_CREDENTIAL):
             raise IdentityError("monitored_agent credential may only be 'none'; name the key with credential_env")
-        if (self.credential_env is None) == (self.credential is None):
-            raise IdentityError(f"monitored_agent {self.id!r}: declare exactly one of credential_env "
-                                "or credential: none")
+        basic = self.username_env is not None or self.password_env is not None
+        if [self.credential_env is not None, self.credential is not None, basic].count(True) != 1:
+            raise IdentityError(f"monitored_agent {self.id!r}: declare exactly one of credential_env, "
+                                "username_env with password_env, or credential: none")
+        if basic:
+            for name in ("username_env", "password_env"):
+                v = getattr(self, name)
+                if not isinstance(v, str) or not v.strip() or v.startswith("REPLACE_"):
+                    raise IdentityError(f"monitored_agent {self.id!r}: declare {name} (the name of an environment "
+                                        "variable) with the other one")
+            if u.scheme != "https":
+                raise IdentityError(f"monitored_agent {self.id!r}: a username and password are sent only over "
+                                    "HTTPS; use an https base_url")
         if self.credential == NO_CREDENTIAL and u.scheme != IN_PROCESS and not host_is_local(u.hostname or ""):
             raise IdentityError(f"monitored_agent {self.id!r}: credential: none is only for a loopback or "
                                 "private-address agent; declare credential_env")
@@ -753,7 +763,16 @@ class AgentDeclaration:
                 fp_key: bytes | None = None) -> ResolvedIdentity:
         self.validate(allow_in_process=allow_in_process)
         fps = {credential_fingerprint(s, fp_key) for s in extra_secrets if s}
-        if self.credential_env is not None:
+        if self.username_env is not None:
+            user, password = os.environ.get(self.username_env), os.environ.get(self.password_env)
+            if not user or not password:
+                missing = self.username_env if not user else self.password_env
+                raise IdentityError(f"monitored_agent {self.id!r}: {missing} is not set")
+            if ":" in user:
+                raise IdentityError(f"monitored_agent {self.id!r}: the username in {self.username_env} must not "
+                                    "contain ':' (HTTP Basic)")
+            fps.add(credential_fingerprint(f"{user}:{password}", fp_key))   # the pair, as a judge's is
+        elif self.credential_env is not None:
             value = os.environ.get(self.credential_env) if isinstance(self.credential_env, str) else None
             if not value:
                 raise IdentityError(f"monitored_agent {self.id!r}: credential_env {self.credential_env} is not set")
@@ -767,6 +786,7 @@ class AgentDeclaration:
     def to_record(self) -> dict:
         return {"id": self.id, "model": self.model, "provider": self.provider, "base_url": self.base_url,
                 "credential_env": self.credential_env, "credential": self.credential,
+                "username_env": self.username_env, "password_env": self.password_env,
                 "tenant": dict(self.tenant) if self.tenant else None,
                 "upstream": sorted(validate_upstream(self.upstream, "monitored_agent")) or None}
 
@@ -792,86 +812,94 @@ class SeparationReport:
     judges: tuple[ResolvedIdentity, ...]
     refusals: tuple[str, ...]
 
-    tenant_optin: bool = False
-    tenant_optin_pairs: tuple[dict, ...] = ()
+    tenant_optin: bool = False                 # deprecated flag, recorded as set; it lifts nothing
+    tenant_optin_pairs: tuple[dict, ...] = ()  # always empty now; kept so the ledger record keeps its shape
+    warnings: tuple[dict, ...] = ()            # likely accidents that were allowed: agent, judge, check, detail
 
     def to_record(self) -> dict:
-        return {"ok": self.ok, "rule": "judge_is_not_monitored_agent", "checks": list(SEPARATION_CHECKS),
+        return {"ok": self.ok, "rule": "judge_is_not_monitored_agent", "same_agent": SEPARATION_RULE,
+                "checks": list(SEPARATION_CHECKS), "warning_checks": list(SEPARATION_WARNINGS),
                 "same_provider": "allowed",
                 "same_model_tenant_optin": self.tenant_optin,
                 "same_model_tenant_optin_pairs": list(self.tenant_optin_pairs),
                 "refusals": list(self.refusals),
+                "warnings": [dict(w) for w in self.warnings],
                 "agents": [a.to_record() for a in self.agents],
                 "judges": [j.to_record() for j in self.judges]}
 
 
 TENANT_OPTIN_FLAG = "allow_same_model_distinct_tenant"
-TENANT_OPTIN_WARNING = ("two-key: WARNING: allow_same_model_distinct_tenant is set: a judge running the monitored "
-                        "agent's model on the same endpoint or upstream is allowed when both sides declare "
-                        "different tenants and use different keys. Tenants are declared by the operator, not "
-                        "verified; this is logged as same_model_tenant_optin in constitution_loaded.")
+TENANT_OPTIN_DEPRECATED = ("two-key: allow_same_model_distinct_tenant is deprecated and has no effect: a judge is "
+                           "refused only when it uses the monitored agent's credential on the agent's address")
 
 
-def distinct_tenants(agent: ResolvedIdentity, judge: ResolvedIdentity) -> bool:
-    """Both sides declared a tenant, the scoped tenant ids are non-empty and share nothing, and both sides
-    have a key with different fingerprints. A keyless side (a local daemon) or an undeclared tenant is not."""
-    def keyed(side: ResolvedIdentity) -> bool:
-        return bool(side.credentials) and NO_CREDENTIAL not in side.credentials
-    return (agent.tenant_declared and judge.tenant_declared and bool(agent.tenants) and bool(judge.tenants)
-            and not (agent.tenants & judge.tenants) and keyed(agent) and keyed(judge)
-            and not (agent.credentials & judge.credentials))
-
-
-def same_model_overlap(agent: ResolvedIdentity, judge: ResolvedIdentity) -> bool:
-    """The same normalized model on the same endpoint or a shared upstream route."""
-    return agent.model == judge.model and (agent.endpoint == judge.endpoint or bool(agent.routes & judge.routes))
+def _keyed(side: ResolvedIdentity) -> bool:
+    return bool(side.credentials - {NO_CREDENTIAL})
 
 
 def compare(agent: ResolvedIdentity, judge: ResolvedIdentity, *,
             allow_same_model_distinct_tenant: bool = False) -> str | None:
-    """The refusal for one judge against one agent, or None. The same provider alone is not a match.
+    """The refusal for one judge against one agent, or None.
 
-    With ``allow_same_model_distinct_tenant`` (a logged opt-in, default off), the same model on the same
-    endpoint or upstream is allowed when ``distinct_tenants`` holds. Every other refusal still applies:
-    the same key, an unresolved side, a local proxy with no declared upstream, and a shared tenant id."""
+    A judge is the monitored agent only when it connects to the same address (the normalized endpoint) with the
+    same credential, or with no credential on either side, which leaves Two-Key nothing to tell them apart by.
+    Any other pairing is allowed; ``separation_warnings`` lists the likely accidents among them.
+    ``allow_same_model_distinct_tenant`` is accepted for older callers and ignored."""
+    if agent.endpoint != judge.endpoint:
+        return None
     who = f"judge {judge.id!r} vs agent {agent.id!r}"
-    optin = allow_same_model_distinct_tenant and distinct_tenants(agent, judge)
     if (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
-        return f"{who}: same credential fingerprint"
-    if agent.unresolved or judge.unresolved:
-        side = "agent" if agent.unresolved else "judge"
-        return (f"{who}: {side} upstream unresolved (unrecognized router or host, or a local proxy with no "
-                f"recognizable model maker; declare upstream: to attest it); treated as a match")
-    if agent.model == judge.model:
-        if agent.endpoint == judge.endpoint and not optin:
-            return f"{who}: same model {judge.model!r} on the same endpoint {judge.endpoint}"
-        # A loopback or private endpoint (a LiteLLM-style proxy, a local Ollama daemon), or any host
-        # that is no recognized vendor (a maker/ prefix does not identify it), can forward the same model
-        # to the other side's provider and account without a key of its own. Its upstream and tenant are
-        # unknown unless the operator declares an upstream (compared as a route below).
-        for side, label in ((judge, "judge"), (agent, "agent")):
-            if side.proxy and not side.declared_upstreams:
-                return (f"{who}: same model {judge.model!r} through a local or unrecognized proxy or daemon ({label} at "
-                        f"{side.endpoint}) with no declared upstream; upstream and tenant unknown "
-                        "(declare upstream: on it)")
-        # Declared upstreams count as endpoints: the same model reaching the same upstream is the same
-        # agent. Declared tenants do not lift it; a different account on one upstream is still that model.
-        via = agent.routes & judge.routes
-        if via and not optin:
-            return f"{who}: same model {judge.model!r} through the same upstream {sorted(via)[0]}"
+        return f"{who}: the same credential on the same address {judge.endpoint}"
+    if not _keyed(agent) and not _keyed(judge):
+        return (f"{who}: the same address {judge.endpoint} and no credential on either side, so Two-Key cannot "
+                "tell them apart (give the judge its own endpoint or its own credential)")
+    return None
+
+
+def separation_warnings(agent: ResolvedIdentity, judge: ResolvedIdentity) -> list[dict]:
+    """Likely accidents in a pairing that ``compare`` allows. Each is recorded, never refused."""
+    out: list[dict] = []
+
+    def add(check: str, detail: str) -> None:
+        out.append({"agent": agent.id, "judge": judge.id, "check": check, "detail": detail})
+
+    same_address = agent.endpoint == judge.endpoint
+    if not same_address and (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
+        add("same_credential_other_address",
+            f"the same credential at {agent.endpoint} (agent) and {judge.endpoint} (judge)")
+    if same_address and _keyed(agent) != _keyed(judge):
+        add("same_address_one_side_keyless",
+            f"the same address {judge.endpoint}, and only one side has a credential (a daemon may ignore it)")
+    if agent.model and agent.model == judge.model:
+        if same_address:
+            add("same_model_same_address", f"the same model {judge.model!r} on the same address {judge.endpoint}")
+        else:
+            via = agent.routes & judge.routes
+            if via:
+                add("same_model_shared_route", f"the same model {judge.model!r} through {sorted(via)[0]}")
+            for side, label in ((judge, "judge"), (agent, "agent")):
+                if side.proxy and not side.declared_upstreams:
+                    add("same_model_unknown_proxy",
+                        f"the same model {judge.model!r} through a local or unrecognized proxy or daemon "
+                        f"({label} at {side.endpoint}) with no declared upstream")
+                    break
     shared = agent.tenants & judge.tenants
     if shared:
-        return f"{who}: same tenant {sorted(shared)[0]}"
-    return None
+        add("shared_tenant", f"a shared tenant {sorted(shared)[0]}")
+    for side, label in ((agent, "agent"), (judge, "judge")):
+        if side.unresolved:
+            add("unresolved_identity", f"the {label} upstream is unresolved (an unrecognized router or host, or a "
+                                       "local proxy with no recognizable model maker; declare upstream:)")
+    return out
 
 
 def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[ResolvedIdentity],
                      allow_same_provider_judge: bool | None = None, *,
                      allow_same_model_distinct_tenant: bool = False) -> SeparationReport:
-    """Refuse any judge that is the same agent. ``allow_same_provider_judge`` is a deprecated no-op.
+    """Refuse any judge that is the monitored agent (``compare``); warn on, and record, the likely accidents.
 
-    ``allow_same_model_distinct_tenant`` is the logged opt-in (see ``compare``). When it is set, a warning
-    goes to stderr and the report lists every pair it let through with both tenant labels."""
+    ``allow_same_provider_judge`` and ``allow_same_model_distinct_tenant`` are deprecated no-ops; each prints a
+    note on stderr when set."""
     if not agents:
         raise IdentityError("monitored_agent_required: declare the monitored agent (monitored_agent: model, provider, base_url, "
                             "credential_env) whenever judges are configured")
@@ -879,15 +907,15 @@ def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[Resolv
         warn_allow_same_provider_judge()
     optin = allow_same_model_distinct_tenant is True
     if optin:
-        print(TENANT_OPTIN_WARNING, file=sys.stderr)
-    refusals = [r for a in agents for j in judges
-                if (r := compare(a, j, allow_same_model_distinct_tenant=optin))]
+        print(TENANT_OPTIN_DEPRECATED, file=sys.stderr)
+    refusals = [r for a in agents for j in judges if (r := compare(a, j))]
     if refusals:
-        raise IdentityError("judge_matches_agent: a judge could be the monitored agent: " + "; ".join(refusals))
-    pairs = tuple({"agent": a.id, "judge": j.id, "model": j.model,
-                   "agent_tenant": sorted(a.tenants), "judge_tenant": sorted(j.tenants)}
-                  for a in agents for j in judges if optin and same_model_overlap(a, j))
-    return SeparationReport(True, tuple(agents), tuple(judges), (), optin, pairs)
+        raise IdentityError("judge_matches_agent: a judge is the monitored agent: " + "; ".join(refusals))
+    found = tuple(w for a in agents for j in judges for w in separation_warnings(a, j))
+    for w in found:
+        print(f"two-key: WARNING: judge {w['judge']!r} vs agent {w['agent']!r}: {w['detail']} ({w['check']}); "
+              "allowed and recorded in constitution_loaded", file=sys.stderr)
+    return SeparationReport(True, tuple(agents), tuple(judges), (), optin, (), found)
 
 
 def warn_allow_same_provider_judge() -> None:

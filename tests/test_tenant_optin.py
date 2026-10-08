@@ -1,7 +1,10 @@
-"""allow_same_model_distinct_tenant: a logged opt-in, default off. It lets a judge run the agent's model on
-the same endpoint or upstream only when both sides declare different tenants and both have different keys.
-It is recorded in constitution_loaded (same_model_tenant_optin, both tenant labels), is part of the policy
-digest, and prints a warning. A misspelled flag is refused."""
+"""allow_same_model_distinct_tenant: deprecated, no effect (2026-10-08).
+
+A judge is refused only when it uses the monitored agent's credential on the agent's address, so nothing is
+left for the flag to lift. It is still accepted, recorded in constitution_loaded (same_model_tenant_optin, with
+an always-empty pairs list), part of the policy digest, and it prints a deprecation note. A misspelled flag is
+still refused.
+"""
 
 import io
 import os
@@ -13,7 +16,7 @@ from types import SimpleNamespace
 
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
-from two_key.identity import TENANT_OPTIN_WARNING, AgentDeclaration, compare, judge_identity
+from two_key.identity import TENANT_OPTIN_DEPRECATED, AgentDeclaration, compare, judge_identity
 from two_key.judges.config import JudgeConfigError, load_config
 from two_key.judges.credentials import StaticToken
 from two_key.judges.openai_compat import OpenAICompatibleJudge
@@ -24,8 +27,6 @@ from two_key.quorum import QuorumConfigError, QuorumPolicy
 
 AGENT = {"id": "agent", "model": "gpt-4o", "provider": "openai", "base_url": "https://api.openai.com/v1",
          "credential_env": "OPTIN_AGENT_KEY", "tenant": {"project": "p1"}}
-DAEMON = {"id": "agent", "model": "llama3.1:8b", "provider": "ollama", "base_url": "http://localhost:11434",
-          "credential": "none", "upstream": "localhost:11434", "tenant": {"account": "a"}}
 FP = b"k" * 32
 
 
@@ -39,41 +40,21 @@ class Compare(unittest.TestCase):
         os.environ["OPTIN_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "OPTIN_AGENT_KEY", None)
 
-    def verdict(self, agent, j, flag=True):
+    def verdict(self, agent, j, flag):
         a = AgentDeclaration.from_mapping(agent).resolve(fp_key=FP)
         return compare(a, judge_identity(j, FP), allow_same_model_distinct_tenant=flag)
 
-    def test_distinct_tenants_and_keys_are_allowed_with_the_flag(self):
-        self.assertIsNone(self.verdict(AGENT, judge(tenant={"project": "p2"})))          # same endpoint
-        self.assertIsNone(self.verdict(AGENT, judge(base_url="http://localhost:4000", upstream="api.openai.com",
-                                                    tenant={"project": "p2"})))          # same upstream
+    def test_the_flag_changes_nothing(self):
+        cases = [judge(tenant={"project": "p2"}), judge(), judge(tenant={"project": "P1"}),
+                 judge(base_url="http://localhost:4000", upstream="api.openai.com", tenant={"project": "p2"}),
+                 judge(key="agent-key-K"), judge(key="agent-key-K", base_url="http://localhost:4000")]
+        for j in cases:
+            with self.subTest(base_url=j.base_url, tenant=j.tenant):
+                self.assertEqual(self.verdict(AGENT, j, True), self.verdict(AGENT, j, False))
 
-    def test_flag_off_still_refuses(self):
-        self.assertRegex(self.verdict(AGENT, judge(tenant={"project": "p2"}), flag=False),
-                         "same model 'gpt4o' on the same endpoint")
-        self.assertRegex(self.verdict(AGENT, judge(base_url="http://localhost:4000", upstream="api.openai.com",
-                                                   tenant={"project": "p2"}), flag=False), "through the same upstream")
-
-    def test_same_tenant_is_refused(self):
-        self.assertRegex(self.verdict(AGENT, judge(tenant={"project": "P1"})), "same model .* on the same endpoint")
-
-    def test_one_side_without_a_tenant_is_refused(self):
-        self.assertRegex(self.verdict(AGENT, judge()), "on the same endpoint")
-        self.assertRegex(self.verdict(dict(AGENT, tenant=None), judge(tenant={"project": "p2"})), "on the same endpoint")
-
-    def test_keyless_is_refused(self):
-        self.assertRegex(self.verdict(DAEMON, judge("llama3.1:8b", "http://localhost:11434", key=None,
-                                                    tenant={"account": "b"}, upstream="localhost:11434")),
-                         "on the same endpoint localhost:11434")
-        self.assertRegex(self.verdict(AGENT, judge(key=None, tenant={"project": "p2"})), "on the same endpoint")
-
-    def test_other_refusals_are_untouched(self):
-        # A local proxy with no declared upstream: its upstream and tenant are unknown.
-        self.assertRegex(self.verdict(AGENT, judge(base_url="http://localhost:4000", tenant={"project": "p2"})),
-                         "through a local or unrecognized proxy or daemon")
-        # The same key.
-        self.assertRegex(self.verdict(AGENT, judge(key="agent-key-K", tenant={"project": "p2"})),
-                         "same credential fingerprint")
+    def test_same_credential_on_the_same_address_is_still_refused(self):
+        self.assertRegex(self.verdict(AGENT, judge(key="agent-key-K", tenant={"project": "p2"}), True),
+                         "the same credential on the same address api.openai.com:443")
 
 
 class Config(unittest.TestCase):
@@ -94,7 +75,7 @@ class Config(unittest.TestCase):
                                  "quorum": {"allow_same_model_distinct_tenant": True}})
         self.assertTrue(policy.allow_same_model_distinct_tenant)
 
-    def test_policy_digest_covers_the_flag(self):
+    def test_policy_digest_still_covers_the_flag(self):
         self.assertNotEqual(policy_digest(QuorumPolicy(required_yes=1).to_record()),
                             policy_digest(QuorumPolicy(required_yes=1,
                                                        allow_same_model_distinct_tenant=True).to_record()))
@@ -110,46 +91,43 @@ class EndToEnd(unittest.TestCase):
         self.env = sign_constitution("Searching is fine.", [{"id": "t", "allow_only_tools": ["search"]}], self.key,
                                      {"search": {"irreversible": False, "data_class_floor": "public"}})
 
-    def start(self, flag, tenant):
-        j = OpenAICompatibleJudge("j", "openai", "gpt-4o", "https://api.openai.com/v1", StaticToken("judge-key"))
+    def start(self, flag, tenant, key="judge-key", model="gpt-4o"):
+        j = OpenAICompatibleJudge("j", "openai", model, "https://api.openai.com/v1", StaticToken(key))
         j.tenant = tenant
         err = io.StringIO()
         with redirect_stderr(err):
-            tk = TwoKey(Ledger(Path(self.tmp.name, f"ledger-{flag}-{bool(tenant)}"), self.key), self.key.public_key(),
-                        verify_signed(self.env, self.key.public_key()), [j], private_key=self.key,
-                        quorum=QuorumPolicy(required_yes=1, allow_same_model_distinct_tenant=flag),
+            tk = TwoKey(Ledger(Path(self.tmp.name, f"ledger-{flag}-{bool(tenant)}-{key}"), self.key),
+                        self.key.public_key(), verify_signed(self.env, self.key.public_key()), [j],
+                        private_key=self.key, quorum=QuorumPolicy(required_yes=1, allow_same_model_distinct_tenant=flag),
                         monitored_agent=AGENT)
         return tk, err.getvalue()
 
-    def test_opt_in_is_logged_digested_and_warned(self):
+    def test_flag_set_is_recorded_and_noted_as_deprecated(self):
         tk, err = self.start(True, {"project": "p2"})
-        self.assertIn(TENANT_OPTIN_WARNING, err)
-        self.assertIn("same_model_tenant_optin", err)
+        self.assertIn(TENANT_OPTIN_DEPRECATED, err)
         [loaded] = [e.body for e in tk.ledger.entries if e.kind == "constitution_loaded"]
         self.assertIs(loaded["same_model_tenant_optin"], True)
-        self.assertEqual(loaded["same_model_tenant_optin_pairs"],
-                         [{"agent": "agent", "judge": "j", "model": "gpt4o",
-                           "agent_tenant": ["openai:project:p1"], "judge_tenant": ["openai:project:p2"]}])
+        self.assertEqual(loaded["same_model_tenant_optin_pairs"], [])
         self.assertTrue(loaded["quorum_policy"]["allow_same_model_distinct_tenant"])
         self.assertEqual(loaded["policy_digest"], policy_digest(loaded["quorum_policy"]))
         self.assertIs(loaded["judge_agent_separation"]["same_model_tenant_optin"], True)
 
-    def test_flag_off_refuses_and_does_not_warn(self):
-        with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*on the same endpoint"):
-            self.start(False, {"project": "p2"})
+    def test_same_model_same_address_starts_either_way_with_a_warning(self):
+        for flag in (False, True):
+            with self.subTest(flag=flag):
+                tk, err = self.start(flag, {"project": "p2"})
+                self.assertIn("(same_model_same_address)", err)
+                self.assertTrue(tk.separation.ok)
 
-    def test_flag_on_without_a_judge_tenant_refuses(self):
-        with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*on the same endpoint"):
-            self.start(True, None)
+    def test_the_agents_key_on_the_agents_address_is_refused_either_way(self):
+        for flag in (False, True):
+            with self.subTest(flag=flag):
+                with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*the same credential"):
+                    self.start(flag, {"project": "p2"}, key="agent-key-K")
 
-    def test_default_records_the_opt_in_as_off(self):
-        j = OpenAICompatibleJudge("j", "openai", "gpt-4o-mini", "https://api.openai.com/v1", StaticToken("judge-key"))
-        err = io.StringIO()
-        with redirect_stderr(err):
-            tk = TwoKey(Ledger(Path(self.tmp.name, "ledger-default"), self.key), self.key.public_key(),
-                        verify_signed(self.env, self.key.public_key()), [j], private_key=self.key,
-                        quorum=QuorumPolicy(required_yes=1), monitored_agent=AGENT)
-        self.assertNotIn("allow_same_model_distinct_tenant", err.getvalue())
+    def test_default_records_the_flag_as_off(self):
+        tk, err = self.start(False, None, model="gpt-4o-mini")
+        self.assertNotIn("allow_same_model_distinct_tenant", err)
         [loaded] = [e.body for e in tk.ledger.entries if e.kind == "constitution_loaded"]
         self.assertIs(loaded["same_model_tenant_optin"], False)
         self.assertEqual(loaded["same_model_tenant_optin_pairs"], [])

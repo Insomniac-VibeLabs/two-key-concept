@@ -11,6 +11,7 @@ The request shapes match the judge connectors. No vendor SDK and no streaming.
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import urllib.error
@@ -161,6 +162,8 @@ class MonitoredAgent:
             raise AgentConfigError(f"invalid base_url {base_url!r}")
         if u.scheme == "http" and u.hostname not in LOOPBACK:
             raise AgentConfigError(f"refusing plain-HTTP agent endpoint {base_url!r}")
+        if getattr(credential, "kind", None) == "basic" and u.scheme != "https":
+            raise AgentConfigError(f"refusing a username and password over plain HTTP {base_url!r}; use https")
         self.agent_id, self.provider, self.model = agent_id, provider, model
         self.base_url = base_url.rstrip("/")
         self.hosting = hosting
@@ -181,6 +184,11 @@ class MonitoredAgent:
 
     def _headers(self) -> dict:
         token = self.credential_token()
+        if getattr(self.credential, "kind", None) == "basic":    # username:password, HTTPS only (see __init__)
+            h = {"Authorization": "Basic " + base64.b64encode(token.encode("utf-8")).decode("ascii")} if token else {}
+            if self.kind == "anthropic":
+                h["anthropic-version"] = "2023-06-01"
+            return h
         if self.kind == "anthropic":
             h = {"x-api-key": token, "anthropic-version": "2023-06-01"} if token else {}
             return h

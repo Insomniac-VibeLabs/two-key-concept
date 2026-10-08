@@ -75,15 +75,17 @@ the code wins, then this file should be corrected.
   local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
   still not a skip. `min_distinct_providers` still defaults to 1.
-- A judge that is the monitored agent: the same credential, a shared tenant
-  id, the same model on the same endpoint or upstream (different declared
-  tenants do not lift this unless the logged opt-in
-  `allow_same_model_distinct_tenant` is set and both sides have different
-  declared tenants and different keys), the same
-  model through a loopback or private proxy or daemon with no declared
-  `upstream:` (a keyless local proxy can forward to the agent's own
-  account), or an identity that cannot be resolved refuses to start. The agent is declared by the operator, never
-  by the agent. The same provider is allowed.
+- A judge that is the monitored agent refuses to start. The same agent
+  means the agent's credential (API token, or username and password over
+  HTTPS) on the agent's address, compared as configured (`host:port`,
+  local aliases folded, no DNS), or both sides keyless on one address. Any
+  model and any vendor is allowed otherwise. The likely accidents (the
+  agent's credential elsewhere, one side keyless on the agent's address,
+  the agent's model on its address or through a shared or undeclared
+  proxy, a shared tenant id, an unresolved upstream) start with a warning
+  on stderr and in `constitution_loaded`. The agent is declared by the
+  operator, never by the agent. A judge that reuses the runtime agent's
+  session on one of the declared agents' addresses abstains.
 - A value read twice: every JSON and YAML input refuses a repeated key.
   Oversized or too-deeply nested arguments are a deny before the ledger.
   Inputs stop at 62 levels, two under the encoder's 64, so the ledger and
@@ -115,8 +117,11 @@ the code wins, then this file should be corrected.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
-  provider and its blind spots with the agent. A declared `upstream:` and a
-  `model_prefix` resolution are operator-attested and not verified.
+  provider and its blind spots with the agent, or run the agent's model
+  under another key (a warning, not a refusal). A declared `upstream:` and a
+  `model_prefix` resolution are operator-attested and not verified; they
+  change which warnings print, not what is refused. Two names for one
+  server (a CNAME, or a host name and its IP) are two addresses.
 - Without a local judge, the constitution prose, the action record, and any
   attached tool arguments go to the cloud judges' vendors.
 
@@ -192,8 +197,9 @@ claims to close.
   retry, even if the tool did not run. Exactly-once execution is not claimed.
 - Where `fcntl` is absent, another process can still append. This package
   does not claim cross-process exclusion on those platforms.
-- There is no TEE. Username/password and OAuth device-code judge auth are
-  rejected. Use `env`, `keyring`, or `callback`.
+- There is no TEE. OAuth device-code judge auth is rejected. A username and
+  password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
+  `env`, `keyring`, `callback`, or `basic`.
 - The signatures are not quantum resistant. Ed25519 signs the constitution,
   the ledger head (principal and witness), and capability tokens. A
   sufficiently capable quantum computer could forge an Ed25519 signature.
@@ -304,6 +310,6 @@ above in the release that ships it.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
-- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; HMAC credential fingerprints; local means the loopback, RFC 1918, or fc00::/7 allowlist.
+- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse only on the same address with the same credential, or both keyless; everything else warns and is recorded; HMAC credential fingerprints (a username and password as one pair); addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append.

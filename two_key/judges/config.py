@@ -17,13 +17,13 @@ Format (see examples/judges.yaml):
       require_path_a_first: false      # stored, not a skip
       tool_args_on_derive_deny: false # true sends argument bytes after a derive deny
       # allow_same_provider_judge: deprecated, no effect (the same provider is allowed)
-      # allow_same_model_distinct_tenant: false  # logged opt-in: the agent's model and upstream with different declared tenants and keys
+      # allow_same_model_distinct_tenant: deprecated, no effect (a judge is refused only on the agent's address and credential)
     monitored_agent:             # required; read by identity.load_monitored_agent_file
       id: my-agent
       model: REPLACE_WITH_MODEL
       provider: openai          # a label; recorded, never compared
       base_url: https://api.openai.com/v1
-      credential_env: OPENAI_AGENT_API_KEY   # or credential: none for a keyless loopback agent
+      credential_env: OPENAI_AGENT_API_KEY   # or username_env + password_env (HTTPS only), or credential: none
       # tenant: {organization: org-123}   # optional: organization, project, account, deployment
       # upstream: api.openai.com # declare for a loopback/private proxy or daemon: an alias model, or the same model as a judge
     judges:
@@ -37,7 +37,8 @@ Format (see examples/judges.yaml):
         local_weights: false      # optional; ollama defaults to true
         echo_binding: false       # optional; required true when ballot_binding: echo
 
-Auth types: none | env | keyring | callback.
+Auth types: none | env | keyring | callback | basic. ``basic`` is
+``{type: basic, username_env: NAME, password_env: NAME}``, sent as HTTP Basic over HTTPS only.
 Hooks (``login``, ``fetch_token``, ``callback``) are "module:function" strings
 that are imported at load time. The config file is authored by the principal
 and is trusted to the same degree as code.
@@ -56,7 +57,8 @@ from ..quorum import QuorumConfigError, QuorumPolicy, check_judge_set
 from ..strict import StrictParseError, load_file_strict
 from .anthropic import AnthropicJudge
 from .base import Judge
-from .credentials import (CallbackTokenProvider, CredentialProvider, EnvApiKey, KeyringApiKey, NoCredential)
+from .credentials import (BasicAuthCredential, CallbackTokenProvider, CredentialProvider, EnvApiKey, KeyringApiKey,
+                          NoCredential)
 from .gemini import GeminiJudge
 from .ollama import OllamaJudge
 from .openai_compat import OpenAICompatibleJudge
@@ -80,6 +82,8 @@ QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "time
 TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 makers, 1 local, local yes).
 # vendor and min_vendors are the names through 0.2.1: still accepted, with a note on stderr.
+# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+# Remove "vendor" from JUDGE_KEYS and the build_judge copy list, and "min_vendors" from QUORUM_KEYS.
 QUORUM_PROFILES = {"default", "high_assurance"}
 
 
@@ -111,7 +115,18 @@ def build_credential(auth: Any) -> CredentialProvider:
         return EnvApiKey(auth.get("var", ""))
     if t == "keyring":
         return KeyringApiKey(auth["service"], auth["username"])
-    if t in ("username_password", "oauth_device_code"):
+    if t == "basic":
+        extra = set(auth) - {"type", "username_env", "password_env"}
+        if extra:
+            raise JudgeConfigError(f"auth type basic takes username_env and password_env only, not {sorted(extra)}")
+        names = auth.get("username_env"), auth.get("password_env")
+        if any(not isinstance(n, str) or not n or n.startswith("REPLACE_") for n in names):
+            raise JudgeConfigError("auth type basic needs username_env and password_env: the names of the "
+                                   "environment variables that hold them")
+        return BasicAuthCredential(*names)
+    if t == "username_password":
+        raise JudgeConfigError("username_password is now auth type basic (username_env and password_env; HTTPS only)")
+    if t == "oauth_device_code":
         raise JudgeConfigError(f"{t} is not in the concept line; use auth type env or callback")
     if t == "callback":
         return CallbackTokenProvider(_hook(auth["callback"]))

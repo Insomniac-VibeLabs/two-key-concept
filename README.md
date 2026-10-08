@@ -44,7 +44,9 @@ is going, see [ROADMAP.md](ROADMAP.md).
    `internal_error:` deny, written to the ledger.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. The minimum is one judge, and that judge
-   must not be the monitored agent. A missing, malformed, errored, or
+   must not be the monitored agent: it may run any model from any vendor,
+   but not with the agent's credential on the agent's address. A missing,
+   malformed, errored, or
    timed-out ballot does not count as yes. The default policy has no
    diversity floors. `QuorumPolicy.high_assurance()` (or
    `profile: high_assurance` in judges.yaml) needs judges from at least two
@@ -100,8 +102,8 @@ flowchart TD
   authorize --> pathA
   authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
   judgeText --> pathB
-  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: judge is not the agent"| judges
-  session["agent_session<br/>must not be a judge API key"] --> pathB
+  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused only on the agent's<br/>address with the agent's credential"| judges
+  session["agent_session<br/>a judge on the agent's address<br/>must not present it"] --> pathB
   pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
   judges -->|"yes, no, or abstain"| pathB
   pathA --> gate{"both allow?"}
@@ -111,7 +113,7 @@ flowchart TD
   gate -->|no| ledger
   gate -->|yes| token["Capability token<br/>signed by the capability key"]
   token --> ledger
-  token --> gateway["Tool gateway<br/>public key only, cannot mint"]
+  token --> gateway["Tool gateway<br/>capability public key only, cannot mint<br/>own process or host: designed, not built (#45)"]
   gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
   gateway --> ledger
 ```
@@ -145,25 +147,26 @@ and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 `declared_upstream`), scoped tenant ids (a `tenant:` mapping of
 `organization`, `project`, `account`, or `deployment`, plus what the URL
 shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
-whitespace stripped). It refuses to start (`judge_matches_agent:`) only
-when a judge is the same agent: the same credential, a shared tenant id,
-the same model on the same endpoint (every alias of this machine is one
-endpoint), the same model reaching the same upstream (a declared upstream,
-the endpoint itself, or `ollama.com` for a `-cloud` model, even when the
-two sides declare different tenants), or the same
-model through a loopback, private, or unrecognized proxy or daemon that declares no
-`upstream:` (it could forward to the agent's own account without a key).
-An identity it cannot resolve also refuses, including a local proxy serving
-an alias model unless you declare its `upstream:`. The same provider with a different model is allowed and
-recorded. `allow_same_provider_judge` is accepted and has no effect. The
-quorum flag `allow_same_model_distinct_tenant: true` is a logged opt-in,
-off by default. It allows the agent's model on the same endpoint or upstream
-only when both sides declare different tenants and use different keys. It
-warns on stderr, is recorded as `same_model_tenant_optin` in
-`constitution_loaded`, and is part of `policy_digest`.
-Without a declaration it refuses with `monitored_agent_required:`. The
-result is in the `constitution_loaded` ledger entry. Provider labels are
-never compared. HOWTO has the details.
+whitespace stripped; a username and password are one pair).
+
+A judge may run any model from any vendor. It is the monitored agent, and
+`TwoKey` refuses to start (`judge_matches_agent:`), only when it connects
+to the agent's address (the endpoint `host:port`, every alias of this
+machine folded to `localhost`) with the agent's credential: the same API
+token, the same username and password, or no credential on either side, so
+that nothing tells them apart. Everything else starts. Likely accidents are
+allowed with a `two-key: WARNING:` line on stderr and recorded in
+`constitution_loaded` (`judge_agent_separation.warnings`): the same
+credential on another address, the same model on the same address, the
+same model through a shared route or a local or unrecognized proxy with no
+declared `upstream:`, a shared tenant id, one side keyless on the same
+address, and an identity whose upstream cannot be resolved. Addresses are
+compared as configured; DNS names are not resolved. A username and
+password are sent as HTTP Basic over HTTPS only.
+`allow_same_provider_judge` and `allow_same_model_distinct_tenant` are
+accepted and have no effect. Without a declaration it refuses with
+`monitored_agent_required:`. Provider labels are never compared. HOWTO has
+the details.
 
 Judges vote in parallel under one hard deadline. A missing, malformed, or
 timed-out ballot is an abstention, and an abstention is not a yes. No
@@ -172,9 +175,9 @@ ballot is paired with its judge by position and takes its judge id from
 the judge; a ballot that names another judge abstains
 (`judge_id_mismatch`). A judge
 that is not on a loopback host makes the round deny when `agent_session`
-is missing. If that string equals any judge's credential, local or cloud,
-the ballot abstains with `cloud_judge_reused_agent_session` and the round
-denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
+is missing. If that string equals the credential of a judge, local or
+cloud, that connects to a declared agent's address, the ballot abstains
+with `cloud_judge_reused_agent_session` and the round denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
 session at the model host.
 
 Without a local judge, the constitution prose, the action record, and any
@@ -244,7 +247,7 @@ outside the ledger directory). It is bound to the tool, the argument hash,
 the ledger Merkle root and size at issuance, the constitution hashes,
 `spec_hash`, and the derived form. The gateway is constructed with
 `issuer.verifier()` or with the issuer; either way it keeps only the public
-key. It recomputes the form from the same bytes. It checks the
+half of the capability key. It recomputes the form from the same bytes. It checks the
 signature, expiry, a lifetime no longer than the TTL (`ttl_too_long`), an
 issue time at most 5 s ahead (`issued_in_future`), and that nothing revoked
 or reloaded the constitution after issuance. It writes `redemption_started` before the tool runs. It does not
@@ -255,6 +258,15 @@ refused. The capability key is created once, mode 0600 in a 0700
 directory. Once a token has been issued it is never regenerated: a missing
 or changed key refuses to start. Its fingerprint is recorded in
 `constitution_loaded` and the gateway checks it.
+
+The gateway is meant to run in its own process or on its own host, holding
+the capability public key and a gateway-only ledger role: it reads the
+ledger, refreshes without ending outstanding tokens, and records
+redemptions, without the principal or witness private key. That role is
+designed, not yet built
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
+Today the gateway shares the ledger object of the `TwoKey` process, and
+that object holds the principal, witness, and ledger keys.
 
 ## What this repo leaves out
 

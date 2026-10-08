@@ -25,6 +25,7 @@ Every connector:
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import uuid
@@ -39,6 +40,7 @@ from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge, maker_from_vendor
 from .credentials import CredentialError, CredentialProvider, NoCredential
+from ..identity import endpoint_key
 from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
 
@@ -133,7 +135,7 @@ LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 class LLMJudge(Judge):
     """Base class. Subclasses implement ``_request`` and ``_extract_text``."""
 
-    default_auth_header = "bearer"  # bearer | x-api-key | x-goog-api-key | none
+    default_auth_header = "bearer"  # bearer | x-api-key | x-goog-api-key | none (basic comes with auth type basic)
 
     def __init__(self, judge_id: str, provider: str, model: str, base_url: str,
                  credential: CredentialProvider | None = None, *, timeout: float = 30.0,
@@ -142,6 +144,7 @@ class LLMJudge(Judge):
                  local_weights: bool | None = None, weights_sha256: str | None = None,
                  echo_binding: bool = False, ballot_key: str | None = None, ballot_key_env: str | None = None,
                  receives_proposal: bool = False, vendor: str | None = None):
+        # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
         maker = maker_from_vendor(maker, vendor)
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
@@ -156,6 +159,13 @@ class LLMJudge(Judge):
         self.timeout = timeout
         self.transport = transport or pooled_transport
         self.auth_header = auth_header or self.default_auth_header
+        basic = getattr(self.credential, "kind", None) == "basic"
+        if basic or self.auth_header == "basic":
+            if not basic or auth_header not in (None, "basic"):
+                raise ValueError("auth_header basic goes only with auth type basic (username_env and password_env)")
+            if u.scheme != "https":
+                raise ValueError(f"refusing a username and password over plain HTTP {base_url!r}; use https")
+            self.auth_header = "basic"
         if maker:
             self.maker = maker
         if local_weights is not None:
@@ -186,6 +196,8 @@ class LLMJudge(Judge):
             return {}
         if self.auth_header == "bearer":
             return {"Authorization": f"Bearer {token}"}
+        if self.auth_header == "basic":
+            return {"Authorization": "Basic " + base64.b64encode(token.encode("utf-8")).decode("ascii")}
         if self.auth_header in ("x-api-key", "x-goog-api-key"):
             return {self.auth_header: token}
         raise ValueError(f"unknown auth_header {self.auth_header!r}")
@@ -206,7 +218,10 @@ class LLMJudge(Judge):
                 and not model_is_cloud(self.model))
 
     def score_bound(self, constitution_text: str, action: Action, proposal: str, binding,
-                    agent_session: str | None = None) -> Ballot:
+                    agent_session: str | None = None, agent_endpoints=None) -> Ballot:
+        """Score one action. ``agent_endpoints`` are the declared agents' normalized addresses (TwoKey passes
+        them): a judge that presents the agent session abstains only when it also connects to one of them, the
+        start-up rule. ``None`` (a direct call) keeps the stricter check: any judge presenting the session abstains."""
         echo = self.echo_binding and binding is not None
         if not isinstance(constitution_text, str) or not constitution_text.strip():
             return self.abstain("empty constitution text")
@@ -219,15 +234,21 @@ class LLMJudge(Judge):
         sessions.discard("")
         if self.is_cloud() and not sessions:
             return self.abstain("cloud_judge_session_required")
-        # Second layer behind the start-up check (identity.py), for every judge, local or cloud:
-        # a judge must not call its model with the monitored agent's own credential.
+        # Second layer behind the start-up check (identity.py), for every judge, local or cloud: a judge
+        # must not be the agent, that is, call the agent's address with the agent's own credential.
         tokens = []
         auth = headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
             tokens.append(auth.split(" ", 1)[1].strip())
+        elif auth.lower().startswith("basic "):
+            try:
+                tokens.append(base64.b64decode(auth.split(" ", 1)[1].strip(), validate=True).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                pass
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
         if any(token and token.strip() in sessions for token in tokens):
-            return self.abstain("cloud_judge_reused_agent_session")
+            if agent_endpoints is None or endpoint_key(self.base_url) in agent_endpoints:
+                return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():
             # Two-Key's own call id. It is not a session at the provider.
             headers["X-Two-Key-Judge-Session"] = str(uuid.uuid4())

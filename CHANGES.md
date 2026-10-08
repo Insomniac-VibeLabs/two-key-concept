@@ -592,3 +592,77 @@ On branch `working`. Not tagged. Version unchanged.
   product is more mature and in use. They no longer say not to open a public
   issue for an unfixed security bug. The review findings are public issues
   #45 to #60.
+- **Judge ≠ agent rule (owner's decision, 2026-10-08).** A judge may run
+  any model from any vendor. It is the monitored agent, and refused at
+  start-up (`judge_matches_agent:`), only when it uses the agent's
+  credential on the agent's address, or when both sides are keyless on one
+  address. The credential is the API token, or the username and password as
+  one pair. The address is `host:port` as configured, local aliases folded,
+  with no DNS resolution. The goal is to make the same agent easy to avoid
+  and not exploitable, and to leave everything else to the operator.
+  - Refusals: `same_address_same_credential`,
+    `same_address_no_credential`. A keyless judge next to a keyless agent on
+    one address is always refused.
+  - The overlaps that used to refuse now start with a warning on stderr,
+    and each warning is recorded in `constitution_loaded`
+    (`judge_agent_separation.warnings`, with `same_agent` and
+    `warning_checks`). The checks are `same_credential_other_address`,
+    `same_address_one_side_keyless`, `same_model_same_address`,
+    `same_model_shared_route` (was `same_model_same_upstream`),
+    `same_model_unknown_proxy` (was `same_model_unknown_upstream`),
+    `shared_tenant`, and `unresolved_identity`. `upstream:` and `tenant:`
+    change which warnings print, never what is refused.
+  - `allow_same_model_distinct_tenant` is a deprecated no-op, like
+    `allow_same_provider_judge`. It is still accepted, still in
+    `quorum_policy` and `policy_digest`, and prints a deprecation note.
+    `same_model_tenant_optin_pairs` is always empty.
+  - Username and password auth is accepted as HTTP Basic over HTTPS only:
+    `auth: {type: basic, username_env: ..., password_env: ...}` on a judge
+    (and an agent's `auth:`), and `username_env` / `password_env` instead of
+    `credential_env` in `monitored_agent:`. A plain-HTTP `base_url` with
+    Basic auth is refused. A username containing `:` is refused. The old
+    `username_password` type is still refused, with a message naming
+    `basic`. OAuth device-code is still refused.
+  - The call-time check is address-aware. A judge whose credential equals
+    `agent_session` abstains (`cloud_judge_reused_agent_session`) only when
+    the judge's address is one of the declared agents' addresses.
+  - `quorum` passes keyword arguments a judge's `score_bound` accepts, read
+    from its signature, instead of retrying on `TypeError`. A judge whose
+    own code raises `TypeError` is no longer called twice.
+  - Docs: README, HOWTO (rule, warnings table, trade-offs, auth types),
+    THREAT_MODEL, SCOPE, SECURITY.md, AGENTS.md, llms.txt, and both example
+    configs.
+  - Tests: `tests/test_same_agent_rule.py` (14 tests), and the separation,
+    proxy, tenant opt-in, fingerprint, and fail-closed tests rewritten for
+    the rule. 389 tests (377 before).
+
+  Upgrading:
+
+  1. A configuration that started before still starts, except a keyless
+     judge on the same `host:port` as a keyless agent. Move one of them to
+     another port or give one a credential.
+  2. A configuration that was refused before may now start with warnings.
+     Read the `two-key: WARNING:` lines at start-up, or
+     `judge_agent_separation.warnings` in `constitution_loaded`.
+  3. Alerts that match `same_model_same_upstream` or
+     `same_model_unknown_upstream` should match `same_model_shared_route`
+     and `same_model_unknown_proxy`, and expect them as warnings.
+  4. Remove `allow_same_model_distinct_tenant` when convenient; it does
+     nothing.
+- **#44 follow-up**: every `vendor` / `min_vendors` alias carries
+  `# TODO(remove-vendor-alias)`. The aliases stay through the next release
+  and are then removed. `grep -rn "TODO(remove-vendor-alias)" two_key`
+  finds all 11.
+- Docs (#45): README and HOWTO describe the intended gateway in its own
+  process or host (capability public key only, a gateway-only ledger role
+  without the principal or witness private key, a refresh that keeps
+  outstanding tokens, a read-only audit open), marked designed, not yet
+  built. HOWTO says what happens today with a `Ledger` opened in another
+  process. No behavior change.
+- Docs (#49): HOWTO "If the ledger will not open after a crash" gives a
+  manual recovery: copy, delete `head.json.tmp`, remove trailing lines of
+  `entries.jsonl` until it opens (at most six, or seven with a torn line),
+  then append a `manual_recovery` entry and checkpoint. Checked against a
+  ledger with four uncovered entries and a torn line. A recovery command is
+  still open.
+- llms.txt: test count is 389.

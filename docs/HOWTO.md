@@ -90,16 +90,23 @@ HTTP error abstains.
 
 ## The monitored agent and the judge-is-not-the-agent rule
 
-The minimum is one judge, and no judge may be the monitored agent. Declare
-the agent yourself, never from what the agent reports: the
+The minimum is one judge, and no judge may be the monitored agent. A judge
+may run any model from any vendor. It is the same specific agent only when
+it connects to the agent's address with the agent's credential. You
+declare who the agent is; Two-Key refuses the same agent, and makes likely
+accidents visible rather than blocking them.
+
+Declare the agent yourself, never from what the agent reports: the
 `monitored_agent:` block in judges.yaml (the CLI reads it), or
 `TwoKey(monitored_agent=...)` with a mapping, an `AgentDeclaration`, a
 `MonitoredAgent`, or a list of them. Give `model`, `provider` (a label,
-recorded and never compared), `base_url`, and either `credential_env` (the
-name of the environment variable holding the agent's key) or
-`credential: none` for a keyless loopback or private agent. Optional keys
-are `id`, `tenant`, and `upstream`; any other key is refused. Without a
-declaration, `TwoKey` refuses with `monitored_agent_required:`.
+recorded and never compared), `base_url`, and exactly one credential:
+`credential_env` (the name of the environment variable holding the agent's
+API token), `username_env` with `password_env` (the names of the two
+variables holding a username and password, sent as HTTP Basic over HTTPS
+only), or `credential: none` for a keyless loopback or private agent.
+Optional keys are `id`, `tenant`, and `upstream`; any other key is refused.
+Without a declaration, `TwoKey` refuses with `monitored_agent_required:`.
 
 At startup each judge and agent is resolved to:
 
@@ -134,62 +141,45 @@ At startup each judge and agent is resolved to:
 - a credential fingerprint: HMAC-SHA256 of the key with surrounding
   whitespace stripped, under a per-install key,
   `<ledger>.ledger-key/fingerprint.key` (32 random bytes, created once with
-  O_EXCL, mode 0600). Raw keys are never logged.
+  O_EXCL, mode 0600). A username and password are fingerprinted as one
+  `username:password` pair. Raw keys and passwords are never logged.
 
-`TwoKey` refuses with `judge_matches_agent:` only when a judge is the same
-agent:
+`TwoKey` refuses with `judge_matches_agent:` only when a judge is the
+monitored agent. That takes both of these:
 
-- the same credential fingerprint;
-- a shared tenant id;
-- the same normalized model on the same endpoint `host:port`;
-- the same normalized model where either side is a loopback or private
-  endpoint (a LiteLLM-style proxy or a local daemon, with or without a key)
-  that declares no `upstream:`. Such an endpoint can forward the agent's
-  model to the agent's provider and account, so its upstream and tenant are
-  unknown. Any host that is not a recognized vendor, router, or inference
-  host counts the same way, whatever the model's `maker/` prefix says (for
-  example `litellm`, `host.docker.internal`, `proxy.corp.example`, 100.64.x,
-  or 169.254.x). A local daemon serving its own weights declares its own
-  address (`upstream: localhost:11434`);
-- the same normalized model reaching the same upstream: declared upstreams
-  count as endpoints, and an Ollama cloud model (`:cloud`, `-cloud`) reaches
-  `ollama.com` even through a local daemon. This is
-  `same_model_same_upstream`, and declared tenants do not lift it. Two
-  accounts on one upstream serving one model are still that model from that
-  provider. Upstreams are compared as lower-case `host` or
-  `host:port` with the default port removed;
-- or either side is unresolved: an unrecognized host or router whose model
-  names no maker, or a loopback or private endpoint (a local proxy such as
-  LiteLLM) whose model is an alias with no recognizable maker. Declare
-  `upstream:` (a host or a list, for example `upstream: api.anthropic.com`)
-  to attest where such a proxy routes. It is recorded, not verified.
+- the same address: the same endpoint `host:port` as above, with every alias
+  of this machine folded to `localhost`. Addresses are compared as you
+  configure them; DNS names are not resolved, so two names for one server
+  count as two addresses;
+- the same credential: the same API token or the same username and password
+  (as fingerprints, whitespace stripped), or no credential on either side.
+  Two keyless sides on one address, such as two models on one local Ollama
+  daemon, have nothing to tell them apart, so they are refused whatever their
+  models. Give the judge its own daemon or port, or its own credential.
 
-The same provider or upstream with a different model, the same endpoint
-with a different model, the same model through another endpoint (for
-example a router) with another key and tenant, a local proxy that declares
-a non-overlapping upstream (a different provider, `upstream: api.groq.com`),
-a different daemon, and the same provider on another model or endpoint are
-allowed and recorded
-(`same_provider: allowed`). `allow_same_provider_judge` is accepted, prints
-a deprecation note, and has no effect.
+Everything else starts: any model, any vendor, any route, the same provider,
+the same model through another endpoint, and the same address with a
+different credential. Likely accidents still start, but each prints a
+`two-key: WARNING: judge '<j>' vs agent '<a>': ...` line on stderr and is
+recorded in `constitution_loaded` under `judge_agent_separation.warnings`
+(agent, judge, `check`, detail):
 
-`quorum: allow_same_model_distinct_tenant: true` is a logged opt-in, off by
-default. With it, the same model on the same endpoint or upstream is
-allowed only when all of these hold:
-- both sides declare `tenant:`;
-- the scoped tenant ids are non-empty and share nothing;
-- both sides have a key, and the fingerprints differ.
+| `check` | What it means |
+| --- | --- |
+| `same_credential_other_address` | The judge uses the agent's credential on another address |
+| `same_address_one_side_keyless` | The same address, and only one side has a credential (a daemon may ignore it) |
+| `same_model_same_address` | The same normalized model on the same address, with a different credential |
+| `same_model_shared_route` | The same model reaching a shared route: a declared `upstream:`, the endpoint, or `ollama.com` for a `-cloud` model |
+| `same_model_unknown_proxy` | The same model through a loopback, private, or unrecognized proxy or daemon with no declared `upstream:`, which could forward to the agent's own account |
+| `shared_tenant` | A shared tenant id (an Azure resource or deployment, a Vertex project, a Bedrock account and region, or a declared id) |
+| `unresolved_identity` | An upstream that cannot be resolved (an unrecognized router or host, or a local proxy serving an alias model); declare `upstream:` to attest it |
 
-A keyless side (such as a local daemon), an undeclared tenant, a local proxy
-with no `upstream:`, and an unresolved side are still refused. The flag:
-- prints `two-key: WARNING: allow_same_model_distinct_tenant is set: ...` on stderr;
-- records `same_model_tenant_optin: true` and
-  `same_model_tenant_optin_pairs` (agent, judge, model, and both tenant
-  labels) in `constitution_loaded`;
-- is in `quorum_policy`, so it is part of `policy_digest`.
-
-Tenants are declared, not verified. A misspelled key is refused as
-`unknown quorum keys`.
+`upstream:` and `tenant:` are recorded and not verified. They only change
+which warnings print. `allow_same_provider_judge` and
+`allow_same_model_distinct_tenant` are accepted, print a deprecation note,
+are recorded in `quorum_policy` (and so in `policy_digest`), and have no
+effect: nothing they used to lift is refused any more. A misspelled quorum
+key is still refused as `unknown quorum keys`.
 
 Judge credentials are read at startup for this check, so a judge key that
 cannot be read refuses to start. The result is the `judge_agent_separation`
@@ -207,8 +197,12 @@ from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
-Any judge whose credential equals that session (whitespace stripped)
-abstains with `cloud_judge_reused_agent_session`, and the round denies.
+A judge whose credential equals that session (whitespace stripped, a
+username and password compared as their pair) and that connects to a
+declared agent's address abstains with `cloud_judge_reused_agent_session`,
+and the round denies. This is the start-up rule again, at call time. A
+judge called directly through `convene` without the agents' addresses keeps
+the stricter check: any judge presenting the session abstains.
 
 The in-process placeholder agent `two_key.testing.TEST_AGENT` is accepted
 only with `allow_test_doubles=True` and only when every judge is a test
@@ -488,13 +482,74 @@ a counterparty path is the canonical party. The token is
 single-use. A tool exception does not consume it, so the same token can be
 retried. There is no content scanner on the way in or out.
 
-Username/password and OAuth device-code auth are rejected. Use `env`,
-`keyring`, or `callback`.
+Judge auth types are `none`, `env`, `keyring`, `callback`, and `basic`:
+`{type: basic, username_env: NAME, password_env: NAME}` reads a username and
+password from those two variables and sends them as HTTP Basic, over HTTPS
+only (plain HTTP is refused, loopback included). A monitored agent in
+agents.yaml takes the same `auth:` types. OAuth device-code auth is
+rejected; bring such a token in through `env` or `callback`.
 
 A redemption intent is checkpointed before the tool runs. A crash after that
 intent, including after the tool has returned, does not run the token again.
 A tool exception appends an abort and leaves the token usable. A crash before
 the tool runs also blocks a retry.
+
+### Running the gateway in its own process or host
+
+The intended setup puts the gateway in its own process or on its own host,
+next to the tools, with:
+
+- the capability public key only; it never holds the minting key;
+- a gateway-only ledger role: it reads the ledger and records
+  `redemption_started`, `redemption`, `redemption_aborted`, and
+  `gateway_denied`, without the principal private key or the witness
+  private key;
+- a refresh that sees tokens issued after it opened, without ending
+  outstanding tokens;
+- a read-only open for audit.
+
+This role is designed, not yet built
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
+Today `ToolGateway` takes a `Ledger` object; in the `TwoKey` process, pass
+`tk.ledger` as above. A `Ledger` opened in another process is its own
+in-memory copy: it does not see tokens issued after it opened, so the first
+such redemption is refused (`ledger_size_invalid`, then
+`ledger_failed: ledger file changed by another writer`) unless the gateway
+reopens the ledger before every redemption. Opening a `Ledger` also loads the
+witness key and the ledger key, and writing needs the principal private key,
+so a gateway process today holds the keys that can sign a ledger head.
+
+## If the ledger will not open after a crash
+
+A process killed between a ledger append and the next checkpoint (the OOM
+killer, SIGKILL, power loss) leaves entries the signed head does not cover.
+The next open refuses with `signed head does not match the chain`; a torn last
+line shows as `ledger record rejected (wrong key or tampered ciphertext)`.
+Nothing is lost or forged. Until a recovery command exists
+([#49](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/49)),
+recover by hand:
+
+1. Stop every process that uses the ledger. Copy the ledger directory and
+   its `<ledger>.ledger-key`, `<ledger>.witness`, and `<ledger>.capability`
+   siblings somewhere safe.
+2. Delete `head.json.tmp` in the ledger directory if it exists.
+3. Remove the last line of `entries.jsonl`, then try to open the ledger
+   (`Ledger("ledger", key)`). Repeat until it opens. `authorize` writes at
+   most six entries before its checkpoint, and the gateway one, so this takes
+   at most six tries, or seven with a torn last line. If it still does not
+   open, restore the copy and report it.
+4. Once it opens, record what you did, for example
+   `ledger.append("manual_recovery", {"removed_entries": 3, "reason": "crash before checkpoint"})`
+   and then `ledger.checkpoint()`. Keep the copy: the removed lines exist only
+   there.
+
+The removed entries were never covered by a signed head. `authorize`
+returns a token only after its checkpoint, so no caller holds a token from a
+removed entry. The gateway runs a tool only after `redemption_started` is
+checkpointed, so a removed `redemption_started` means the tool never ran,
+and the token can be redeemed again within its lifetime. A removed
+`redemption` or `redemption_aborted` leaves the signed `redemption_started`
+in place, so a retry is still refused (`already_attempted`).
 
 ## Known trade-offs by configuration
 
@@ -505,34 +560,42 @@ names the setting or declaration that controls it.
   Unicode dashes to ASCII, casefold). Bare maker names such as `openai` map to the
   maker's API host (`api.openai.com`).
 - Omit `tenant` when there is none; an empty mapping `tenant: {}` is refused.
+- A judge is refused only on the agent's address with the agent's
+  credential. Addresses are compared as configured and DNS is not resolved,
+  so two names for one server (a CNAME, or a host name and its IP) count as
+  two addresses, and the agent's credential behind them only warns
+  (`same_credential_other_address`).
+- Two keyless sides on one address are refused whatever their models. Run
+  the judge on another daemon or port, or give one side a credential.
 - Declared `upstream:` and `tenant:` values are trusted as declared, not
-  verified. A false declaration on a proxy can hide that it forwards with
-  the agent's account and key. The same model through another endpoint is
-  accepted by design when upstreams do not overlap.
+  verified. They only change which warnings print, so a false declaration
+  can hide a warning; it cannot let a same-address, same-credential judge
+  start.
 - A maker prefix in a model id (`mistral/gpt-4o`) names the maker, not the
   host that serves it. On a host that is not a recognized vendor, router,
-  or inference host (or any local alias), the same model as the agent is
-  refused (`same_model_unknown_upstream`) unless that side declares an
-  `upstream:` that is not the agent's.
-- A local daemon serving its own weights is refused against the same model
-  until you declare its own address (`upstream: localhost:11434`).
+  or inference host (or any local alias), the same model as the agent
+  starts with a `same_model_unknown_proxy` warning unless that side declares
+  an `upstream:`.
+- A local daemon serving its own weights warns against the same model until
+  you declare its own address (`upstream: localhost:11434`).
 - A private-address `base_url` (RFC 1918, fc00::/7) is treated as a local
-  proxy, so it needs `upstream:` when it serves the agent's model.
+  proxy, so it warns when it serves the agent's model without `upstream:`.
 - This machine's own addresses are read once per process. After an address
   change, restart before relying on how `base_url` hosts fold to `localhost`.
 - A `tenant:` on a proxy is scoped by the provider family its `upstream:`
   reaches, not by the proxy's address.
-- `allow_same_model_distinct_tenant: true` lets a judge run the agent's
-  exact model on the same endpoint under a different declared tenant. It is off by
-  default, warns at startup, and is logged as `same_model_tenant_optin` in
-  `constitution_loaded` (load-time only; not re-checked on each authorize).
-  Leave it off unless the accounts are separate.
-- Two judges, or a judge and the agent, on the same endpoint and model are
-  refused whatever their `tenant:`, unless that flag is set.
+- `allow_same_model_distinct_tenant` and `allow_same_provider_judge` are
+  deprecated no-ops: accepted, recorded in `quorum_policy` (so part of
+  `policy_digest`), and announced on stderr.
+- A judge and the agent on the same address and model with different
+  credentials start, with a `same_model_same_address` warning.
 - The runtime agent is not matched against `monitored_agent:`. The
-  declaration is what is compared.
-- `agents.yaml` in the examples has no `tenant:` or `upstream:`. Add them
-  when the agent runs behind a proxy.
+  declaration is what is compared. At call time `agent_session` is compared
+  with each judge's credential on the declared agents' addresses; it is not
+  compared with the declared agent credential and is not ledgered.
+- `agents.yaml` does not accept `tenant:` or `upstream:`. For an agent
+  behind a proxy, declare it with the `monitored_agent:` block or an
+  `AgentDeclaration`, which do.
 - After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096; `max_denied_jtis` is clamped to at least 1). Concurrent same-jti denies are single-flight: only one append runs at a time; waiters re-check and skip if already marked. Waiters use a timed wait (default 30 seconds; `deny_inflight_wait_seconds` on `ToolGateway` must be finite and positive — `inf`/`nan`/≤0 fall back to 30s): on timeout they still deny fail-closed without marking and without fail-open, so a stuck ledger append cannot hang waiters forever. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
   `constitution_loaded`. Neither a reload nor `revoke` changes the pinned key:

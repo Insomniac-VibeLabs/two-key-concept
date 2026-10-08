@@ -7,9 +7,12 @@
 # Declare the agent you run to TwoKey: TwoKey(monitored_agent=agent), or a
 # list of agents, or the monitored_agent block in judges.yaml for the CLI.
 # Each declared agent is checked against every judge at startup. A judge
-# with the same key, a shared tenant id, or the same model on the same
-# endpoint host:port as an agent refuses to start. Only the top-level key
-# agents is accepted, and a repeated key is refused.
+# with the agent's key on the agent's endpoint host:port, or a keyless judge
+# on a keyless agent's host:port, refuses to start. Other overlaps (the same
+# key elsewhere, the same model on the same host:port, a shared tenant id)
+# start with a warning. This file has no tenant: or upstream: keys; declare
+# those in the monitored_agent block. Only the top-level key agents is
+# accepted, and a repeated key is refused.
 
 agents:
   - id: grok
@@ -42,6 +45,9 @@ agents:
     model: REPLACE_WITH_MODEL
     auth: {type: env, var: GEMINI_AGENT_API_KEY}
 
+  # Keyless. Declared as the monitored agent, it is refused next to a keyless
+  # judge on the same host:port (the local judge in judges.yaml uses 11434).
+  # Serve one of them on another port.
   - id: local-llama
     type: ollama
     provider: local

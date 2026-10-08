@@ -86,7 +86,9 @@ a prototype, report security findings as public issues, per
   `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
   two makers (`min_makers`), one local judge, and a local yes.
 - `tool_specs` is required. A disagreeing claim is a deny.
-- No judge may be the monitored agent.
+- No judge may be the monitored agent: the same credential on the same
+  address, or both keyless on one address, is refused. Other overlaps warn
+  and are recorded. Addresses are compared as configured, without DNS.
 - The gateway verifies only; it never mints.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

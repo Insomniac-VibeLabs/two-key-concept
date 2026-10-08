@@ -14,21 +14,21 @@
 # receives_proposal: true sends that judge the proposal.
 # A judge that is not on a loopback host denies the round unless authorize is
 # given the agent session (two-key authorize --agent-session-env NAME). A judge
-# whose key equals that session abstains (cloud_judge_reused_agent_session).
+# whose key equals that session on one of the declared agents' addresses
+# abstains (cloud_judge_reused_agent_session).
 
 # Only the top-level keys judges, quorum, and monitored_agent are accepted,
 # and a key repeated in one mapping is refused.
 
-# The monitored agent, declared by you, never by the agent. Required. At
-# startup Two-Key refuses (judge_matches_agent:) only when a judge is the
-# same agent: the same credential, a shared tenant id, the same model on
-# the same endpoint host:port, the same model with a shared route
-# (same_model_same_upstream: declared upstream, the endpoint itself, or
-# ollama.com for a -cloud model), or the same model through a local or
-# unrecognized proxy/daemon with no upstream: that is non-overlapping with
-# the other side. An unresolved identity also refuses (for example a local
-# or unrecognized proxy serving an alias model; declare upstream:).
-# The same provider with a different model is allowed.
+# The monitored agent, declared by you, never by the agent. Required. A
+# judge may run any model from any vendor. At startup Two-Key refuses
+# (judge_matches_agent:) only when a judge is the same agent: the agent's
+# credential on the agent's address (host:port as written here, no DNS), or
+# no credential on either side of one address. Likely accidents start with
+# a warning on stderr, recorded in constitution_loaded: the agent's
+# credential at another address, one side keyless on the agent's address,
+# the agent's model on its address or through a shared or undeclared proxy
+# (declare upstream:), a shared tenant id, or an unresolved upstream.
 # This example agent is ChatGPT, which is not one of the judges below.
 monitored_agent:
   id: chatgpt
@@ -36,9 +36,12 @@ monitored_agent:
   provider: openai                   # a label; recorded, never compared
   base_url: https://api.openai.com/v1
   credential_env: OPENAI_AGENT_API_KEY   # the env var name, not the key
+  # username_env: AGENT_USER         # instead of credential_env: HTTP Basic, https only;
+  # password_env: AGENT_PASSWORD     #   the pair is fingerprinted together
   # credential: none                 # instead, only for a keyless loopback/private agent
   # tenant: {organization: org-123}  # optional mapping: organization, project, account, deployment; also on a judge
   # upstream: api.openai.com         # optional, for a local proxy: where it routes (attested, recorded, not verified)
+  # tenant and upstream only change which warnings print; they never let the same agent start.
 
 quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"
@@ -106,4 +109,5 @@ judges:
 # Other working auth modes:
 #   auth: {type: keyring, service: two-key, username: openai}
 #   auth: {type: callback, callback: "my_hooks:get_token"}
-# Username/password and OAuth device-code are rejected on this line.
+#   auth: {type: basic, username_env: JUDGE_USER, password_env: JUDGE_PASSWORD}   # https only
+# OAuth device-code is rejected on this line.
