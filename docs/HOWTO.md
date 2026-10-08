@@ -560,6 +560,10 @@ names the setting or declaration that controls it.
 Open items that no setting changes:
 - Test gaps: the ledger's O_EXCL path, the case-folded control-path check,
   the audit self-check, and five bare `assertRaises`.
+- Each redemption leaves one empty lock file per jti under
+  `<ledger>.redeem-locks/`. Nothing deletes them, because removing a file
+  another process holds a `flock` on is unsafe. The gateway's in-memory
+  per-jti lock is removed once no thread holds or waits on it.
 - Comments that still cite design notes not in the repository.
 
 ## Stop

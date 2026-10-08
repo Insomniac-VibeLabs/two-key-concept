@@ -529,3 +529,10 @@ On branch `working`. Not tagged. Version unchanged.
 - README roadmap table: a row for generic spec field types (after 1.0, not
   scheduled).
 - CHANGES: this section moved to the end, so the log stays oldest first.
+- **#42** — `ToolGateway._locks` no longer grows with every redeemed jti.
+  Each entry is reference-counted under `_locks_guard` (`_lock_refs`) and
+  removed when the last thread that holds or waits on it leaves, including
+  after a tool exception or a lock-file error. No LRU cap, so a held lock is
+  never evicted. The lock files under `<ledger>.redeem-locks/` are unchanged
+  (one per jti, never deleted); HOWTO lists that as an open item. Tests in
+  `tests/test_gateway_locks.py`.
