@@ -581,3 +581,14 @@ On branch `working`. Not tagged. Version unchanged.
      `insufficient_makers`.
   4. `policy_digest` values after the upgrade differ from before it for
      the same settings. Compare digests within one `constitution_loaded`.
+- Docs (#46): `revoke` is described as what it does. It ends tokens issued before
+  the call. It does not stop new approvals and does not survive a restart.
+  HOWTO's "Stop" section is now "Revoke outstanding tokens"; THREAT_MODEL and
+  SECURITY.md say "issued before a revocation"; the HOWTO trade-off line that
+  said a reload or `revoke` changes the pinned capability key is corrected
+  (only a new ledger does). No behavior change.
+- Docs: SECURITY.md and AGENTS.md ask for security findings as public issues
+  while this is a prototype, and say private reporting will start once the
+  product is more mature and in use. They no longer say not to open a public
+  issue for an unfixed security bug. The review findings are public issues
+  #45 to #60.

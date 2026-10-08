@@ -1,9 +1,13 @@
 # Security
 
-This is a prototype. Report vulnerabilities privately to the repository
-admins of Insomniac-VibeLabs: open the repository's Security tab and choose
-"Report a vulnerability" (GitHub private vulnerability reporting). Do not
-open a public issue for an unfixed security bug.
+This is a prototype and a public concept. It has had no independent review and
+has no production use. Security findings are welcome as public issues on this
+repository: the project would rather have them seen and argued over than
+hidden. State what the code does, what the docs claim, and how you checked.
+
+Private vulnerability reporting (the repository's Security tab, "Report a
+vulnerability") will become the channel once the product is more mature and in
+use. This file will say so when that happens.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.
@@ -11,7 +15,8 @@ is how to report a vulnerability. It is not the model.
 ## In scope
 
 - Fail-open on either path (a deny or a missing ballot must not become allow)
-- Token replay, argument substitution, or redemption after revocation
+- Token replay, argument substitution, or redemption of a token issued before
+  a revocation (`revoke` ends earlier tokens; it does not stop new approvals)
 - Ledger tampering that still verifies
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`

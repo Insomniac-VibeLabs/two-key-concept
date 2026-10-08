@@ -535,7 +535,8 @@ names the setting or declaration that controls it.
   when the agent runs behind a proxy.
 - After a successful `gateway_denied` append for a given jti, further denies of that authenticated token still refuse but do not append another `gateway_denied`. The jti is remembered only after append+checkpoint succeed (so a failed ledger write can be retried); the in-memory set is LRU-capped (default 4096; `max_denied_jtis` is clamped to at least 1). Concurrent same-jti denies are single-flight: only one append runs at a time; waiters re-check and skip if already marked. Waiters use a timed wait (default 30 seconds; `deny_inflight_wait_seconds` on `ToolGateway` must be finite and positive — `inf`/`nan`/≤0 fall back to 30s): on timeout they still deny fail-closed without marking and without fail-open, so a stuck ledger append cannot hang waiters forever. `ttl_seconds` still bounds how long a token can be presented.
 - The gateway pins the capability key from the latest
-  `constitution_loaded`. Reload the constitution or revoke to change it.
+  `constitution_loaded`. Neither a reload nor `revoke` changes the pinned key:
+  a missing or different key is refused, and only a new ledger pins a new one.
 - `payload:` paths in a tool spec may overlap each other. Only overlap
   with control paths is refused.
 - `dropped_keys` is checked against every declared path, so the cost grows
@@ -578,10 +579,21 @@ Open items that no setting changes:
   per-jti lock is removed once no thread holds or waits on it.
 - Comments that still cite design notes not in the repository.
 
-## Stop
+## Revoke outstanding tokens
 
 ```python
 tk.revoke("principal stop")
 ```
 
-Outstanding tokens then fail at the gateway.
+This ends every token issued before the call: the gateway refuses them
+(`revoked_or_reloaded`). It is not a kill switch:
+
+- It does not stop new approvals. The same `TwoKey` keeps running both paths,
+  and a token issued after the revoke redeems normally.
+- It does not survive a restart. Any new `TwoKey` writes a fresh
+  `constitution_loaded` entry, which also ends every token issued before it,
+  and then approves calls as usual.
+
+To stop an agent, stop calling `authorize` (or stop the process), and revoke
+to end tokens already issued. A persistent halt that refuses new approvals
+until a ledgered resume is not built.

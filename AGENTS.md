@@ -70,9 +70,9 @@ live outside the ledger directory. The gateway must verify only; it must not
 mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
-agent identity checks: get a security review from the maintainer. Report
-vulnerabilities per [SECURITY.md](SECURITY.md); do not open a public issue for
-an unfixed security bug.
+agent identity checks: get a security review from the maintainer. While this is
+a prototype, report security findings as public issues, per
+[SECURITY.md](SECURITY.md).
 
 ## Fail-closed defaults to preserve
 

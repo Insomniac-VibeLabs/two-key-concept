@@ -91,7 +91,9 @@ the code wins, then this file should be corrected.
 - A token replay, a token used for different argument bytes, a token used
   after expiry (120 seconds unless you change it, at most 300), a token
   whose lifetime exceeds the TTL or whose issue time is in the future, and
-  a token used after revocation or a constitution reload.
+  a token issued before a revocation or a constitution reload and used after
+  it. `revoke` ends earlier tokens only: it does not stop new approvals and it
+  does not survive a restart (see HOWTO, "Revoke outstanding tokens").
 - A second run of a token after `redemption_started` has been checkpointed.
   A tool exception writes `redemption_aborted` and leaves the token usable.
 - A silent edit of a ledger record that still verifies, and opening the log
