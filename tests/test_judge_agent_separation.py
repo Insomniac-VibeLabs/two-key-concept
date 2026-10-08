@@ -1,10 +1,9 @@
 """A judge must not be the monitored agent. Checked at start-up from operator config only.
 
-Owner rule (2026-10-08): a judge may run any model from any vendor. It is the same specific agent only when
-it connects to the same address as the agent with the same credential, or when neither side has a credential
-on that address. Everything else starts; likely accidents (the same model on the same address, a shared
-tenant, a proxy, an unresolved identity, the same key elsewhere) are warned on stderr and recorded in
-constitution_loaded.
+Owner rule (2026-10-08): a judge may run any model from any vendor. It is the same specific agent when it
+holds the agent's credential, at any address, or when neither side has a credential on the same address.
+Everything else starts; likely accidents (the same model on the same address, a shared tenant, a proxy, an
+unresolved identity) are warned on stderr and recorded in constitution_loaded.
 """
 
 import contextlib
@@ -229,6 +228,12 @@ class Refusals(Env):
                                           "model": "claude-sonnet-4-0", "auth": {"type": "env", "var": "SEP_OTHER"}}]})
         self.warned([claude()], "same_model_same_address", agent=agents)
         self.refused([claude(key="other-agent-key")], "the same credential on the same address", agent=agents)
+        self.refused([oai("or", "anthropic/claude-sonnet-4", "https://openrouter.ai/api/v1", " other-agent-key\n")],
+                     r"the same credential \(agent at api.anthropic.com:443, judge at openrouter.ai:443\)",
+                     agent=agents)
+        # A mixed list: a declaration and an agents.yaml agent; the second one's key is found.
+        self.refused([oai("or", "m", "https://openrouter.ai/api/v1", "other-agent-key")],
+                     "judge 'or' vs agent 'claude-agent': the same credential", agent=[AGENT, *agents])
 
 
 class SameProvider(Env):

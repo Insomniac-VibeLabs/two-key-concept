@@ -117,7 +117,8 @@ the code wins, then this file should be corrected.
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
   provider and its blind spots with the agent, or run the agent's model
-  under another key (a warning, not a refusal). A declared `upstream:` and a
+  under another key (allowed; warned on the same address or through a
+  shared or undeclared route, silent through a recognized router). A declared `upstream:` and a
   `model_prefix` resolution are operator-attested and not verified; they
   change which warnings print, not what is refused. Two names for one
   server (a CNAME, or a host name and its IP) are two addresses.

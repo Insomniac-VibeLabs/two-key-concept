@@ -77,7 +77,11 @@ class Rule(EnvVars):
         self.setenv(RULE_PLACEHOLDER="EMPTY")
         a = a.resolve(fp_key=FP)
         msg = compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1", "EMPTY"), FP))
-        self.assertRegex(msg, "give each side its own value or credential: none")
+        self.assertRegex(msg, r"give each side its own value, or leave it off one side: auth: \{type: none\} on a "
+                              "judge, credential: none on the agent")
+        same = compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8000/v1", "EMPTY"), FP))
+        self.assertRegex(same, "on the same address localhost:8000 .give the judge its own address, or its own "
+                               "credential that the server checks")
         self.assertIsNone(compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1", "EMPTY-2"), FP)))
         self.assertIsNone(compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1"), FP)))
 
@@ -122,6 +126,15 @@ class Rule(EnvVars):
                                     build_credential({"type": "env", "var": "RULE_NEVER_SET"}), kind="openai_compatible")
         with self.assertRaisesRegex(IdentityError, "credential could not be read at start-up"):
             configured_agent_identity(unreadable, FP)
+
+    def test_a_keyed_agent_next_to_a_keyless_judge_is_warned(self):
+        a = self.agent(base_url="http://localhost:11434", model="llama3.1:8b")
+        for j in (side("qwen2.5:7b", "http://localhost:11434"),
+                  OllamaJudge("o", "ollama", "qwen2.5:7b", "http://localhost:11434", StaticToken("agent-key"))):
+            with self.subTest(judge=type(j).__name__):
+                ident = judge_identity(j, FP)   # the Ollama judge holds the agent's key but never sends it
+                self.assertIsNone(compare(a, ident))
+                self.assertIn("same_address_one_side_keyless", [w["check"] for w in separation_warnings(a, ident)])
 
     def test_an_unresolved_identity_is_warned_once(self):
         a = self.agent(base_url="https://llm.corp.example/v1", model="agent-model")
@@ -235,6 +248,35 @@ class Basic(EnvVars):
                                   transport=never)
         b = j.score_bound("c", SEARCH, "", None, agent_session="alice:s3cret")
         self.assertEqual(b.error, "cloud_judge_reused_agent_session")
+
+
+class CallTime(unittest.TestCase):
+    """The call-time check: a judge presenting the agent session abstains, whatever header carries it."""
+
+    @staticmethod
+    def never(*a):
+        raise AssertionError("must not call the model")
+
+    def test_key_headers_and_whitespace(self):
+        from two_key.judges.anthropic import AnthropicJudge
+        from two_key.judges.gemini import GeminiJudge
+        judges = [AnthropicJudge("c", "anthropic", "claude-sonnet-4-5", credential=StaticToken(" sess-123\t"),
+                                 base_url="https://claude-proxy.corp.example", transport=self.never),
+                  GeminiJudge("g", "google", "gemini-2.5-pro", credential=StaticToken("sess-123\n"),
+                              base_url="https://gemini-proxy.corp.example", transport=self.never)]
+        for j in judges:
+            for session in ("sess-123", " sess-123\n", ["other", "sess-123 "]):
+                with self.subTest(judge=j.judge_id, session=session):
+                    self.assertEqual(j.score_bound("c", SEARCH, "", None, agent_session=session).error,
+                                     "cloud_judge_reused_agent_session")
+
+    def test_a_session_that_is_not_a_string_fails_closed(self):
+        j = OllamaJudge("q", "ollama", "qwen2.5:7b", credential=StaticToken("sess"), auth_header="bearer",
+                        transport=self.never)
+        for session in (b"sess", bytearray(b"sess"), [b"sess"], {"sess": 1}):
+            with self.subTest(session=session):
+                self.assertEqual(j.score_bound("c", SEARCH, "", None, agent_session=session).error,
+                                 "agent_session must be a string")
 
 
 class ScoreOne(unittest.TestCase):

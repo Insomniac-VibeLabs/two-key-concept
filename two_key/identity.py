@@ -19,7 +19,7 @@ a label, never compared), the endpoint ``base_url``, the credential (the
 name of the environment variable that holds the agent's key,
 ``credential_env``; the two variables that hold a username and password,
 ``username_env`` and ``password_env``, sent as HTTP Basic over HTTPS only; or
-``credential: none`` for a keyless loopback agent), and optionally a
+``credential: none`` for a keyless loopback or private-address agent), and optionally a
 ``tenant`` mapping (see below). If any required field is missing or cannot
 be read, Two-Key refuses to start.
 
@@ -74,11 +74,14 @@ Refusals, judge against agent, message prefix ``judge_matches_agent:``:
 - the same credential fingerprint, at any address: an API token, a
   username/password pair, or any credential the agent declares. A
   placeholder value that a local server ignores (``EMPTY``) counts too: give
-  each side its own value, or ``credential: none``;
+  each side its own value, or leave it off one side (``auth: {type: none}``
+  on a judge, ``credential: none`` on the agent);
 - the same address (normalized ``endpoint``, ``host:port``, every alias of
   this machine folded to ``localhost``) with no credential on either side:
-  Two-Key has nothing to tell them apart by;
-- a judge or agent whose address or credential cannot be read at start-up.
+  Two-Key has nothing to tell them apart by.
+
+Two-Key also refuses to start, with its own message, when a judge's or the
+agent's address or credential cannot be read at start-up.
 
 Everything else is allowed: any model, any vendor, any endpoint. Likely
 accidents are allowed with a warning on stderr, and every warning is
@@ -712,7 +715,7 @@ class AgentDeclaration:
     provider: str
     base_url: str
     credential_env: str | None = None
-    credential: str | None = None        # only "none", for a keyless loopback agent
+    credential: str | None = None        # only "none", for a keyless loopback or private-address agent
     id: str = "monitored-agent"
     tenant: Mapping[str, str] | None = None   # organization / project / account / deployment, if declared
     upstream: Any = None                      # operator-declared upstream host(s), for a proxy; not verified
@@ -853,10 +856,13 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity, *,
     accidents among them. ``allow_same_model_distinct_tenant`` is accepted for older callers and ignored."""
     who = f"judge {judge.id!r} vs agent {agent.id!r}"
     if (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
-        where = (f"on the same address {judge.endpoint}" if agent.endpoint == judge.endpoint
-                 else f"(agent at {agent.endpoint}, judge at {judge.endpoint})")
-        return (f"{who}: the same credential {where}; a credential identifies its holder wherever it is sent "
-                "(for a placeholder a local server ignores, give each side its own value or credential: none)")
+        if agent.endpoint == judge.endpoint:
+            return (f"{who}: the same credential on the same address {judge.endpoint} (give the judge its own "
+                    "address, or its own credential that the server checks)")
+        return (f"{who}: the same credential (agent at {agent.endpoint}, judge at {judge.endpoint}); a credential "
+                "identifies its holder wherever it is sent (for a placeholder a local server ignores, give each side "
+                "its own value, or leave it off one side: auth: {type: none} on a judge, credential: none on the "
+                "agent)")
     if agent.endpoint != judge.endpoint:
         return None
     if not _keyed(agent) and not _keyed(judge):

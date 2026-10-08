@@ -175,9 +175,9 @@ ballot is paired with its judge by position and takes its judge id from
 the judge; a ballot that names another judge abstains
 (`judge_id_mismatch`). A judge
 that is not on a loopback host makes the round deny when `agent_session`
-is missing. If that string equals the credential of a judge, local or
-cloud, that connects to a declared agent's address, the ballot abstains
-with `cloud_judge_reused_agent_session` and the round denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
+is missing. If that string equals the credential of any judge, local or
+cloud, wherever it connects, the ballot abstains with
+`cloud_judge_reused_agent_session` and the round denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
 session at the model host.
 
 Without a local judge, the constitution prose, the action record, and any

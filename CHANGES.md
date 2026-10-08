@@ -739,6 +739,36 @@ On branch `working`. Not tagged. Version unchanged.
     end-to-end call where a judge with the agent's real session abstains
     though the declaration names another key. 395 tests.
 
-  Upgrading from 0.2.1: no change on these two points. 0.2.1 also refused
-  a shared credential at any address and abstained on the session at any
-  address.
+  Upgrading from 0.2.1: 0.2.1 also refused a shared credential at any
+  address and abstained on the session at any address. One difference: a
+  judge configured with the agent's key that never sends it
+  (`auth_header: none`, an Ollama judge's default), or an `ollama` agent
+  whose configured key is never sent, counts as keyless since the review
+  fixes above, so that pairing is no longer refused for the shared key.
+- Review of the change above (an adversarial review workflow: security,
+  docs, tests; 25 findings, 14 confirmed, none a way past the rule). Fixed:
+  - The shared-credential refusal suggested `credential: none`, which a
+    judge does not accept. It now says `auth: {type: none}` on a judge or
+    `credential: none` on the agent. On the same address it says to give the
+    judge its own address or a credential the server checks, because
+    different placeholders on one server that ignores keys only hide that
+    both sides are keyless there. HOWTO says so as a trade-off.
+  - An `agent_session` that is not a string (bytes, for example) silently
+    skipped the call-time check (in 0.2.1 too). The judge now abstains with
+    `agent_session must be a string`, so the round denies.
+  - Stale wording of the old rule: README (call time), HOWTO (section
+    intro), SCOPE.md, THREAT_MODEL (the agent's model under another key is
+    warned only on the same address or a shared or undeclared route), the
+    identity docstring (an unreadable credential has its own message, not
+    `judge_matches_agent:`; `credential: none` is for loopback or private
+    addresses), and a test module docstring.
+  - Tests added: call-time abstain for `x-api-key` and `x-goog-api-key`
+    judges with padded keys and sessions, a non-string session, a keyed
+    agent next to a keyless judge on one server, and an agents.yaml agent's
+    key at another address, alone and in a mixed list. 398 tests.
+
+  Not changed: a `monitored_agent:` declaration cannot say whether the agent
+  sends its key, so a declared Ollama agent with `credential_env` counts as
+  keyed (an agents.yaml `type: ollama` agent counts as keyless).
+  `extra_secrets` on `AgentDeclaration.resolve` can make a keyless agent
+  count as keyed, but nothing in Two-Key passes it.

@@ -227,8 +227,14 @@ class LLMJudge(Judge):
             headers = self._auth_headers()
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(cap_ledger_text(f"credential: {e}"))
-        sessions = {agent_session} if isinstance(agent_session, str) else set(agent_session or ())
-        sessions = {s.strip() for s in sessions if isinstance(s, str)}   # as for fingerprints
+        if agent_session is None or isinstance(agent_session, str):
+            sessions = {agent_session} if agent_session else set()
+        elif (isinstance(agent_session, (list, tuple, set, frozenset))
+              and all(isinstance(s, str) for s in agent_session)):
+            sessions = set(agent_session)
+        else:   # bytes or another type would silently skip the check below, so fail closed
+            return self.abstain("agent_session must be a string")
+        sessions = {s.strip() for s in sessions}   # as for fingerprints
         sessions.discard("")
         if self.is_cloud() and not sessions:
             return self.abstain("cloud_judge_session_required")

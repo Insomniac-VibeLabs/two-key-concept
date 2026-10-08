@@ -91,8 +91,9 @@ HTTP error abstains.
 ## The monitored agent and the judge-is-not-the-agent rule
 
 The minimum is one judge, and no judge may be the monitored agent. A judge
-may run any model from any vendor. It is the same specific agent only when
-it connects to the agent's address with the agent's credential. You
+may run any model from any vendor. It is the same specific agent when it
+holds the agent's credential, at any address, or when neither side has a
+credential on the same address. You
 declare who the agent is; Two-Key refuses the same agent, and makes likely
 accidents visible rather than blocking them.
 
@@ -153,7 +154,10 @@ monitored agent. That is either of these:
   behind a pass-through proxy, under another name for the agent's server, or
   at a provider's alternate host is still the agent. A placeholder that a
   local server ignores (`EMPTY`) counts too: give each side its own value,
-  or `credential: none`;
+  or leave it off one side (`auth: {type: none}` on a judge,
+  `credential: none` on the agent). On one shared server that ignores keys,
+  different placeholders only hide that both sides are keyless there: give
+  the judge its own server or port instead;
 - no credential on either side, on the same address: the same endpoint
   `host:port` as above, with every alias of this machine folded to
   `localhost`. Two keyless sides on one address, such as two models on one
@@ -569,7 +573,11 @@ names the setting or declaration that controls it.
 - Omit `tenant` when there is none; an empty mapping `tenant: {}` is refused.
 - A judge with the agent's credential is refused at any address. Two
   local servers that both ignore their key and share a placeholder value are
-  refused too; give each its own value or `credential: none`.
+  refused too; give each its own value, or leave it off one side
+  (`auth: {type: none}` on a judge, `credential: none` on the agent).
+- Two-Key cannot tell whether a server checks keys. Two sides with
+  different placeholders on one server that ignores them start, with no
+  warning, though the server cannot tell them apart.
 - Two keyless sides on one address are refused whatever their models. Run
   the judge on another daemon or port, or give one side a credential.
   Addresses are compared as configured and DNS is not resolved, so two names
