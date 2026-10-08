@@ -13,6 +13,9 @@ On branch `working`. Not tagged. Version unchanged.
   outside this one (`credentials.py`, `llm.py`, `base.py`, `ollama.py`,
   `quorum.py`, `action.py`, `identity.py`, `core.py`, `strict.py`). No
   behavior change.
+- `pyproject.toml` build requirement raised to `setuptools>=77.0`, the
+  first release that accepts `license = "Apache-2.0"` as an SPDX string
+  (PEP 639). setuptools 76 refuses the file.
 
 ## 0.1.0 — 2026-10-02
 
