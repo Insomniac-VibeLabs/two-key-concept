@@ -29,7 +29,8 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
 
 - Key backup and recovery (target 0.3): encrypted backup and restore of this
   package's own keys (principal, capability, ledger, witness). This is not
-  PKI, X.509 identities, or seed-phrase backup. Those are not planned.
+  PKI or seed-phrase backup. PKI is the item below. Seed phrases are not
+  planned.
 - Ledger export for SIEM (target 0.4): a command that verifies and decrypts
   the ledger locally and writes events without argument values.
 - Inspection hooks for DLP and antivirus (target 0.5): an interface that
@@ -37,16 +38,23 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
   content itself.
 - MCP adapter (target 0.6): an optional proxy in front of the gateway. This
   package is still not an MCP server.
-- Post-quantum signatures (target 0.7): hybrid Ed25519 plus ML-DSA-65 for the
+- PKI and certificate recovery (target 0.7): X.509 identities for the
+  principal, witness, capability issuer, and optionally agents, for personal
+  use (a small local CA) and enterprise use (an existing CA and trust
+  anchors), with revocation recorded in the ledger. Recovery is a backup
+  bundle unlocked by a recovery key for personal use, and a key split k-of-n
+  among custodians for enterprise use. This package does not become a
+  general-purpose certificate authority.
+- Post-quantum signatures (target 0.8): hybrid Ed25519 plus ML-DSA-65 for the
   long-lived signatures (the constitution and the ledger head), sized to this
   repository's scope.
-- FIPS approved mode (target 0.8): an opt-in mode that refuses to start unless
+- FIPS approved mode (target 0.9): an opt-in mode that refuses to start unless
   the cryptography library runs on a FIPS 140-3 validated module in approved
   mode, and that refuses algorithms outside the approved set. This package is
   not FIPS validated today, and that mode would not make it validated.
   Running on a validated module is not the same as this package being
   validated or compliant, and the docs will not describe it that way.
-- Local GUI (target 0.9): a loopback-only interface for configuration and
+- Local GUI (target 0.10): a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. It does not
   hold the principal key, and it is not a hosted or multi-user service.
 

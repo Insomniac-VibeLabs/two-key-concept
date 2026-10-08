@@ -205,10 +205,10 @@ claims to close.
   in front of or beside the gateway, and they would not make this package a
   server or a scanner.
 - Full per-value information-flow tracking, and a content classifier. A
-  tool-spec floor is not a taint label. Scanning engines, PKI, anchoring, and
+  tool-spec floor is not a taint label. Scanning engines, anchoring, and
   seed phrases are not here and are not planned. Planned scanner hooks, key
-  backup, and hybrid signatures are in [ROADMAP.md](../ROADMAP.md). See
-  [SCOPE.md](SCOPE.md).
+  backup, PKI with certificate recovery, and hybrid signatures are in
+  [ROADMAP.md](../ROADMAP.md). See [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
@@ -237,14 +237,26 @@ above in the release that ships it.
   becomes the central one, because an agent that can reach an MCP server
   directly bypasses the proxy. A `tool_specs` draft made from MCP schemas is
   a proposal for the principal to review and sign, not trusted input.
-- Post-quantum signatures (target 0.7). New assets: a second signing key per
+- PKI and certificate recovery (target 0.7). New assets: the certificate
+  authority key (a personal local CA or an enterprise CA), issued
+  certificates, the revocation list, and recovery material (a backup bundle,
+  a recovery key, or key shares). New boundary: certificate validation, meaning
+  chain building to a configured trust anchor, validity period, key usage, and
+  revocation. A stolen CA key lets an attacker mint identities the package
+  accepts, so it is treated as equal to the principal key or higher. Recovery
+  is itself an attack path: a stolen recovery key, enough colluding or
+  coerced custodians, or a social-engineered recovery request can replace an
+  identity. Recovery is meant to be a ledger event and to end with the old
+  certificate revoked. Validity checks depend on a correct clock. Existing
+  bare-key setups stay valid.
+- Post-quantum signatures (target 0.8). New assets: a second signing key per
   signing role, and larger signatures in the constitution, ledger head, and
   possibly tokens. A hybrid signature is meant to verify only when both
   halves verify. New risk to design against: a downgrade, where the
   post-quantum half is stripped. Every signed format carries an algorithm
   identifier, and a verifier that expects the hybrid form refuses a
   classical-only one. Existing 0.2.x ledgers stay readable.
-- FIPS approved mode (target 0.8). New boundary: the cryptographic provider.
+- FIPS approved mode (target 0.9). New boundary: the cryptographic provider.
   The mode is meant to refuse to start unless the library runs on a FIPS
   140-3 validated module in approved mode, and to refuse algorithms outside
   the approved set. The module's certificate and version are meant to be
@@ -253,7 +265,7 @@ above in the release that ships it.
   cover the rest of the host. How a hybrid signature is treated in approved
   mode depends on what the validated module supports, and is decided when
   the mode is built.
-- Local GUI (target 0.9). New boundary: browser to a local server. It is
+- Local GUI (target 0.10). New boundary: browser to a local server. It is
   meant to bind to loopback only and to require a per-session token, which
   is meant to address other local pages, cross-site requests, and DNS
   rebinding. It is the first place decrypted ledger content is displayed, so
