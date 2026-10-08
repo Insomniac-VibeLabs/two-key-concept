@@ -625,7 +625,8 @@ On branch `working`. Not tagged. Version unchanged.
     `basic`. OAuth device-code is still refused.
   - The call-time check is address-aware. A judge whose credential equals
     `agent_session` abstains (`cloud_judge_reused_agent_session`) only when
-    the judge's address is one of the declared agents' addresses.
+    the judge's address is one of the declared agents' addresses. (Reverted
+    below: a shared credential refuses at any address.)
   - `quorum` passes keyword arguments a judge's `score_bound` accepts, read
     from its signature, instead of retrying on `TypeError`. A judge whose
     own code raises `TypeError` is no longer called twice.
@@ -705,8 +706,39 @@ On branch `working`. Not tagged. Version unchanged.
     rule (the same credential and the same address). If `monitored_agent`
     names the wrong address, neither the start-up check nor the call-time
     check sees a judge that uses the agent's session on the real one.
+    (Closed by the next entry: the check no longer depends on the address.)
   - A legacy subclass with a class attribute `vendor = ...` and an explicit
     `maker=` reads its own `.vendor`; `.maker`, the floor, and `describe()`
     use `maker=`.
   - The `score_bound` signature is read on each call. Judge calls are
     network-bound, so a cache is not worth its code.
+- **Judge ≠ agent rule, the credential refuses at any address (owner's
+  decision, 2026-10-08).** A key, token, or password identifies its holder
+  wherever it is sent, so a judge holding the monitored agent's credential is
+  the agent at any address: behind a pass-through proxy, under another name
+  for the agent's server, or at a provider's alternate host. The address
+  still decides only for keyless sides.
+  - Refusals: `same_credential` (at any address) and
+    `same_address_no_credential`. `same_agent` in the ledger record is
+    `same_credential_or_keyless_same_address`.
+  - The `same_credential_other_address` warning is gone; that case now
+    refuses. The message names both addresses and says what to do for a
+    placeholder a local server ignores (`EMPTY`): give each side its own
+    value, or `credential: none`.
+  - The call-time check no longer depends on the address: a judge whose
+    credential equals `agent_session` abstains
+    (`cloud_judge_reused_agent_session`) wherever it connects, as in 0.2.1.
+    It now catches a judge holding the agent's real session even when
+    `monitored_agent` names the wrong key or address.
+  - The `agent_endpoints` argument (added earlier on this branch, never
+    released) is removed from `convene`, `score_bound`, and `_score_one`.
+  - Docs: README, HOWTO, THREAT_MODEL, SECURITY.md, AGENTS.md, llms.txt,
+    both example configs, and the identity docstring.
+  - Tests: refusal at another address (a router, a pass-through proxy,
+    another name for the server), the placeholder message, and an
+    end-to-end call where a judge with the agent's real session abstains
+    though the declaration names another key. 395 tests.
+
+  Upgrading from 0.2.1: no change on these two points. 0.2.1 also refused
+  a shared credential at any address and abstained on the session at any
+  address.

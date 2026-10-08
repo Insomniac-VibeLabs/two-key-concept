@@ -145,20 +145,24 @@ At startup each judge and agent is resolved to:
   `username:password` pair. Raw keys and passwords are never logged.
 
 `TwoKey` refuses with `judge_matches_agent:` only when a judge is the
-monitored agent. That takes both of these:
+monitored agent. That is either of these:
 
-- the same address: the same endpoint `host:port` as above, with every alias
-  of this machine folded to `localhost`. Addresses are compared as you
-  configure them; DNS names are not resolved, so two names for one server
-  count as two addresses;
-- the same credential: the same API token or the same username and password
-  (as fingerprints, whitespace stripped), or no credential on either side.
-  Two keyless sides on one address, such as two models on one local Ollama
-  daemon, have nothing to tell them apart, so they are refused whatever their
-  models. Give the judge its own daemon or port, or its own credential.
-  A side counts as keyless when it sends no credential, whatever is
-  configured: a judge with `auth_header: none` (an Ollama judge's default)
-  and an `ollama` agent without Basic auth send none.
+- the same credential, at any address: the same API token or the same
+  username and password (as fingerprints, whitespace stripped). A credential
+  identifies its holder wherever it is sent, so a judge with the agent's key
+  behind a pass-through proxy, under another name for the agent's server, or
+  at a provider's alternate host is still the agent. A placeholder that a
+  local server ignores (`EMPTY`) counts too: give each side its own value,
+  or `credential: none`;
+- no credential on either side, on the same address: the same endpoint
+  `host:port` as above, with every alias of this machine folded to
+  `localhost`. Two keyless sides on one address, such as two models on one
+  local Ollama daemon, have nothing to tell them apart, so they are refused
+  whatever their models. Give the judge its own daemon or port, or its own
+  credential. A side counts as keyless when it sends no credential, whatever
+  is configured: a judge with `auth_header: none` (an Ollama judge's
+  default) and an `ollama` agent without Basic auth send none. Addresses are
+  compared as you configure them; DNS names are not resolved.
 
 Everything else starts: any model, any vendor, any route, the same provider,
 the same model through another endpoint, and the same address with a
@@ -169,7 +173,6 @@ recorded in `constitution_loaded` under `judge_agent_separation.warnings`
 
 | `check` | What it means |
 | --- | --- |
-| `same_credential_other_address` | The judge uses the agent's credential on another address |
 | `same_address_one_side_keyless` | The same address, and only one side has a credential (a daemon may ignore it) |
 | `same_model_same_address` | The same normalized model on the same address, with a different credential |
 | `same_model_shared_route` | The same model reaching a shared route: a declared `upstream:`, the endpoint, or `ollama.com` for a `-cloud` model |
@@ -202,14 +205,11 @@ from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
 A judge whose credential equals that session (whitespace stripped, a
-username and password compared as their pair) and that connects to a
-declared agent's address abstains with `cloud_judge_reused_agent_session`,
-and the round denies. This is the start-up rule again, at call time, so it
-relies on `monitored_agent:` naming the address the agent really uses: a
-judge with the agent's session on an address you did not declare is not
-caught by either check. A judge called directly through `convene` without
-the agents' addresses keeps the stricter check: any judge presenting the
-session abstains.
+username and password compared as their pair) abstains with
+`cloud_judge_reused_agent_session`, wherever it connects, and the round
+denies. This is the start-up rule again, at call time, with the session the
+agent really uses: it catches a judge holding the agent's key even when
+`monitored_agent:` names the wrong key or address.
 
 The in-process placeholder agent `two_key.testing.TEST_AGENT` is accepted
 only with `allow_test_doubles=True` and only when every judge is a test
@@ -567,16 +567,16 @@ names the setting or declaration that controls it.
   Unicode dashes to ASCII, casefold). Bare maker names such as `openai` map to the
   maker's API host (`api.openai.com`).
 - Omit `tenant` when there is none; an empty mapping `tenant: {}` is refused.
-- A judge is refused only on the agent's address with the agent's
-  credential. Addresses are compared as configured and DNS is not resolved,
-  so two names for one server (a CNAME, or a host name and its IP) count as
-  two addresses, and the agent's credential behind them only warns
-  (`same_credential_other_address`).
+- A judge with the agent's credential is refused at any address. Two
+  local servers that both ignore their key and share a placeholder value are
+  refused too; give each its own value or `credential: none`.
 - Two keyless sides on one address are refused whatever their models. Run
   the judge on another daemon or port, or give one side a credential.
+  Addresses are compared as configured and DNS is not resolved, so two names
+  for one keyless server count as two addresses.
 - Declared `upstream:` and `tenant:` values are trusted as declared, not
   verified. They only change which warnings print, so a false declaration
-  can hide a warning; it cannot let a same-address, same-credential judge
+  can hide a warning; it cannot let a judge with the agent's credential
   start.
 - A maker prefix in a model id (`mistral/gpt-4o`) names the maker, not the
   host that serves it. On a host that is not a recognized vendor, router,
@@ -598,8 +598,8 @@ names the setting or declaration that controls it.
   credentials start, with a `same_model_same_address` warning.
 - The runtime agent is not matched against `monitored_agent:`. The
   declaration is what is compared. At call time `agent_session` is compared
-  with each judge's credential on the declared agents' addresses; it is not
-  compared with the declared agent credential and is not ledgered.
+  with each judge's credential, at any address; it is not compared with the
+  declared agent credential and is not ledgered.
 - `agents.yaml` does not accept `tenant:` or `upstream:`. For an agent
   behind a proxy, declare it with the `monitored_agent:` block or an
   `AgentDeclaration`, which do.

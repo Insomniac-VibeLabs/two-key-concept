@@ -3,10 +3,13 @@ Two-Key: a Path B judge must not be the monitored agent
 =======================================================
 The rule (the owner's, revised 2026-10-08): at least one judge, and no judge
 may be the *same specific agent* as the monitored agent. A judge may run any
-model from any vendor. It is the same agent only when it connects to the same
-address as the agent with the same credential. ``TwoKey`` checks it when it
-starts and refuses with ``TwoKeyConfigError``. The operator configures who the
-agent is; Two-Key refuses the same agent and makes likely accidents visible.
+model from any vendor. It is the same agent when it holds the agent's
+credential, wherever it connects: a key, token, or password identifies its
+holder, so the address it is sent to does not matter. Two sides with no
+credential have only their address to tell them apart, so they are the same
+agent on the same address. ``TwoKey`` checks it when it starts and refuses
+with ``TwoKeyConfigError``. The operator configures who the agent is; Two-Key
+refuses the same agent and makes likely accidents visible.
 
 The agent's identity comes only from operator configuration
 (``TwoKey(monitored_agent=...)``, the ``monitored_agent:`` block of
@@ -68,29 +71,30 @@ Each judge and agent is resolved to:
 
 Refusals, judge against agent, message prefix ``judge_matches_agent:``:
 
+- the same credential fingerprint, at any address: an API token, a
+  username/password pair, or any credential the agent declares. A
+  placeholder value that a local server ignores (``EMPTY``) counts too: give
+  each side its own value, or ``credential: none``;
 - the same address (normalized ``endpoint``, ``host:port``, every alias of
-  this machine folded to ``localhost``) and the same credential fingerprint:
-  an API token, a username/password pair, or any credential the agent
-  declares;
-- the same address with no credential on either side: Two-Key has nothing to
-  tell them apart by;
+  this machine folded to ``localhost``) with no credential on either side:
+  Two-Key has nothing to tell them apart by;
 - a judge or agent whose address or credential cannot be read at start-up.
 
 Everything else is allowed: any model, any vendor, any endpoint. Likely
 accidents are allowed with a warning on stderr, and every warning is
 recorded in ``constitution_loaded`` (``judge_agent_separation.warnings``):
-the same credential on a different address, one side without a credential on
-the same address, the same model on the same address, the same model through
-a shared route or through a local or unrecognized proxy with no declared
-``upstream:``, a shared tenant id, and an identity whose upstream cannot be
-resolved. Addresses are compared as configured; DNS names are not resolved.
+one side without a credential on the same address, the same model on the
+same address, the same model through a shared route or through a local or
+unrecognized proxy with no declared ``upstream:``, a shared tenant id, and an
+identity whose upstream cannot be resolved. Addresses are compared as
+configured; DNS names are not resolved.
 
 ``allow_same_model_distinct_tenant`` and ``allow_same_provider_judge`` are
 deprecated no-ops: nothing they used to lift is refused any more.
 
 The runtime check stays as a second layer: a judge whose credential equals
-the frozen agent session, and that connects to one of the declared agents'
-addresses, abstains with ``cloud_judge_reused_agent_session``.
+the frozen agent session abstains with ``cloud_judge_reused_agent_session``,
+wherever it connects.
 """
 
 from __future__ import annotations
@@ -119,10 +123,10 @@ AGENT_KEYS = {"id", "model", "provider", "base_url", "credential_env", "credenti
               "tenant", "upstream"}
 TENANT_KEYS = ("organization", "project", "account", "deployment")
 # What refuses a judge (the same specific agent), and what only warns (a likely accident, recorded).
-SEPARATION_RULE = "same_address_and_same_credential"
-SEPARATION_CHECKS = ("same_address_same_credential", "same_address_no_credential")
-SEPARATION_WARNINGS = ("same_credential_other_address", "same_address_one_side_keyless", "same_model_same_address",
-                       "same_model_shared_route", "same_model_unknown_proxy", "shared_tenant", "unresolved_identity")
+SEPARATION_RULE = "same_credential_or_keyless_same_address"
+SEPARATION_CHECKS = ("same_credential", "same_address_no_credential")
+SEPARATION_WARNINGS = ("same_address_one_side_keyless", "same_model_same_address", "same_model_shared_route",
+                       "same_model_unknown_proxy", "shared_tenant", "unresolved_identity")
 
 
 class IdentityError(ValueError):
@@ -832,7 +836,7 @@ class SeparationReport:
 
 
 TENANT_OPTIN_DEPRECATED = ("two-key: allow_same_model_distinct_tenant is deprecated and has no effect: a judge is "
-                           "refused only when it uses the monitored agent's credential on the agent's address")
+                           "refused when it uses the monitored agent's credential, at any address")
 
 
 def _keyed(side: ResolvedIdentity) -> bool:
@@ -843,15 +847,18 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity, *,
             allow_same_model_distinct_tenant: bool = False) -> str | None:
     """The refusal for one judge against one agent, or None.
 
-    A judge is the monitored agent only when it connects to the same address (the normalized endpoint) with the
-    same credential, or with no credential on either side, which leaves Two-Key nothing to tell them apart by.
-    Any other pairing is allowed; ``separation_warnings`` lists the likely accidents among them.
-    ``allow_same_model_distinct_tenant`` is accepted for older callers and ignored."""
-    if agent.endpoint != judge.endpoint:
-        return None
+    A judge is the monitored agent when it holds the agent's credential, at any address (a credential identifies
+    its holder), or when it connects to the agent's address with no credential on either side, which leaves
+    Two-Key nothing to tell them apart by. Any other pairing is allowed; ``separation_warnings`` lists the likely
+    accidents among them. ``allow_same_model_distinct_tenant`` is accepted for older callers and ignored."""
     who = f"judge {judge.id!r} vs agent {agent.id!r}"
     if (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
-        return f"{who}: the same credential on the same address {judge.endpoint}"
+        where = (f"on the same address {judge.endpoint}" if agent.endpoint == judge.endpoint
+                 else f"(agent at {agent.endpoint}, judge at {judge.endpoint})")
+        return (f"{who}: the same credential {where}; a credential identifies its holder wherever it is sent "
+                "(for a placeholder a local server ignores, give each side its own value or credential: none)")
+    if agent.endpoint != judge.endpoint:
+        return None
     if not _keyed(agent) and not _keyed(judge):
         return (f"{who}: the same address {judge.endpoint} and no credential on either side, so Two-Key cannot "
                 "tell them apart (give the judge its own endpoint or its own credential)")
@@ -866,9 +873,6 @@ def separation_warnings(agent: ResolvedIdentity, judge: ResolvedIdentity) -> lis
         out.append({"agent": agent.id, "judge": judge.id, "check": check, "detail": detail})
 
     same_address = agent.endpoint == judge.endpoint
-    if not same_address and (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
-        add("same_credential_other_address",
-            f"the same credential at {agent.endpoint} (agent) and {judge.endpoint} (judge)")
     if same_address and _keyed(agent) != _keyed(judge):
         add("same_address_one_side_keyless",
             f"the same address {judge.endpoint}, and only one side has a credential (a daemon may ignore it)")

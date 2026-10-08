@@ -110,9 +110,9 @@ class QuorumPolicy:
     # After a derive deny, do not attach tool arguments to the judge record.
     # Set true to send those bytes anyway. Path B still runs either way.
     tool_args_on_derive_deny: bool = False
-    # Deprecated, no effect (2026-10-08): a judge is refused only when it uses the monitored agent's credential
-    # on the agent's address (identity.compare), so there is nothing left for this flag to lift. Still accepted,
-    # recorded and part of the policy digest, with a note on stderr, so older configurations load.
+    # Deprecated, no effect (2026-10-08): a judge is refused when it uses the monitored agent's credential, or is
+    # keyless on a keyless agent's address (identity.compare), so there is nothing left for this flag to lift.
+    # Still accepted, recorded and part of the policy digest, with a note on stderr, so older configurations load.
     allow_same_model_distinct_tenant: bool = False
 
 
@@ -353,12 +353,11 @@ def _accepted(fn, kw: Mapping) -> dict:
 
 
 def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
-               binding: Mapping[str, str] | None = None, agent_session: str | None = None,
-               agent_endpoints: frozenset[str] | None = None) -> Ballot:
+               binding: Mapping[str, str] | None = None, agent_session: str | None = None) -> Ballot:
     try:
         sb = getattr(j, "score_bound", None)
         if sb is not None:
-            kw = _accepted(sb, {"agent_session": agent_session, "agent_endpoints": agent_endpoints})
+            kw = _accepted(sb, {"agent_session": agent_session})
             b = sb(constitution_text, action, proposal, binding, **kw)
         else:
             b = j.score(constitution_text, action, proposal)
@@ -380,12 +379,12 @@ def _score_one(j: Judge, constitution_text: str, action: Action, proposal: str,
 
 def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, proposal: str,
              policy: QuorumPolicy, binding: Mapping[str, str] | None = None,
-             agent_session: str | None = None, agent_endpoints: frozenset[str] | None = None) -> list[Ballot]:
+             agent_session: str | None = None) -> list[Ballot]:
     if not judges:
         return []
     if not policy.parallel and policy.timeout_seconds is None:
-        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session,
-                           agent_endpoints) for j in judges]
+        return [_score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding, agent_session)
+                for j in judges]
     # One daemon thread per judge: a hung judge can neither delay the decision past the deadline
     # nor keep the process alive at exit (its HTTP timeout ends the thread eventually).
     results: list[Ballot | None] = [None] * len(judges)
@@ -393,7 +392,7 @@ def _collect(judges: Sequence[Judge], constitution_text: str, action: Action, pr
 
     def run(i: int, j: Judge) -> None:
         results[i] = _score_one(j, constitution_text, action, _proposal_for(j, proposal, policy), binding,
-                                agent_session, agent_endpoints)
+                                agent_session)
         done[i].set()
 
     deadline = None if policy.timeout_seconds is None else time.monotonic() + policy.timeout_seconds
@@ -425,13 +424,10 @@ def convene(
     binding: Mapping[str, str] | None = None,
     tool_args: Mapping | None = None,
     agent_session: str | None = None,
-    agent_endpoints: frozenset[str] | None = None,
 ) -> QuorumResult:
     """Convene the judges.
 
     ``binding`` = {action_hash, constitution_hash, nl_hash, bytecode_hash} (Two-Key always passes it).
-    ``agent_endpoints`` = the declared agents' normalized addresses (Two-Key passes them), for the judges'
-    runtime same-agent check.
     """
     policy = (policy or QuorumPolicy()).resolved(len(judges))
     k_floor = policy.effective_min_responding
@@ -448,8 +444,7 @@ def convene(
     selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
     if judges and not duplicate and selection is None:
         ballots = [_bind(b, binding, policy)
-                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session,
-                                      agent_endpoints)]
+                   for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
     responding = [b for b in ballots if b.responded]
     abstain = len(ballots) - len(responding)
 

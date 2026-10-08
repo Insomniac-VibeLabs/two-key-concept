@@ -16,7 +16,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(394 tests, no network).
+(395 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
@@ -28,10 +28,10 @@ and a local yes. vendor/min_vendors are deprecated aliases (through 0.2.1).
 TwoKey needs monitored_agent, declared by the operator. A judge may run any
 model from any vendor. It refuses a judge that is the same agent: the same
 credential fingerprint (HMAC, per-install key; API token, or username and
-password as one pair, Basic over HTTPS only) on the same address (host:port
-as configured, local aliases folded, no DNS), or both sides keyless on one
-address. Other overlaps start with a warning on stderr and in
-constitution_loaded: same_credential_other_address,
+password as one pair, Basic over HTTPS only) at any address, or both sides
+keyless on one address (host:port as configured, local aliases folded, no
+DNS). A judge presenting agent_session abstains at any address. Other
+overlaps start with a warning on stderr and in constitution_loaded:
 same_address_one_side_keyless, same_model_same_address,
 same_model_shared_route, same_model_unknown_proxy, shared_tenant,
 unresolved_identity. allow_same_model_distinct_tenant and

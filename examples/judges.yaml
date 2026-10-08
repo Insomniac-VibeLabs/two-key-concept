@@ -14,8 +14,8 @@
 # receives_proposal: true sends that judge the proposal.
 # A judge that is not on a loopback host denies the round unless authorize is
 # given the agent session (two-key authorize --agent-session-env NAME). A judge
-# whose key equals that session on one of the declared agents' addresses
-# abstains (cloud_judge_reused_agent_session).
+# whose key equals that session abstains, wherever it connects
+# (cloud_judge_reused_agent_session).
 
 # Only the top-level keys judges, quorum, and monitored_agent are accepted,
 # and a key repeated in one mapping is refused.
@@ -23,12 +23,12 @@
 # The monitored agent, declared by you, never by the agent. Required. A
 # judge may run any model from any vendor. At startup Two-Key refuses
 # (judge_matches_agent:) only when a judge is the same agent: the agent's
-# credential on the agent's address (host:port as written here, no DNS), or
-# no credential on either side of one address. Likely accidents start with
-# a warning on stderr, recorded in constitution_loaded: the agent's
-# credential at another address, one side keyless on the agent's address,
-# the agent's model on its address or through a shared or undeclared proxy
-# (declare upstream:), a shared tenant id, or an unresolved upstream.
+# credential at any address (a key identifies its holder), or no credential
+# on either side of one address (host:port as written here, no DNS). Likely
+# accidents start with a warning on stderr, recorded in constitution_loaded:
+# one side keyless on the agent's address, the agent's model on its address
+# or through a shared or undeclared proxy (declare upstream:), a shared
+# tenant id, or an unresolved upstream.
 # This example agent is ChatGPT, which is not one of the judges below.
 monitored_agent:
   id: chatgpt

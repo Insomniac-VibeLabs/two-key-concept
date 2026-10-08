@@ -97,13 +97,11 @@ class Fingerprint(unittest.TestCase):
 class Separation(Env):
     def test_agent_key_with_a_trailing_newline_still_matches_the_judge(self):
         os.environ["SEP_AGENT_KEY"] = "agent-secret-key\n"
-        # On the agent's address the same key (whitespace aside) is the same agent: refused.
+        # The same key, whitespace aside, is the same agent, on its address or any other.
         same_address = OpenAICompatibleJudge("x", "xai", "grok-3-mini", "https://api.x.ai/v1",
                                              StaticToken("  agent-secret-key"))
         self.refused([same_address], "the same credential on the same address api.x.ai:443")
-        # On another address it is allowed, and the shared key is recorded as a warning.
-        tk = self.warned([claude(key="  agent-secret-key")], "same_credential_other_address")
-        self.assertTrue(tk.separation.ok)
+        self.refused([claude(key="  agent-secret-key")], r"the same credential \(agent at api.x.ai:443")
 
     def test_ledger_records_hmac_fingerprints_and_the_key_id(self):
         tk = self.started([claude()])

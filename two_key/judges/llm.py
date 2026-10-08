@@ -40,7 +40,6 @@ from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
 from .base import Ballot, Judge, maker_from_vendor
 from .credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
-from ..identity import endpoint_key
 from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
 
@@ -218,10 +217,9 @@ class LLMJudge(Judge):
                 and not model_is_cloud(self.model))
 
     def score_bound(self, constitution_text: str, action: Action, proposal: str, binding,
-                    agent_session: str | None = None, agent_endpoints=None) -> Ballot:
-        """Score one action. ``agent_endpoints`` are the declared agents' normalized addresses (TwoKey passes
-        them): a judge that presents the agent session abstains only when it also connects to one of them, the
-        start-up rule. ``None`` (a direct call) keeps the stricter check: any judge presenting the session abstains."""
+                    agent_session: str | None = None) -> Ballot:
+        """Score one action. A judge that presents the agent session abstains, wherever it connects: a credential
+        identifies its holder (the start-up rule, again at call time)."""
         echo = self.echo_binding and binding is not None
         if not isinstance(constitution_text, str) or not constitution_text.strip():
             return self.abstain("empty constitution text")
@@ -235,7 +233,7 @@ class LLMJudge(Judge):
         if self.is_cloud() and not sessions:
             return self.abstain("cloud_judge_session_required")
         # Second layer behind the start-up check (identity.py), for every judge, local or cloud: a judge
-        # must not be the agent, that is, call the agent's address with the agent's own credential.
+        # must not be the agent, that is, present the agent's own credential, to any address.
         tokens = []
         auth = headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
@@ -247,8 +245,7 @@ class LLMJudge(Judge):
                 pass
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
         if any(token and token.strip() in sessions for token in tokens):
-            if agent_endpoints is None or endpoint_key(self.base_url) in agent_endpoints:
-                return self.abstain("cloud_judge_reused_agent_session")
+            return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():
             # Two-Key's own call id. It is not a session at the provider.
             headers["X-Two-Key-Judge-Session"] = str(uuid.uuid4())

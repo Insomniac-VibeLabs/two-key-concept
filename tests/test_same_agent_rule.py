@@ -1,7 +1,7 @@
 """The judge-is-not-the-agent rule (owner decision, 2026-10-08).
 
-A judge is the same specific agent only when it connects to the same address with the same credential (an
-API token, a username/password pair, or a session), or when neither side has a credential on that address.
+A judge is the same specific agent when it holds the agent's credential (an API token, a username/password
+pair, or a session), at any address, or when neither side has a credential on the same address.
 Any model from any vendor is allowed; likely accidents are warned and recorded. Usernames and passwords are
 HTTP Basic over HTTPS only and are compared as one HMAC-fingerprinted pair.
 """
@@ -56,17 +56,30 @@ class Rule(EnvVars):
                 "credential_env": "RULE_AGENT_KEY", **kw}
         return AgentDeclaration.from_mapping(decl).resolve(fp_key=FP)
 
-    def test_both_must_match_to_refuse(self):
+    def test_the_same_credential_refuses_at_any_address(self):
         a = self.agent()
         self.assertRegex(compare(a, judge_identity(side("gpt-4o-mini", "https://api.openai.com/v1", "agent-key"), FP)),
                          "the same credential on the same address api.openai.com:443")
+        for url, where in (("https://openrouter.ai/api/v1", "openrouter.ai:443"),
+                           ("http://localhost:4000", "localhost:4000"),           # a pass-through proxy
+                           ("https://llm.corp.example/v1", "llm.corp.example:443")):   # another name for a server
+            with self.subTest(url=url):
+                self.assertRegex(compare(a, judge_identity(side("gpt-4o", url, " agent-key\n"), FP)),
+                                 f"the same credential \\(agent at api.openai.com:443, judge at {where}\\); "
+                                 "a credential identifies its holder")
         # Same address, another key: allowed, whatever the model.
         for model in ("gpt-4o", "gpt-4o-mini", "o3"):
             self.assertIsNone(compare(a, judge_identity(side(model, "https://api.openai.com/v1", "judge-key"), FP)))
-        # Same key, another address: allowed (and warned).
-        j = judge_identity(side("gpt-4o", "https://openrouter.ai/api/v1", "agent-key"), FP)
-        self.assertIsNone(compare(a, j))
-        self.assertIn("same_credential_other_address", [w["check"] for w in separation_warnings(a, j)])
+
+    def test_a_shared_placeholder_refuses_and_the_message_says_what_to_do(self):
+        a = AgentDeclaration.from_mapping({"id": "agent", "model": "llama3.1:8b", "provider": "vllm",
+                                           "base_url": "http://localhost:8000/v1", "credential_env": "RULE_PLACEHOLDER"})
+        self.setenv(RULE_PLACEHOLDER="EMPTY")
+        a = a.resolve(fp_key=FP)
+        msg = compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1", "EMPTY"), FP))
+        self.assertRegex(msg, "give each side its own value or credential: none")
+        self.assertIsNone(compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1", "EMPTY-2"), FP)))
+        self.assertIsNone(compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1"), FP)))
 
     def test_any_model_any_vendor_elsewhere_has_no_warning(self):
         a = self.agent()
@@ -220,8 +233,7 @@ class Basic(EnvVars):
             raise AssertionError("must not call the model")
         j = OpenAICompatibleJudge("b", "x", "m", "https://h.example/v1", BasicAuthCredential("BA_USER", "BA_PASS"),
                                   transport=never)
-        b = j.score_bound("c", SEARCH, "", None, agent_session="alice:s3cret",
-                          agent_endpoints=frozenset({"h.example:443"}))
+        b = j.score_bound("c", SEARCH, "", None, agent_session="alice:s3cret")
         self.assertEqual(b.error, "cloud_judge_reused_agent_session")
 
 
@@ -237,7 +249,7 @@ class ScoreOne(unittest.TestCase):
                 self.calls.append(agent_session)
                 raise TypeError("a bug inside the judge")
         j = Raises()
-        b = _score_one(j, "c", SEARCH, "", None, agent_session="s", agent_endpoints=frozenset({"x:443"}))
+        b = _score_one(j, "c", SEARCH, "", None, agent_session="s")
         self.assertEqual((b.vote, j.calls), ("abstain", ["s"]))
         self.assertIn("TypeError", b.error)
 
@@ -263,10 +275,18 @@ class ScoreOne(unittest.TestCase):
             def score_bound(self, constitution_text, action, proposal, binding, **kw):
                 seen["any"] = kw
                 return Ballot("a", "x", "yes", 0.9, "")
-        eps = frozenset({"x:443"})
-        self.assertEqual(_score_one(Old(), "c", SEARCH, "", None, "s", eps).vote, "yes")
-        self.assertEqual(_score_one(Any(), "c", SEARCH, "", None, "s", eps).vote, "yes")
-        self.assertEqual(seen, {"old": "s", "any": {"agent_session": "s", "agent_endpoints": eps}})
+        class Older(Judge):
+            judge_id, provider = "n", "x"
+
+            def score(self, *a):
+                raise AssertionError("not used")
+
+            def score_bound(self, constitution_text, action, proposal, binding):
+                seen["older"] = True
+                return Ballot("n", "x", "yes", 0.9, "")
+        for judge in (Old(), Any(), Older()):
+            self.assertEqual(_score_one(judge, "c", SEARCH, "", None, "s").vote, "yes")
+        self.assertEqual(seen, {"old": "s", "any": {"agent_session": "s"}, "older": True})
 
     def test_an_unreadable_signature_gets_every_keyword(self):
         from two_key.quorum import _accepted
@@ -276,12 +296,12 @@ class ScoreOne(unittest.TestCase):
 
             def __call__(self, *a, **kw):
                 return kw
-        kw = {"agent_session": "s", "agent_endpoints": frozenset({"x:443"})}
+        kw = {"agent_session": "s"}
         self.assertEqual(_accepted(Opaque(), kw), kw)
 
 
 class EndToEnd(EnvVars):
-    def test_twokey_passes_the_agent_address_to_the_runtime_check(self):
+    def test_a_judge_holding_the_agent_session_abstains_whatever_was_declared(self):
         self.setenv(E2E_AGENT_KEY="shared-session")
         key = generate_private_key()
         env = sign_constitution("Searching is fine.", [{"id": "t", "allow_only_tools": ["search"]}], key,
@@ -293,7 +313,17 @@ class EndToEnd(EnvVars):
             return {"choices": [{"message": {"content": BALLOT}}]}
         agent = {"id": "agent", "model": "gpt-4o", "provider": "openai", "base_url": "https://api.openai.com/v1",
                  "credential_env": "E2E_AGENT_KEY"}
-        # The judge holds the agent's key, but on another address: it starts (with a warning) and votes.
+        # The judge holds the agent's key at any address: it does not start.
+        for url in ("https://api.openai.com/v1", "https://openrouter.ai/api/v1"):
+            same = OpenAICompatibleJudge("s", "x", "gpt-4o-mini", url, StaticToken("shared-session"),
+                                         transport=transport)
+            with self.subTest(url=url), tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*the same credential"):
+                    TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
+                           [same], private_key=key, quorum=QuorumPolicy(required_yes=1), monitored_agent=agent)
+        # The agent is declared with the wrong key (or at the wrong address), so the judge starts. At call time
+        # it presents the agent's real session: it abstains without a call, wherever it connects.
+        self.setenv(E2E_AGENT_KEY="declared-key")
         j = OpenAICompatibleJudge("j", "x", "gpt-4o", "https://openrouter.ai/api/v1", StaticToken("shared-session"),
                                   transport=transport)
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()):
@@ -301,15 +331,12 @@ class EndToEnd(EnvVars):
                         private_key=key, quorum=QuorumPolicy(required_yes=1), monitored_agent=agent)
             d = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, {}, "look",
                              agent_session="shared-session")
-        self.assertTrue(d.allowed, d.reason)
+            ok = tk.authorize({"tool": "search", "data_class": "public", "irreversible": False}, {}, "look",
+                              agent_session="the-agent-session")
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.path_b["abstain"], 1)
+        self.assertTrue(ok.allowed, ok.reason)
         self.assertEqual(len(calls), 1)
-        # On the agent's own address the same key does not start at all.
-        same = OpenAICompatibleJudge("s", "x", "gpt-4o-mini", "https://api.openai.com/v1",
-                                     StaticToken("shared-session"), transport=transport)
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(TwoKeyConfigError, "the same credential on the same address"):
-                TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
-                       [same], private_key=key, quorum=QuorumPolicy(required_yes=1), monitored_agent=agent)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ Format (see examples/judges.yaml):
       require_path_a_first: false      # stored, not a skip
       tool_args_on_derive_deny: false # true sends argument bytes after a derive deny
       # allow_same_provider_judge: deprecated, no effect (the same provider is allowed)
-      # allow_same_model_distinct_tenant: deprecated, no effect (a judge is refused only on the agent's address and credential)
+      # allow_same_model_distinct_tenant: deprecated, no effect (a judge is refused on the agent's credential)
     monitored_agent:             # required; read by identity.load_monitored_agent_file
       id: my-agent
       model: REPLACE_WITH_MODEL

@@ -45,7 +45,7 @@ is going, see [ROADMAP.md](ROADMAP.md).
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. The minimum is one judge, and that judge
    must not be the monitored agent: it may run any model from any vendor,
-   but not with the agent's credential on the agent's address. A missing,
+   but never with the agent's credential, at any address. A missing,
    malformed, errored, or
    timed-out ballot does not count as yes. The default policy has no
    diversity floors. `QuorumPolicy.high_assurance()` (or
@@ -102,8 +102,8 @@ flowchart TD
   authorize --> pathA
   authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
   judgeText --> pathB
-  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused only on the agent's<br/>address with the agent's credential"| judges
-  session["agent_session<br/>a judge on the agent's address<br/>must not present it"] --> pathB
+  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused on the agent's credential,<br/>at any address"| judges
+  session["agent_session<br/>no judge may present it"] --> pathB
   pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
   judges -->|"yes, no, or abstain"| pathB
   pathA --> gate{"both allow?"}
@@ -150,19 +150,19 @@ shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
 whitespace stripped; a username and password are one pair).
 
 A judge may run any model from any vendor. It is the monitored agent, and
-`TwoKey` refuses to start (`judge_matches_agent:`), only when it connects
-to the agent's address (the endpoint `host:port`, every alias of this
-machine folded to `localhost`) with the agent's credential: the same API
-token, the same username and password, or no credential on either side, so
-that nothing tells them apart. Everything else starts. Likely accidents are
-allowed with a `two-key: WARNING:` line on stderr and recorded in
-`constitution_loaded` (`judge_agent_separation.warnings`): the same
-credential on another address, the same model on the same address, the
-same model through a shared route or a local or unrecognized proxy with no
-declared `upstream:`, a shared tenant id, one side keyless on the same
-address, and an identity whose upstream cannot be resolved. Addresses are
-compared as configured; DNS names are not resolved. A username and
-password are sent as HTTP Basic over HTTPS only.
+`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the
+agent's credential (the same API token, or the same username and password),
+at any address: a credential identifies its holder wherever it is sent. Two
+sides with no credential are the same agent only on the same address (the
+endpoint `host:port`, every alias of this machine folded to `localhost`),
+where nothing tells them apart. Everything else starts. Likely accidents
+are allowed with a `two-key: WARNING:` line on stderr and recorded in
+`constitution_loaded` (`judge_agent_separation.warnings`): the same model
+on the same address, the same model through a shared route or a local or
+unrecognized proxy with no declared `upstream:`, a shared tenant id, one
+side keyless on the same address, and an identity whose upstream cannot be
+resolved. Addresses are compared as configured; DNS names are not
+resolved. A username and password are sent as HTTP Basic over HTTPS only.
 `allow_same_provider_judge` and `allow_same_model_distinct_tenant` are
 accepted and have no effect. Without a declaration it refuses with
 `monitored_agent_required:`. Provider labels are never compared. HOWTO has

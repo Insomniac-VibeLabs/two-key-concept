@@ -1,7 +1,7 @@
 """allow_same_model_distinct_tenant: deprecated, no effect (2026-10-08).
 
-A judge is refused only when it uses the monitored agent's credential on the agent's address, so nothing is
-left for the flag to lift. It is still accepted, recorded in constitution_loaded (same_model_tenant_optin, with
+A judge is refused when it uses the monitored agent's credential, at any address, so nothing is left for the
+flag to lift. It is still accepted, recorded in constitution_loaded (same_model_tenant_optin, with
 an always-empty pairs list), part of the policy digest, and it prints a deprecation note. A misspelled flag is
 still refused.
 """

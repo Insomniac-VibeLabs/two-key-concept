@@ -168,9 +168,13 @@ class Refusals(Env):
         j = OpenAICompatibleJudge("x2", "xai", "grok-4", "https://API.x.ai:443/v1", EnvApiKey("SEP_JUDGE_KEY"))
         self.refused([j], "the same credential on the same address")
 
-    def test_same_credential_on_another_address_is_warned(self):
-        tk = self.warned([claude(key="agent-secret-key")], "same_credential_other_address")
-        self.assertTrue(tk.separation.ok)
+    def test_same_credential_on_another_address_is_refused(self):
+        # A credential identifies its holder wherever it is sent.
+        self.refused([claude(key="agent-secret-key")],
+                     r"^judge_matches_agent: .*the same credential \(agent at api.x.ai:443, judge at "
+                     r"api.anthropic.com:443\); a credential identifies its holder")
+        self.refused([oai("proxy", "grok-4", "http://localhost:4000", "agent-secret-key")],
+                     r"the same credential \(agent at api.x.ai:443, judge at localhost:4000\)")
 
     def test_unresolved_router_is_warned(self):
         self.warned([oai("gw", "judge-model", "https://llm.corp.example/v1", "gw-key")], "unresolved_identity")
@@ -236,8 +240,9 @@ class SameProvider(Env):
         rec = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body["judge_agent_separation"]
         self.assertTrue(rec["ok"])
         self.assertEqual(rec["same_provider"], "allowed")
-        self.assertEqual(rec["same_agent"], "same_address_and_same_credential")
-        self.assertEqual(rec["checks"], ["same_address_same_credential", "same_address_no_credential"])
+        self.assertEqual(rec["same_agent"], "same_credential_or_keyless_same_address")
+        self.assertEqual(rec["checks"], ["same_credential", "same_address_no_credential"])
+        self.assertNotIn("same_credential_other_address", rec["warning_checks"])
         self.assertEqual(rec["warnings"], [])
         self.warned([oai("same", "gpt-4o-2024-08-06", "https://api.openai.com/v1", "k2")],
                     "same_model_same_address", agent=agent)
@@ -357,7 +362,7 @@ class RuntimeSessionCheckForEveryJudge(unittest.TestCase):
         self.assertEqual(j.score_bound("c", a, "", None, agent_session="shared").error,
                          "cloud_judge_reused_agent_session")
 
-    def test_the_runtime_check_follows_the_address_rule(self):
+    def test_the_runtime_check_ignores_the_address(self):
         calls = []
 
         def transport(url, headers, body, timeout):
@@ -366,14 +371,12 @@ class RuntimeSessionCheckForEveryJudge(unittest.TestCase):
         j = OllamaJudge("q", "ollama", "qwen2.5:7b", credential=StaticToken("shared"), auth_header="bearer",
                         transport=transport)
         a = normalize_action({"tool": "search"})
-        # The session on the agent's own address: the same agent, abstains without a call.
-        self.assertEqual(j.score_bound("c", a, "", None, agent_session="shared",
-                                       agent_endpoints=frozenset({"localhost:11434"})).error,
+        # A judge presenting the agent session is the agent, wherever it connects: it abstains without a call.
+        self.assertEqual(j.score_bound("c", a, "", None, agent_session="shared").error,
                          "cloud_judge_reused_agent_session")
         self.assertEqual(calls, [])
-        # The same session string on another address is not the same agent: the judge votes.
-        b = j.score_bound("c", a, "", None, agent_session="shared", agent_endpoints=frozenset({"api.x.ai:443"}))
-        self.assertEqual(b.vote, "yes")
+        # Another session: the judge votes.
+        self.assertEqual(j.score_bound("c", a, "", None, agent_session="other").vote, "yes")
         self.assertEqual(len(calls), 1)
 
 
