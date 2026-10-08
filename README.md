@@ -266,8 +266,9 @@ Not in this repository:
 Some of this is planned as optional additions. See the
 [roadmap](#roadmap): DLP and antivirus hooks (an interface that calls
 external scanners, not a scanning engine), key backup (not seed-phrase
-backup), and hybrid ML-DSA-65. Enterprise deployment modes,
-permissioned-chain anchoring, PKI, and seed phrases are not planned.
+backup), PKI with certificate recovery, and hybrid ML-DSA-65. Enterprise
+deployment modes, permissioned-chain anchoring, and seed phrases are not
+planned.
 
 The ledger is encrypted at rest.
 
@@ -287,6 +288,8 @@ It is a prototype. It is not a FIPS 140-3 validated module.
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
   are on the roadmap.
+- Identities are bare keys. There is no certificate chain, expiry, or
+  revocation. PKI with certificate recovery is on the roadmap.
 - It does not scan payloads, and it is not an antivirus or DLP product.
 
 The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
@@ -303,10 +306,11 @@ flowchart LR
   p1 --> p2["0.4<br/>Ledger export<br/>for SIEM"]
   p2 --> p3["0.5<br/>DLP and AV hooks"]
   p3 --> p4["0.6<br/>MCP adapter"]
-  p4 --> p5["0.7<br/>Post-quantum<br/>signatures"]
-  p5 --> p6["0.8<br/>FIPS approved<br/>mode"]
-  p6 --> p7["0.9<br/>Local GUI"]
-  p7 --> p8["1.0<br/>Review and release"]
+  p4 --> p5["0.7<br/>PKI and certificate<br/>recovery"]
+  p5 --> p6["0.8<br/>Post-quantum<br/>signatures"]
+  p6 --> p7["0.9<br/>FIPS approved<br/>mode"]
+  p7 --> p8["0.10<br/>Local GUI"]
+  p8 --> p9["1.0<br/>Review and release"]
 ```
 
 | Target | What |
@@ -315,9 +319,10 @@ flowchart LR
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
 | 0.6 | MCP adapter: a proxy in front of the gateway, not an MCP server |
-| 0.7 | Hybrid Ed25519 plus ML-DSA-65 signatures for the constitution and ledger head |
-| 0.8 | FIPS approved mode: refuses to start unless running on a validated module |
-| 0.9 | Local GUI for configuration and ledger auditing |
+| 0.7 | PKI: X.509 identities for personal and enterprise use, and certificate recovery |
+| 0.8 | Hybrid Ed25519 plus ML-DSA-65 signatures for the constitution and ledger head |
+| 0.9 | FIPS approved mode: refuses to start unless running on a validated module |
+| 0.10 | Local GUI for configuration and ledger auditing |
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 
 Install from git. It is not published to PyPI. Package version 0.2.1.

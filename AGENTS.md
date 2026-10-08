@@ -12,8 +12,12 @@ Concept line only: signed constitution, Path A bytecode, Path B judge hooks,
 monitored-agent hooks, encrypted ledger, single-use capability token, and a
 verify-only gateway. Prototype. Apache-2.0.
 
-Do **not** add scanning, antivirus, DLP, PKI, chain anchoring, seed phrases, or
-hybrid ML-DSA here. See [docs/SCOPE.md](docs/SCOPE.md).
+Do **not** add a scanning or antivirus engine, chain anchoring, or seed
+phrases here. The items in [ROADMAP.md](ROADMAP.md) are in scope: key backup,
+ledger export for a SIEM, DLP and antivirus hooks that call external scanners,
+an MCP adapter, PKI with certificate recovery, hybrid ML-DSA signatures, a FIPS
+approved mode, and a local GUI. Build them in the order and with the limits stated there, unless the
+operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
@@ -49,9 +53,11 @@ Git install:
 
 - Tests: `python -m unittest discover -s tests` (no network). Keep the suite
   network-free; use `two_key.testing` doubles only where the docs allow.
-- When a claim changes, update `README.md`, `docs/HOWTO.md`, `docs/FIT.md`,
-  `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`, `docs/SCOPE.md`, `CHANGES.md`,
-  and `llms.txt` as needed.
+- When a claim changes, update `README.md`, `ROADMAP.md`, `docs/HOWTO.md`,
+  `docs/FIT.md`, `docs/COMPARISON.md`, `docs/THREAT_MODEL.md`,
+  `docs/SCOPE.md`, `CHANGES.md`, and `llms.txt` as needed.
+- When a roadmap item ships, update `docs/SCOPE.md` and `docs/THREAT_MODEL.md`
+  in the same release.
 - Keep [docs/HOWTO.md](docs/HOWTO.md) "Known trade-offs by configuration"
   accurate when a config trade-off changes.
 
