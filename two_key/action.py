@@ -1,10 +1,10 @@
-"""Normalized action record (disclosure section 5.2) and its validation.
+"""Normalized action record and its validation.
 
 ``normalize_action`` validates and canonicalizes a proposed action before
 the Policy VM sees it. Any validation failure raises ``ActionValidationError``,
 and Two-Key turns that into an explicit, logged DENY.
 
-Missing-field defaults follow disclosure section 5.2 and the missing-field rule: a missing
+Missing-field defaults follow the missing-field rule: a missing
 ``irreversible`` means ``True`` and a missing ``data_class`` means
 ``"classified"``. A signed constitution must include ``tool_specs``.
 ``derive.py`` then fills the form from the argument bytes. A disagreeing
@@ -28,7 +28,7 @@ from .agent_meta import type_tag
 
 DATA_CLASSES = ("public", "personal", "medical", "financial", "classified")
 
-# Conservative defaults for missing high-impact fields (spec 5.2 / the missing-field rule).
+# Conservative defaults for missing high-impact fields (the missing-field rule).
 DEFAULT_IRREVERSIBLE = True
 DEFAULT_DATA_CLASS = "classified"
 MAX_AMOUNT_USD = 1e12  # sanity bound; larger values are rejected as malformed

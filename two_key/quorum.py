@@ -3,12 +3,12 @@ Two-Key: Path B, the multi-model intent quorum
 =====================================================
 N judges, each connected to whichever AI the principal chooses, vote on
 whether a proposal is consistent with the principal's natural-language
-constitution (spec 5.4). The convenor counts booleans. It never averages prose.
+constitution. The convenor counts booleans. It never averages prose.
 
 Fixes from the original prototype (see CHANGES.md):
 - An exact integer k-of-n threshold (``required_yes``) replaces the
   fractional threshold. With the old 0.67 default, 2-of-3 failed.
-- A minimum number of responding judges (``min_responding``, spec 5.4 "K").
+- A minimum number of responding judges (``min_responding``, "K").
   Zero judges, or too few valid responses, is a deny.
 - A judge that raises, or returns a malformed ballot, is an abstention and
   never counts as "yes".
@@ -83,7 +83,7 @@ class QuorumConfigError(ValueError):
 @dataclass(frozen=True)
 class QuorumPolicy:
     required_yes: int | None = None  # k in k-of-n; None = min(2, number of judges), resolved at start-up
-    min_responding: int | None = None  # K in spec 5.4; defaults to required_yes
+    min_responding: int | None = None  # K, the availability floor; defaults to required_yes
     min_distinct_providers: int = 1  # responding providers; 1 means this check is not a floor
     timeout_seconds: float | None = 45.0  # overall deadline; None (no deadline) is refused by TwoKey
     parallel: bool = True

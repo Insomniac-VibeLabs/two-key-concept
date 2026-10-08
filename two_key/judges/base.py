@@ -1,4 +1,4 @@
-"""Path B judge interface (engineering; the protocol follows spec 5.4).
+"""Path B judge interface.
 
 A judge receives the principal's natural-language constitution, the
 normalized action record, and the proposal text. It returns a structured

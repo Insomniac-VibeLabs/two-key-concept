@@ -324,6 +324,7 @@ flowchart LR
 | 0.9 | FIPS approved mode: refuses to start unless running on a validated module |
 | 0.10 | Local GUI for configuration and ledger auditing |
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
+| After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
 Install from git. It is not published to PyPI. Package version 0.2.1.
 Tag `v0.2.1` is on `main` and on `working`. Tag `v0.2.0` stays on commit

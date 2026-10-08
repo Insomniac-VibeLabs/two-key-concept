@@ -42,6 +42,17 @@ On branch `working`. Not tagged. Version unchanged.
 - llms.txt: test count is 362.
 - README layout table: rows for `action.py`, `agent_meta.py`,
   `canonical.py`, `constitution.py`, and `testing.py`.
+- Comments and docstrings no longer cite spec or disclosure section
+  numbers from a document outside this repository (`action.py`,
+  `quorum.py`, `judges/base.py`, `judges/config.py`). No behavior change.
+  `QuorumPolicy.section4` keeps its name.
+- Test skip messages name the right package: `pip install
+  two-key-concept[yaml]`.
+- CHANGES: the 0.1.x entry about comments no longer names the outside
+  notes files. The Cyber fail-closed pass section is titled for `v0.2.0`
+  and sits before 0.2.1.
+- README roadmap table: a row for generic spec field types (after 1.0, not
+  scheduled).
 
 ## 0.1.0 — 2026-10-02
 
@@ -113,7 +124,7 @@ On branch `10.3.2026.2`, cut from `main`. `main` was not updated.
 On branch `10.3.2026.2`. `main` was not updated.
 
 - Path B comments match the code. Both paths always run. `require_path_a_first` is recorded and not consulted. The unused `judge_proposal` value in `convene` is gone; per-judge filtering is unchanged.
-- Comments no longer point at `DESIGN_OPTIONS.md`, `PRIOR_ART.md`, or `CONCEPTION_NOTES.md` as files in this repository. `docs/HOWTO.md` has the Qwen2.5 section the example config links to.
+- Comments no longer point at design notes as if they were files in this repository. `docs/HOWTO.md` has the Qwen2.5 section the example config links to.
 - `two-key authorize` defaults `--data-class` to `classified` and `--irreversible` to true, matching `normalize_action`. `--no-irreversible` turns that flag off.
 - A mismatched principal key on the ledger head reports a principal-key mismatch, not a ledger-key mismatch.
 - Appends and checkpoints take `<ledger>.lock` outside the ledger directory and refuse if another writer changed the file. Redemption locks moved to `<ledger>.redeem-locks/`, also outside. `fcntl` is optional, so the package still imports where that module is absent.
@@ -485,17 +496,7 @@ on stderr, not a refusal.
 
 - Generic spec field types moved to [ROADMAP.md](ROADMAP.md) (after 1.0, not scheduled).
 
-## 0.2.1 — 2026-10-07
-
-Tag `v0.2.1` on `main` and `working`. Docs and version only. No behavior
-change. Not published to PyPI. `v0.2.0` stays on `2f756ac` and is not moved.
-
-- Package version is 0.2.1 (`pyproject.toml`, `two_key.__version__`).
-- README, AGENTS.md, and llms.txt name tag `v0.2.1` and install from
-  `@v0.2.1`. The 0.2.0 README still said the package was untagged on
-  `working`.
-
-## Working — Cyber fail-closed pass (2026-10-06)
+## Cyber fail-closed pass — 2026-10-06 (in v0.2.0)
 
 In tag `v0.2.0` (`2f756ac`), and so in `v0.2.1`. Issues addressed:
 
@@ -517,3 +518,13 @@ In tag `v0.2.0` (`2f756ac`), and so in `v0.2.1`. Issues addressed:
 - **#27** — LLM judge `transport:` / `malformed_response:` abstain errors use `type_tag(e)` (not raw `type(e).__name__`) into `ballot.error` (`QuorumResult.to_record`).
 - **#28** — `deny_inflight_wait_seconds` requires finite positive (`math.isfinite`); `inf` / `nan` / ≤0 fall back to the 30s default (so `inf` cannot restore unbounded same-jti `Condition.wait`).
 - README: removed the GitHub Pages `pages-build-deployment` Documentation Status badge (other badges kept).
+
+## 0.2.1 — 2026-10-07
+
+Tag `v0.2.1` on `main` and `working`. Docs and version only. No behavior
+change. Not published to PyPI. `v0.2.0` stays on `2f756ac` and is not moved.
+
+- Package version is 0.2.1 (`pyproject.toml`, `two_key.__version__`).
+- README, AGENTS.md, and llms.txt name tag `v0.2.1` and install from
+  `@v0.2.1`. The 0.2.0 README still said the package was untagged on
+  `working`.
