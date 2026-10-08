@@ -324,6 +324,7 @@ flowchart LR
 | 0.9 | FIPS approved mode: refuses to start unless running on a validated module |
 | 0.10 | Local GUI for configuration and ledger auditing |
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
+| After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
 Install from git. It is not published to PyPI. Package version 0.2.1.
 Tag `v0.2.1` is on `main` and on `working`. Tag `v0.2.0` stays on commit
@@ -367,6 +368,11 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
 | `two_key/keys.py`, `cli.py` | Key files; `two-key` command line |
+| `two_key/action.py` | Normalized action record and its validation |
+| `two_key/agent_meta.py` | Bounds on operator- or library-supplied agent identity metadata written to the ledger |
+| `two_key/canonical.py` | Canonical encoding for the ledger, tokens, and judge bindings |
+| `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
+| `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
 | `ROADMAP.md` | Planned work from 0.2.1 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |

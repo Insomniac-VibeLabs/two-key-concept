@@ -70,7 +70,7 @@ On branch `10.3.2026.2`, cut from `main`. `main` was not updated.
 On branch `10.3.2026.2`. `main` was not updated.
 
 - Path B comments match the code. Both paths always run. `require_path_a_first` is recorded and not consulted. The unused `judge_proposal` value in `convene` is gone; per-judge filtering is unchanged.
-- Comments no longer point at `DESIGN_OPTIONS.md`, `PRIOR_ART.md`, or `CONCEPTION_NOTES.md` as files in this repository. `docs/HOWTO.md` has the Qwen2.5 section the example config links to.
+- Comments no longer point at design notes as if they were files in this repository. `docs/HOWTO.md` has the Qwen2.5 section the example config links to.
 - `two-key authorize` defaults `--data-class` to `classified` and `--irreversible` to true, matching `normalize_action`. `--no-irreversible` turns that flag off.
 - A mismatched principal key on the ledger head reports a principal-key mismatch, not a ledger-key mismatch.
 - Appends and checkpoints take `<ledger>.lock` outside the ledger directory and refuse if another writer changed the file. Redemption locks moved to `<ledger>.redeem-locks/`, also outside. `fcntl` is optional, so the package still imports where that module is absent.
@@ -180,16 +180,6 @@ the tagged release.
 Tag `v0.1.12` on `main`. No behavior change in this version. The `working`
 line through 0.1.11 is this tree. `v0.1.6` stays on the previous tree.
 Not published to PyPI.
-
-## 0.2.1 — 2026-10-07
-
-Tag `v0.2.1` on `main` and `working`. Docs and version only. No behavior
-change. Not published to PyPI. `v0.2.0` stays on `2f756ac` and is not moved.
-
-- Package version is 0.2.1 (`pyproject.toml`, `two_key.__version__`).
-- README, AGENTS.md, and llms.txt name tag `v0.2.1` and install from
-  `@v0.2.1`. The 0.2.0 README still said the package was untagged on
-  `working`.
 
 ## 0.2.0 — 2026-10-03
 
@@ -390,7 +380,7 @@ setups 0.1.12 accepted: read "Upgrading from 0.1.12" below first.
 | `judge_matches_agent: ... same credential fingerprint` | A judge uses the agent's key (whitespace ignored) | Give the judge its own key |
 | `judge_matches_agent: ... same model '<m>' on the same endpoint <host:port>` | The judge is the agent's model at the agent's endpoint | Use another model, or the same model through another endpoint and key |
 | `judge_matches_agent: ... same tenant <id>` | Same Azure resource or deployment, Vertex project, Bedrock account and region, or declared org/project | Use a judge in another tenant |
-| `judge_matches_agent: ... through a local proxy or daemon (...) with no declared upstream` | The same model as the agent through a loopback or private endpoint that declares no `upstream:` | Use another model, or declare `upstream:` on the proxy or daemon (a different provider, or its own address for local weights) |
+| `judge_matches_agent: ... through a local or unrecognized proxy or daemon (...) with no declared upstream` | The same model as the agent through a loopback or private endpoint that declares no `upstream:` | Use another model, or declare `upstream:` on the proxy or daemon (a different provider, or its own address for local weights) |
 | `judge_matches_agent: ... through the same upstream <host>` | The same model reaching the agent's endpoint or declared upstream (or `ollama.com` for a cloud model) | Use another model or a non-overlapping upstream (another provider); different tenants on one upstream are still refused |
 | `judge_matches_agent: ... upstream unresolved` | Unknown router or host, or a local proxy serving an alias | Use a `maker/model` id, or declare `upstream:` (attested, not verified) |
 | `... tenant must be a mapping` / `unknown tenant key(s)` | Old string or list `tenant` | `tenant: {organization: ..., project: ..., account: ..., deployment: ...}` |
@@ -450,18 +440,11 @@ on stderr, not a refusal.
 
 ### Planned (not done)
 
-- Spec field types become generic. Today a tool spec knows two special
-  field kinds, `amount` (USD or cents) and `counterparties`, plus unread
-  `payload` paths. The plan is a typed field per argument path, each kind
-  with its own limits: string, int, decimal, enum, identifier/principal,
-  path, URL, email, and opaque bytes. `amount` and `counterparty` stop
-  being special cases and become ordinary typed fields that rules can
-  name. Until then the action record keeps `amount_usd` and `counterparty`
-  as fields, with neutral defaults for tools that have neither.
+- Generic spec field types moved to [ROADMAP.md](ROADMAP.md) (after 1.0, not scheduled).
 
-## Working — Cyber fail-closed pass (2026-10-06)
+## Cyber fail-closed pass — 2026-10-06 (in v0.2.0)
 
-On branch `working`. Issues addressed on this tip (GitHub issues left open for Cyber re-review):
+In tag `v0.2.0` (`2f756ac`), and so in `v0.2.1`. Issues addressed:
 
 - **#9** — Declared upstream labels folded (NFKC / zero-width); bare `openai` maps to `api.openai.com`.
 - **#8** — Empty `tenant: {}` refused (omit instead); same-model distinct-tenant opt-in documented as `constitution_loaded`-only.
@@ -478,6 +461,71 @@ On branch `working`. Issues addressed on this tip (GitHub issues left open for C
 - **#24** — `EncodingError` for a non-JSON type is the fixed label `unsupported_type` (never raw unbounded `__name__`). Authorize/gateway `invalid_call:` / `malformed_action:` suffixes and `*_error` ledger fields run through `cap_ledger_text`. `core._deny` stderr caps `reason` / `str(e)` before format (no full `{e}` then `[:500]`).
 - **#25** — Same-jti `Condition.wait` is timed (default 30s, `deny_inflight_wait_seconds`); on timeout waiters still deny fail-closed without marking and without fail-open, so a stuck `append_bounded` cannot hang waiters forever.
 - **#26** — `derive` `value_unreadable:` uses `type_tag(exc)` (never raw unbounded `__name__`); `derive_failed:` decision reasons are `cap_ledger_text`'d where stored. `append_bounded` / `omitted_body` JSON `default=` uses `type_tag(o)` so temporary size/digest allocation cannot balloon on a pathological class name.
-- **#27** — LLM judge `transport:` / `malformed_response:` abstain errors use `type_tag(e)` (not raw `type(e).__name__`) into `ballot.error` → path_b ledger.
+- **#27** — LLM judge `transport:` / `malformed_response:` abstain errors use `type_tag(e)` (not raw `type(e).__name__`) into `ballot.error` (`QuorumResult.to_record`).
 - **#28** — `deny_inflight_wait_seconds` requires finite positive (`math.isfinite`); `inf` / `nan` / ≤0 fall back to the 30s default (so `inf` cannot restore unbounded same-jti `Condition.wait`).
 - README: removed the GitHub Pages `pages-build-deployment` Documentation Status badge (other badges kept).
+
+## 0.2.1 — 2026-10-07
+
+Tag `v0.2.1` on `main` and `working`. Docs and version only. No behavior
+change. Not published to PyPI. `v0.2.0` stays on `2f756ac` and is not moved.
+
+- Package version is 0.2.1 (`pyproject.toml`, `two_key.__version__`).
+- README, AGENTS.md, and llms.txt name tag `v0.2.1` and install from
+  `@v0.2.1`. The 0.2.0 README still said the package was untagged on
+  `working`.
+
+## Unreleased — 2026-10-08
+
+On branch `working`. Not tagged. Version unchanged.
+
+- **#29** — Credential and start-up identity errors no longer use raw
+  `type(e).__name__`. `CallbackTokenProvider.get_token` and
+  `identity._secret_from` use `type_tag(e)` (at most 32 characters). The
+  LLM judge `credential:` abstain is capped with `cap_ledger_text`. Tests
+  added in `tests/test_ledger_error_cap.py`.
+- Module docstrings and comments no longer cite notes or a repository
+  outside this one (`credentials.py`, `llm.py`, `base.py`, `ollama.py`,
+  `quorum.py`, `action.py`, `identity.py`, `core.py`, `strict.py`). No
+  behavior change.
+- `pyproject.toml` build requirement raised to `setuptools>=77.0`, the
+  first release that accepts `license = "Apache-2.0"` as an SPDX string
+  (PEP 639). setuptools 76 refuses the file.
+- Docs: THREAT_MODEL describes the claimed-field problem in plain words
+  instead of an undefined label, and states what the ledger holds today
+  (proposal text, derived form, reasons, digests, sizes; never raw bytes of
+  an oversized or dropped value; never keys).
+- ROADMAP 0.4: the export uses a field allowlist that leaves out the
+  proposal text and the derived amount and counterparty. ROADMAP 0.10:
+  filtering by judge needs per-judge ballot records (judge id, vote, capped
+  error; never rationale text), which the ledger does not hold today.
+  ROADMAP 1.0: no unresolved Medium or higher findings, matching the ground
+  rules. Generic spec field types moved here from CHANGES as planned after
+  1.0, not scheduled. SCOPE and THREAT_MODEL planned sections match.
+- CHANGES: the #27 entry names `ballot.error` (`QuorumResult.to_record`),
+  not the path_b ledger entry. The Cyber fail-closed pass section names tag
+  `v0.2.0` and drops the "left open" clause. 0.2.0 now comes before 0.2.1.
+  The proxy troubleshooting row matches the real message ("local or
+  unrecognized proxy or daemon").
+- AGENTS.md: security review from the maintainer; two more fail-closed
+  defaults (no judge may be the monitored agent; the gateway never mints);
+  CHANGES.md with every commit; SECURITY, CONTRIBUTING, and AGENTS added to
+  the files to update when a claim changes (also in CONTRIBUTING.md).
+- SECURITY.md: report through GitHub private vulnerability reporting
+  (Security tab, "Report a vulnerability"). In scope adds a judge that is
+  the monitored agent being accepted at start-up.
+- llms.txt: test count is 362.
+- README layout table: rows for `action.py`, `agent_meta.py`,
+  `canonical.py`, `constitution.py`, and `testing.py`.
+- Comments and docstrings no longer cite spec or disclosure section
+  numbers from a document outside this repository (`action.py`,
+  `quorum.py`, `judges/base.py`, `judges/config.py`). No behavior change.
+  `QuorumPolicy.section4` keeps its name.
+- Test skip messages name the right package: `pip install
+  two-key-concept[yaml]`.
+- CHANGES: the 0.1.x entry about comments no longer names the outside
+  notes files. The Cyber fail-closed pass section is titled for `v0.2.0`
+  and sits before 0.2.1.
+- README roadmap table: a row for generic spec field types (after 1.0, not
+  scheduled).
+- CHANGES: this section moved to the end, so the log stays oldest first.

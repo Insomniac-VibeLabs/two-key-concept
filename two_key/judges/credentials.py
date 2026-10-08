@@ -1,9 +1,7 @@
 """Credential providers for Path B judge connectors.
 
-This follows the author's conception (CONCEPTION_NOTES.md entry 1 in
-Insomniac-VibeLabs/two-key, not in this repository): judges
-connect to whichever AI the user picks, by "api or username/password or
-single sign on login".
+Judges connect to whichever AI the user picks, by "api or username/password
+or single sign on login".
 
 What is implemented:
 - ``EnvApiKey``: an API key read from an environment variable at call
@@ -27,6 +25,8 @@ from __future__ import annotations
 import abc
 import os
 from typing import Callable
+
+from ..agent_meta import type_tag
 
 
 class CredentialError(RuntimeError):
@@ -110,7 +110,7 @@ class CallbackTokenProvider(CredentialProvider):
         try:
             t = self._fn()
         except Exception as e:
-            raise CredentialError(f"token callback failed: {type(e).__name__}") from e
+            raise CredentialError(f"token callback failed: {type_tag(e)}") from e
         if not t or not isinstance(t, str):
             raise CredentialError("token callback returned no token")
         return t

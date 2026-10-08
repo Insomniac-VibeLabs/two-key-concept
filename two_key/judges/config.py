@@ -4,7 +4,7 @@ Format (see examples/judges.yaml):
 
     quorum:
       required_yes: 2          # k-of-n; omit for min(2, number of judges)
-      min_responding: 2        # spec 5.4 "K"
+      min_responding: 2        # "K": minimum valid ballots
       min_distinct_providers: 1
       # profile: high_assurance  # opt-in: 2 vendors, 1 local judge, require_local_yes
       # Defaults shown (one judge is enough; see quorum.QuorumPolicy):

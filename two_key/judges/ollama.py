@@ -6,8 +6,7 @@ or any other remote host defaults to False. Declaring ``local_weights: true``
 on a remote host does not make the judge local: ``is_local()`` also requires
 the host to be loopback or private, and ``is_cloud()`` ignores the flag. The
 flag is a declaration, not an attestation, and ``weights_sha256`` is
-recorded, not verified. See DESIGN_OPTIONS.md section 7 in
-Insomniac-VibeLabs/two-key, not in this repository.
+recorded, not verified.
 
 A model whose name ends in ``:cloud`` or ``-cloud`` (for example
 ``gpt-oss:120b-cloud``) is an Ollama cloud model: the local daemon forwards

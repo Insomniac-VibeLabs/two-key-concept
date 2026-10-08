@@ -1,4 +1,4 @@
-"""Path B judge interface (engineering; the protocol follows spec 5.4).
+"""Path B judge interface.
 
 A judge receives the principal's natural-language constitution, the
 normalized action record, and the proposal text. It returns a structured
@@ -6,9 +6,7 @@ ballot. Implementations must never raise into the quorum: any failure is
 reported as an ``abstain`` ballot with ``error`` set, and abstentions never
 count toward "yes" (fail closed).
 
-Quorum protocol specifics (the section-4 profile). The prior-art memo is
-not in this repository. The decision record is CONCEPTION_NOTES.md Entry 2
-in Insomniac-VibeLabs/two-key:
+Quorum protocol specifics (the section-4 profile):
 * ``vendor`` and ``local_weights`` describe the judge so that the judge set
   can be checked for vendor heterogeneity (quorum.check_judge_set). Whether
   a judge is local is ``is_local()``: the declared flag AND a loopback or

@@ -255,7 +255,7 @@ class TwoKey:
                                  max_items=MAX_ARGS_BYTES // 2)
         except OversizeError:
             return self._deny(origin, "args_too_large", agent, None, None, _unmeasured("tool_args"))
-        except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
+        except EncodingError as e:     # invalid_call:<why>, the same as the gateway's
             why = cap_ledger_text(str(e))
             return self._deny(origin, f"invalid_call:{why}", agent, None, None,
                               {"tool_args_omitted": True, "tool_args_error": why})
@@ -265,7 +265,7 @@ class TwoKey:
             # invalid_call on every Python version, not args_too_large where the sizer recursed out.
             try:
                 frozen = canonical_bytes(arguments, max_depth=MAX_INPUT_DEPTH, what="tool args are")
-            except EncodingError as e:     # two-key's name: invalid_call:<why>, the same as the gateway's
+            except EncodingError as e:     # invalid_call:<why>, the same as the gateway's
                 why = cap_ledger_text(str(e))
                 return self._deny(origin, f"invalid_call:{why}", agent, None, None,
                                   {"tool_args_omitted": True, "tool_args_error": why})

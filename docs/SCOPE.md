@@ -32,7 +32,9 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
   PKI or seed-phrase backup. PKI is the item below. Seed phrases are not
   planned.
 - Ledger export for SIEM (target 0.4): a command that verifies and decrypts
-  the ledger locally and writes events without argument values.
+  the ledger locally and writes events without argument values. A field
+  allowlist leaves out the proposal text and the derived amount and
+  counterparty, which the ledger holds today.
 - Inspection hooks for DLP and antivirus (target 0.5): an interface that
   calls external scanners. This package still does not scan or classify
   content itself.
@@ -57,6 +59,12 @@ and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
 - Local GUI (target 0.10): a loopback-only interface for configuration and
   ledger auditing, built on the CLI and the existing file formats. It does not
   hold the principal key, and it is not a hosted or multi-user service.
+  Filtering by judge needs per-judge ballot records (judge id, vote, and
+  capped error only, never the rationale text), which the ledger does not
+  hold today.
+- Generic spec field types (planned, not scheduled): a typed field per
+  argument path, each kind with its own limits. `amount` and `counterparty`
+  become ordinary typed fields.
 
 Read [FIT.md](FIT.md) before adopting it, [COMPARISON.md](COMPARISON.md)
 before treating it as a substitute, and [THREAT_MODEL.md](THREAT_MODEL.md)

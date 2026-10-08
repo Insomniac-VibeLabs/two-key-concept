@@ -74,7 +74,7 @@ Refusals, judge against agent (all hard, no opt-out), message prefix
   endpoint itself, or ollama.com for a ``-cloud`` model
   (``same_model_same_upstream``). Declared tenants do not lift this: two
   accounts on one upstream serving one model are still the same model
-  from the same provider, as in two-key
+  from the same provider
 - a shared tenant id (same Azure resource or deployment, OpenAI organization
   or project, Bedrock account in the same region, Vertex project, or a
   declared id on the same host)
@@ -117,6 +117,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
+from .agent_meta import type_tag
 from .netloc import fold_model_id, host_is_local, host_is_loopback, model_is_cloud
 
 FINGERPRINT_DOMAIN = b"two-key/credential-fingerprint/1\x00"
@@ -671,7 +672,7 @@ def _secret_from(credential: Any) -> str:
     try:
         token = credential.get_token()
     except Exception as e:
-        raise IdentityError(f"credential could not be read at start-up ({type(e).__name__}); "
+        raise IdentityError(f"credential could not be read at start-up ({type_tag(e)}); "
                             "Two-Key cannot show it differs from the monitored agent's") from None
     if not token:
         raise IdentityError("credential is empty at start-up")

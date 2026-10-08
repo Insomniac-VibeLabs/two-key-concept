@@ -64,6 +64,8 @@ seed-phrase backup.
   as JSON Lines.
 - Events carry digests, sizes, and reason codes. They do not carry argument
   values.
+- The export uses a field allowlist. It leaves out the proposal text and the
+  derived amount and counterparty, which the ledger holds today.
 - Field mapping to a common schema (ECS or OCSF), with optional CEF or
   syslog output. Delivery by file first, then webhook.
 - An offline check that exported events match the ledger head.
@@ -196,6 +198,10 @@ CLI and file formats, so it adds no new logic of its own.
 - Ledger auditing: browse decisions, filter by tool, reason, judge, and
   time, and show both paths' results for each call. It runs the Merkle and
   digest checks (`check_decision_digests`) and shows failures plainly.
+- Filtering by judge needs per-judge ballot records, which the ledger does
+  not hold today. Planned: ledger each ballot's judge id, vote, and capped
+  error only, never the rationale text, which is model output and may quote
+  arguments.
 - Export from the audit view reuses the 0.4 export, so digests and reason
   codes leave the screen, not argument values.
 - Key and backup status: fingerprints, backup age, and a prompt to run the
@@ -210,12 +216,25 @@ CLI and file formats, so it adds no new logic of its own.
 ## 1.0: Review and release
 
 - A time-boxed, public community review with a stated scope.
-- Release only with no unresolved High findings from that review.
+- Release only with no unresolved Medium or higher findings from that review.
 - Publish to PyPI with trusted publishing, signed tags, and an SBOM.
 - A ten-minute quickstart and a demo with a real MCP server, including a tour of the GUI.
 - 1.0 is described as community-reviewed, not audited, and as not FIPS
   validated itself. A paid audit and any validation of this package are
   later goals.
+
+## After 1.0 (not scheduled)
+
+Planned, with no target version.
+
+- Generic spec field types. Today a tool spec knows two special field kinds,
+  `amount` (USD or cents) and `counterparties`, plus unread `payload` paths.
+  The plan is a typed field per argument path, each kind with its own
+  limits: string, int, decimal, enum, identifier/principal, path, URL,
+  email, and opaque bytes. `amount` and `counterparty` stop being special
+  cases and become ordinary typed fields that rules can name. Until then the
+  action record keeps `amount_usd` and `counterparty` as fields, with neutral
+  defaults for tools that have neither.
 
 ## Not planned for this repository
 

@@ -22,7 +22,7 @@ class StrictParseError(ValueError):
 
 
 class DuplicateKeyError(StrictParseError):
-    """A key repeated in one mapping (two-key's name)."""
+    """A key repeated in one mapping."""
 
     def __init__(self, key, where: str = ""):
         self.key = key

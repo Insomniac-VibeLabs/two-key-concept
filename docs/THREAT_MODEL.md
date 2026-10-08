@@ -123,7 +123,8 @@ These are accepted or still open. They are not bugs the design already
 claims to close.
 
 - No independent review, and no production deployment.
-- Problem F is closed for loaded constitutions. `tool_specs` is required to
+- Trusting the agent's claimed fields instead of reading them from the
+  argument bytes is closed for loaded constitutions. `tool_specs` is required to
   sign and to load. `two_key/derive.py` reads amount and counterparties by
   JSON path. It does not read English. A present claim that disagrees with
   the bytes is a deny (`amount_mismatch`, `counterparty_mismatch`,
@@ -177,6 +178,13 @@ claims to close.
   principal key can forge a head. There is no external anchor, so those
   keys plus the ledger key are enough to rewrite a ledger that never leaves
   the machine.
+- What the ledger holds today: the agent's proposal text in full (the
+  `proposal` entry), the derived form (`action_normalized.form`: the amount,
+  counterparty, and counterparties read from the argument bytes), reasons,
+  digests, and sizes. It never holds the raw argument bytes of an oversized
+  or dropped value, only its size, digest, or key name. It never holds keys.
+  Anyone who can decrypt the log can read the proposal text and the derived
+  amount and counterparties.
 - A crash after `redemption_started` and before the tool runs refuses a
   retry, even if the tool did not run. Exactly-once execution is not claimed.
 - Where `fcntl` is absent, another process can still append. This package
@@ -225,6 +233,8 @@ above in the release that ships it.
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
+  It is meant to use a field allowlist that leaves out the proposal text and
+  the derived amount and counterparty, which the ledger holds today.
   Whoever can read the SIEM becomes a new audience for ledger metadata.
 - Inspection hooks for DLP and antivirus (target 0.5). New trust boundary:
   the scanner. A scanner error, timeout, or missing result is meant to be a
@@ -271,10 +281,18 @@ above in the release that ships it.
   rebinding. It is the first place decrypted ledger content is displayed, so
   anyone who can see the screen or reach the local port is a new audience. It
   is meant to show digests, sizes, and reason codes, not argument values.
+  Filtering by judge needs per-judge ballot records, which the ledger does
+  not hold today. They are meant to carry the judge id, the vote, and a
+  capped error only, never the rationale text, which is model output and may
+  quote arguments.
   Configuration edits change policy, so the GUI is meant never to hold the
   principal key. It prepares a constitution and hands it to the existing
   signing command. A GUI that is reachable from another machine is out of
   scope.
+- Generic spec field types (planned, not scheduled). A typed field per
+  argument path, each kind with its own limits. `amount` and `counterparty`
+  are meant to become ordinary typed fields. Until then the model above
+  describes the two special kinds used today.
 
 ## What to re-check when the code changes
 
