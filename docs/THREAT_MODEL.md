@@ -149,7 +149,8 @@ claims to close.
   `shape` of `string`, `number`, or `list` (strings only) refuses a
   different kind. `max_length` bounds a string or a list. A boolean is not
   a number. `payload_shape` is a derive deny. Shape does not read contents.
-  Meaning stays with Path B, or with DLP in the full repository. The token still binds
+  Meaning stays with Path B. A DLP hook is planned (see
+  [ROADMAP.md](../ROADMAP.md)). The token still binds
   the caller's original argument bytes. Redeem with those same bytes. The
   function is called with the projection. Missing `data_class` still becomes
   `classified` before the floor, and the floor cannot lower that default.
@@ -204,11 +205,10 @@ claims to close.
   in front of or beside the gateway, and they would not make this package a
   server or a scanner.
 - Full per-value information-flow tracking, and a content classifier. A
-  tool-spec floor is not a taint label. Scanning engines, PKI, anchoring, seed
-  phrases, and hybrid ML-DSA are in
-  [two-key](https://github.com/Insomniac-VibeLabs/two-key), not here. Planned
-  scanner hooks and key backup (see [ROADMAP.md](../ROADMAP.md)) do not change
-  that. See [SCOPE.md](SCOPE.md).
+  tool-spec floor is not a taint label. Scanning engines, PKI, anchoring, and
+  seed phrases are not here and are not planned. Planned scanner hooks, key
+  backup, and hybrid signatures are in [ROADMAP.md](../ROADMAP.md). See
+  [SCOPE.md](SCOPE.md).
 
 ## Planned changes to this model
 
