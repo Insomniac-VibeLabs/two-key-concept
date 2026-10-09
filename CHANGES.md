@@ -622,7 +622,7 @@ commit messages of PRs #43 and #61.
 - THREAT_MODEL and README name a gap the ledger has had since before
   0.2.1: anyone who can write the ledger directory can roll it back to an
   earlier signed head or wipe it, with no key, and both open and verify.
-  Without an external anchor neither is detected.
+  Without an external anchor neither is detected (#62).
 - The identity docstring no longer claims the per-install fingerprint key
   stops a ledger reader from testing guesses. README, HOWTO, llms.txt, and
   THREAT_MODEL describe HMAC-SHA256 for tokens and scrypt for passwords.
@@ -716,7 +716,8 @@ commit messages of PRs #43 and #61.
 
 ### Still open
 
-- Issues #45 to #60 are Low or Info. #58 (the witness public key is not
+- Issues #45 to #60 and #62 are Low or Info. #62 is the rollback or wipe
+  of the ledger directory described above. #58 (the witness public key is not
   pinned) is rated Low by the owner and is planned for 0.2.3. #60 item 4 is
   fixed above; its other items are open. #49's recovery command, #46's
   persistent halt, and #45's gateway-only ledger role are not built.

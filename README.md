@@ -306,7 +306,7 @@ It is a prototype. It is not a FIPS 140-3 validated module.
   witness key adds nothing until it is pinned outside the ledger (#58,
   planned for 0.2.3). Anyone who can write the ledger directory can roll it
   back to an earlier signed head or wipe it, with no key, and both still
-  open and verify.
+  open and verify (#62).
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures

@@ -204,7 +204,7 @@ claims to close.
   verify, and a rolled-back ledger forgets later redemptions. With the
   principal key and write access to `<ledger>.ledger-key` and
   `<ledger>.witness`, a whole replacement ledger under a new ledger key
-  verifies. Without an external anchor, neither is detected.
+  verifies. Without an external anchor, neither is detected (#62).
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
   counterparty, and counterparties read from the argument bytes), reasons,
