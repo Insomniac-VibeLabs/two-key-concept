@@ -37,8 +37,9 @@ outside the ledger directory. Stealing only the principal key does not decrypt
 the log, does not sign a new head, and does not mint a capability token.
 The minting key is `<ledger>.capability/capability.pem`, also outside the
 ledger directory. The gateway is given only the public half. Stealing the
-ledger key decrypts. Stealing the witness key as well as the principal key
-allows a forged head. Stealing the capability private key mints tokens.
+ledger key decrypts. Stealing the principal key and the ledger key allows a
+forged head, because the witness public key is not pinned yet (#58, planned
+for 0.2.3). Stealing the capability private key mints tokens.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

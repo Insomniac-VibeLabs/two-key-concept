@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.1/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.2/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -291,14 +291,17 @@ Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
 entries and the signed head are AES-256-GCM at rest. The data key is wrapped
 by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
-directory. A stolen principal key cannot decrypt the log or sign a new head.
+directory. A stolen principal key alone cannot decrypt the log or sign a new
+head. With the ledger key as well it can: the head carries its own witness
+public key, which is not pinned yet (#58; pinning is planned for 0.2.3).
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 ## Known limits
 
 - No independent review and no production deployment.
-- No external anchor for the ledger. Someone holding the principal, witness,
-  and ledger keys can rewrite a ledger that never leaves the machine.
+- No external anchor for the ledger. Someone holding the principal and
+  ledger keys can rewrite a ledger that never leaves the machine. The
+  witness key adds nothing until it is pinned (#58, planned for 0.2.3).
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
@@ -311,9 +314,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from the 0.2.1 prototype to a 1.0 release. It states intent, not a
+The plan from the 0.2.2 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing below exists in 0.2.1. The detail is in [ROADMAP.md](ROADMAP.md).
+Nothing below exists in 0.2.2. The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -330,6 +333,7 @@ flowchart LR
 
 | Target | What |
 | --- | --- |
+| 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
 | 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
@@ -341,17 +345,18 @@ flowchart LR
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.1.
-Tag `v0.2.1` is on `main` and on `working`. Tag `v0.2.0` stays on commit
-`2f756ac`. 0.2.0 changed configuration: read "Upgrading from 0.1.12" in
-[CHANGES.md](CHANGES.md) before upgrading.
+Install from git. It is not published to PyPI. Package version 0.2.2.
+Tag `v0.2.2` is on `main` and on `working`. Tag `v0.2.0` stays on commit
+`2f756ac`. 0.2.2 changes configuration and refuses some setups 0.2.1
+accepted: read "Upgrading from 0.2.1" in [CHANGES.md](CHANGES.md) before
+upgrading (and "Upgrading from 0.1.12" from older versions).
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.1"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"
 ```
 
 ## Run the offline demo
@@ -389,7 +394,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.1 to 1.0 |
+| `ROADMAP.md` | Planned work from 0.2.2 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |

@@ -1,6 +1,6 @@
 # Scope
 
-`two-key-concept` is the first working cut. Package version 0.2.1 (tag `v0.2.1` on `main`). Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
+`two-key-concept` is the first working cut. Package version 0.2.2 (tag `v0.2.2` on `main`). Tag `v0.2.0` stays on `2f756ac`. Tag `v0.1.12`
 is on `main`. `v0.1.6` stays on the previous tree.
 
 It has:
@@ -24,7 +24,7 @@ anchoring, seed phrases, or hybrid ML-DSA.
 ## Planned additions
 
 [ROADMAP.md](../ROADMAP.md) lists optional additions to this repository. None
-exists in 0.2.1, and the lists above describe 0.2.1. When one ships, this file
+exists in 0.2.2, and the lists above describe 0.2.2. When one ships, this file
 and [THREAT_MODEL.md](THREAT_MODEL.md) change in the same release.
 
 - Key backup and recovery (target 0.3): encrypted backup and restore of this

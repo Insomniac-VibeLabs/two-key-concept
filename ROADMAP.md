@@ -1,8 +1,8 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from the 0.2.1 prototype to a
+This is the plan for taking `two-key-concept` from the 0.2.2 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
-version numbers are targets, not dates. Nothing listed here exists in 0.2.1.
+version numbers are targets, not dates. Nothing listed here exists in 0.2.2.
 
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
@@ -36,9 +36,54 @@ flowchart LR
 
 ## 0.2.x: Baseline
 
-- Close the remaining open issues and freeze features.
+- 0.2.2 carries two owner decisions made after this plan was written: when a
+  judge counts as the monitored agent (its credential at any address, or
+  keyless on the agent's address), and HTTP Basic auth for judges and
+  agents. After 0.2.2, close the remaining open issues and freeze features.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
+
+### 0.2.3 (planned)
+
+Two changes, both breaking, both needing the maintainer security review
+that AGENTS.md asks for.
+
+**Pin the ledger's witness public key (#58, rated Low by the owner).**
+Today `Ledger._verify_head` reads `witness_public_key` from the stored head
+and checks the witness signature against that same key, and `checkpoint`
+writes whatever key `witness.pem` holds. So replacing `witness.pem` is
+accepted silently, and the principal key plus the ledger key are enough to
+sign a head. The plan:
+
+1. A new ledger records its witness public key in a `witness_pinned` entry,
+   the first entry after creation, checkpointed. Because it is in the hash
+   chain and the Merkle root, removing or changing it changes every later
+   root, which tokens and any copy of a root expose.
+2. `_verify_head` and `checkpoint` refuse a head whose witness public key is
+   not the pinned one (`witness_key_changed`), and `checkpoint` refuses to
+   sign with a `witness.pem` that does not match the pin.
+3. A ledger made by 0.2.2 or earlier pins the key in its current head on its
+   first open under 0.2.3 (trust on first use), with a ledgered
+   `witness_pinned` entry that says so. A key swapped before the upgrade
+   cannot be detected; CHANGES and THREAT_MODEL say this.
+4. Changing the witness key becomes an explicit, ledgered `witness_rotated`
+   entry, signed by the principal and both the old and the new witness key.
+   A lost witness key means a new ledger until 0.3's key backup can restore
+   it.
+5. `Ledger.verify()` and `audit` report the pin. Tests cover a swapped
+   `witness.pem` (refused), an old ledger pinning on first open, and a
+   rotation.
+6. README, THREAT_MODEL, and SECURITY.md go back to "the principal, witness,
+   and ledger keys together", and say that rewriting the whole chain from
+   its first entry is still possible without an external anchor.
+
+**Remove the `vendor` / `min_vendors` aliases (owner's decision).** Every
+`TODO(remove-vendor-alias)` site in `two_key/`: the `vendor:` and
+`min_vendors:` config keys (then refused as unknown keys), the `vendor=` and
+`min_vendors=` arguments, the `.vendor` and `.min_vendors` properties, the
+`_vendor` fallback, `maker_from_vendor`, `rename_min_vendors`, and the
+`QuorumPolicy.__init__` wrapper. The old-name tests become tests that the
+old names are refused, and CHANGES gets an "Upgrading from 0.2.2" step.
 
 ## 0.3: Key backup and recovery
 

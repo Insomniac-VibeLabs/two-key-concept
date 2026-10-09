@@ -5,10 +5,10 @@ and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.2.1. Tag v0.2.1 is on main and working.
+Package version: 0.2.2. Tag v0.2.2 is on main and working.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install from git ref v0.2.1.
-0.2.0 changed configuration: CHANGES.md "Upgrading from 0.1.12". 0.2.1 is docs and version only.
+Not on PyPI. Install from git ref v0.2.2 (two-key-concept[yaml] for YAML configs).
+0.2.2 changes configuration: CHANGES.md "Upgrading from 0.2.1" (and "Upgrading from 0.1.12" for older).
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
@@ -16,7 +16,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(398 tests, no network).
+(400 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or

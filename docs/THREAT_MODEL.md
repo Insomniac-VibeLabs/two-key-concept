@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.1 (tag `v0.2.1` on `main`). `v0.2.0` stays on `2f756ac`. The model is unchanged from 0.2.0.
+This is the design model for `two-key-concept` 0.2.2 (tag `v0.2.2` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.2 changes when a judge counts as the monitored agent, adds HTTP Basic auth with scrypt-fingerprinted passwords, and describes the witness key as it is (not pinned, #58).
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -19,6 +19,11 @@ the code wins, then this file should be corrected.
   gateway receives only the public half.
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
+- The per-install fingerprint key (`<ledger>.ledger-key/fingerprint.key`),
+  which keys credential fingerprints. It sits beside the ledger key, so it
+  protects fingerprints only from someone without that directory; against
+  someone with it, API tokens are safe by their length and passwords by
+  scrypt's cost.
 - The wrapped data key stored inside the ledger directory.
 - Judge credentials and monitored-agent credentials. They are not the same secret.
 - The capability token and the argument bytes it is bound to.
@@ -98,14 +103,18 @@ the code wins, then this file should be corrected.
 - A second run of a token after `redemption_started` has been checkpointed.
   A tool exception writes `redemption_aborted` and leaves the token usable.
 - A silent edit of a ledger record that still verifies, and opening the log
-  with only the principal key. The head needs the witness signature as well.
+  with only the principal key. The head needs a witness signature as well,
+  but the witness public key is read from the head itself and is not pinned
+  (#58), so the principal key and the ledger key together can sign a head
+  with a new witness key. Pinning is planned for 0.2.3.
 
 ## Assumptions
 
 - The gateway is the only holder of tool credentials. This package cannot
   stop an agent that can call the tool by another path.
-- The principal key, the witness key, and the ledger key are not all in the
-  attacker's hands.
+- The principal key and the ledger key are not both in the attacker's
+  hands. The witness key adds to this only once it is pinned (#58, planned
+  for 0.2.3).
 - The action record describes the real call only for fields the tool spec
   names. Every loaded constitution has `tool_specs`. A tool with no spec
   does not redeem. A counterparty path requires `allow`. A party off that
@@ -182,10 +191,11 @@ claims to close.
   cannot.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
-  capability private key does. Stealing the witness key as well as the
-  principal key can forge a head. There is no external anchor, so those
-  keys plus the ledger key are enough to rewrite a ledger that never leaves
-  the machine.
+  capability private key does. Stealing the principal key and the ledger
+  key is enough to forge a head, because the witness public key is not
+  pinned (#58): a new witness key can sign it. Pinning is planned for
+  0.2.3. There is no external anchor, so those two keys are enough to
+  rewrite a ledger that never leaves the machine.
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
   counterparty, and counterparties read from the argument bytes), reasons,
@@ -229,7 +239,7 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.1, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.2, and nothing in
 this section describes current behavior. Each item is added to the sections
 above in the release that ships it.
 

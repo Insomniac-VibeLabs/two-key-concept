@@ -245,10 +245,10 @@ judge-is-not-the-agent check above never compares it with the monitored
 agent. Maker names are compared after NFKC and case folding, so
 `OpenAI` and `openai` are one maker. `min_distinct_providers` is a separate
 count: the `provider` labels of the judges that returned a valid ballot.
-Through 0.2.1 these keys were `vendor:` and `min_vendors:`. Both still load
-and print `two-key: vendor is deprecated; use maker (same meaning)` (or the
-`min_vendors` line) on stderr; giving the old and the new name together is
-refused.
+Through 0.2.1 these keys were `vendor:` and `min_vendors:`. 0.2.2 still loads
+both and prints `two-key: vendor is deprecated; use maker (same meaning).
+vendor is removed in 0.2.3.` (or the `min_vendors` line) on stderr; giving the
+old and the new name together is refused. 0.2.3 removes the old names.
 
 `TwoKey` does not start with no judge, with `timeout_seconds: null` (Path B
 needs a hard deadline), or with two judges that share an id
