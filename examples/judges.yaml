@@ -54,8 +54,8 @@ quorum:
   #                          # Recommended for destructive, irreversible, financial, or external-send tools.
   #                          # This file's judges (four makers, one local Ollama judge) meet it.
   # A judge's maker is who made its model, as you label it (maker:, default: provider). It is not
-  # verified, and it is not compared with the monitored agent. min_vendors and vendor: are the
-  # names through 0.2.1; 0.2.2 still loads them with a deprecation note, and 0.2.3 removes them.
+  # verified, and it is not compared with the monitored agent. The old names min_vendors and
+  # vendor: (through 0.2.2) are refused as unknown keys.
   # require_local_yes: true needs at least one local judge, or Two-Key does not start.
   # allow_same_provider_judge: deprecated and ignored; the same provider is allowed by default
   # QuorumPolicy.section4() is high_assurance plus require_path_a_first. TwoKey.authorize

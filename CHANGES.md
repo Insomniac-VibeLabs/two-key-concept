@@ -729,3 +729,21 @@ commit messages of PRs #43 and #61.
   `TODO(remove-vendor-alias)` site.
 - Remove the unused `extra_secrets` argument of `AgentDeclaration.resolve`
   (breaking).
+
+## Unreleased (0.2.3)
+
+### Changed (breaking)
+
+- **The `vendor` / `min_vendors` aliases are removed** (owner's decision;
+  deprecated in 0.2.2, #44). The judge key `vendor:` and the quorum key
+  `min_vendors:` are refused as unknown keys. The `vendor=` argument of
+  `LLMJudge` and `FixedJudge`, and `min_vendors=` on `QuorumPolicy` and its
+  `high_assurance`, `section4`, and `without_diversity_floors` builders,
+  raise `TypeError`. `Judge.vendor` and `QuorumPolicy.min_vendors` are gone.
+  A judge's maker is its `maker` label or, when it has none, its `provider`;
+  a `vendor` or `_vendor` attribute is no longer read. `maker_from_vendor`,
+  `rename_min_vendors`, `warn_renamed`, and the `QuorumPolicy.__init__`
+  wrapper are removed.
+- `AgentDeclaration.resolve` no longer takes `extra_secrets`. Nothing passed
+  it, and it fingerprinted whatever it was given as one of the agent's
+  credentials.

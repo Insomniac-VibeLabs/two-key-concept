@@ -735,9 +735,7 @@ def _fingerprint(credential: Any, fp_key: bytes | None) -> str:
 def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     jid = str(getattr(judge, "judge_id", "?"))
     if getattr(judge, "is_test_double", False) and not getattr(judge, "base_url", None):
-        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-        maker = str(getattr(judge, "maker", None) or getattr(judge, "vendor", None)
-                    or getattr(judge, "provider", "test-double"))
+        maker = str(getattr(judge, "maker", None) or getattr(judge, "provider", "test-double"))
         return ResolvedIdentity("judge", jid, f"test-double/{jid}", f"test-double/{jid}",
                                 f"{IN_PROCESS}:{jid}", frozenset({f"{IN_PROCESS}:{maker}"}), None,
                                 frozenset({NO_CREDENTIAL}), getattr(judge, "provider", None))
@@ -819,10 +817,9 @@ class AgentDeclaration:
         validate_tenant(self.tenant, f"monitored_agent {self.id!r}")
         validate_upstream(self.upstream, f"monitored_agent {self.id!r}")
 
-    def resolve(self, *, allow_in_process: bool = False, extra_secrets: Iterable[str] = (),
-                fp_key: bytes | None = None) -> ResolvedIdentity:
+    def resolve(self, *, allow_in_process: bool = False, fp_key: bytes | None = None) -> ResolvedIdentity:
         self.validate(allow_in_process=allow_in_process)
-        fps = {credential_fingerprint(s, fp_key) for s in extra_secrets if s}
+        fps: set[str] = set()
         if self.username_env is not None:
             from .judges.credentials import BasicAuthCredential, CredentialError
             try:   # the pair, read exactly as a judge's is, so the two fingerprints match

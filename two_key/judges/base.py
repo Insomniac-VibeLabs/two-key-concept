@@ -11,8 +11,7 @@ Quorum protocol specifics (the section-4 profile):
   can be checked for maker heterogeneity (quorum.check_judge_set). ``maker``
   is who made the judge's model, as the operator labels it (default:
   ``provider``). It is not verified, and the judge-is-not-the-agent check
-  never compares it. ``vendor`` is its deprecated name (removed in 0.2.3). Whether
-  a judge is local is ``is_local()``: the declared flag AND a loopback or
+  never compares it. Whether a judge is local is ``is_local()``: the declared flag AND a loopback or
   private endpoint host. The flag alone never makes a judge local;
 * ballots are bound to H(action record) and H(constitution). The convenor
   passes a ``binding`` mapping to ``score_bound``. A judge that reports hashes
@@ -23,7 +22,6 @@ Quorum protocol specifics (the section-4 profile):
 from __future__ import annotations
 
 import abc
-import sys
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
@@ -57,22 +55,6 @@ class Ballot:
         return self.vote in ("yes", "no")
 
 
-def warn_renamed(old: str, new: str) -> None:
-    """One stderr line for a name that still works but was renamed (``vendor`` is now ``maker``)."""
-    print(f"two-key: {old} is deprecated; use {new} (same meaning). {old} is removed in 0.2.3.", file=sys.stderr)
-
-
-# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-def maker_from_vendor(maker: str | None, vendor: str | None) -> str | None:
-    """The ``maker`` argument, or the deprecated ``vendor`` one. Both at once is refused."""
-    if vendor is None:
-        return maker
-    if maker is not None:
-        raise ValueError("give maker or the deprecated vendor, not both")
-    warn_renamed("vendor", "maker")
-    return vendor
-
-
 class Judge(abc.ABC):
     """Abstract Path B judge."""
 
@@ -85,26 +67,11 @@ class Judge(abc.ABC):
     def maker(self) -> str:
         """Who made the judge's model, for the ``min_makers`` floor. Operator label, not verified.
         Defaults to ``provider``."""
-        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-        m = getattr(self, "_maker", None) or getattr(self, "_vendor", None)   # _vendor: set by 0.2.1-era code
-        if not m and type(self).vendor is not Judge.vendor:
-            m = self.vendor     # a subclass written before the rename still overrides vendor
-        return m or self.provider
+        return getattr(self, "_maker", None) or self.provider
 
     @maker.setter
     def maker(self, value: str) -> None:
         self._maker = value
-
-    # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-    @property
-    def vendor(self) -> str:
-        """Deprecated name of ``maker`` (accepted in 0.2.2, removed in 0.2.3). Reads the label directly, not
-        ``maker``, so an old subclass whose ``vendor`` calls ``super().vendor`` does not recurse."""
-        return getattr(self, "_maker", None) or getattr(self, "_vendor", None) or self.provider
-
-    @vendor.setter
-    def vendor(self, value: str) -> None:
-        self.maker = value
 
     @abc.abstractmethod
     def score(self, constitution_text: str, action: Action, proposal: str) -> Ballot:

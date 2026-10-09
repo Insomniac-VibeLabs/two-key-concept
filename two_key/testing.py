@@ -10,7 +10,7 @@ deployment. ``core.TwoKey`` refuses test doubles unless
 from __future__ import annotations
 
 from .action import Action
-from .judges.base import Ballot, Judge, maker_from_vendor
+from .judges.base import Ballot, Judge
 
 
 class HeuristicJudge(Judge):
@@ -52,9 +52,7 @@ class FixedJudge(Judge):
     is_test_double = True
 
     def __init__(self, judge_id: str, vote: str, provider: str = "test-double", *, maker: str | None = None,
-                 local_weights: bool = False, vendor: str | None = None):
-        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-        maker = maker_from_vendor(maker, vendor)
+                 local_weights: bool = False):
         self.judge_id, self.vote, self.provider = judge_id, vote, provider
         if maker:
             self.maker = maker
