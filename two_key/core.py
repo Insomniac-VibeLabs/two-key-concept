@@ -131,8 +131,10 @@ class TwoKey:
         sep = {**sep, "identities_digest": self._identities_digest,
                "credential_fingerprint": {"alg": "hmac-sha256", "password_alg": PASSWORD_FINGERPRINT_ALG,
                                           "key_id": fingerprint_key_id(self._fp_key),
-                                          "input": "secret with surrounding whitespace stripped; a username and "
-                                                   "password as one username:password pair"}}
+                                          "input": "every credential a side holds, sent or not, with surrounding "
+                                                   "whitespace stripped; scrypt for a secret that contains ':' (a "
+                                                   "username and password as one username:password pair, or a "
+                                                   "token holding one), HMAC-SHA256 otherwise"}}
         # The full policy is in constitution_loaded (quorum_policy); each decision carries its digest.
         self._policy_digest = policy_digest(self.quorum.to_record())
         self._decision_context = {"policy_digest": self._policy_digest,

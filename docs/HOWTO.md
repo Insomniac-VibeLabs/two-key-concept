@@ -91,8 +91,8 @@ HTTP error abstains.
 ## The monitored agent and the judge-is-not-the-agent rule
 
 The minimum is one judge, and no judge may be the monitored agent. A judge
-may run any model from any vendor. A judge is not the monitored agent, and
-`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the
+may run any model from any vendor. A judge must not be the monitored agent:
+`TwoKey` refuses to start (`judge_matches_agent:`) when a judge holds the
 monitored agent's credential (the same API token, or the same username and
 password), at any address, or when neither side sends a credential on the
 same address. You declare who the agent is; Two-Key refuses a judge that is
@@ -149,11 +149,12 @@ At startup each judge and agent is resolved to:
   The key sits beside the ledger key, so it does not stop someone who holds
   that directory; there a random token is safe by its length, a guessable
   token (a placeholder such as `EMPTY`) is not, and a password is protected
-  only by scrypt's cost. A token that contains `:` is also fingerprinted as
-  a `username:password` pair (scrypt, so about 0.4 s more at start-up), so
-  a judge or agent holding a username and password as a token (`user:pass`
-  in `credential_env`) matches the other side's Basic pair. Raw keys and
-  passwords are never logged.
+  only by scrypt's cost. A fingerprint is chosen by content: any secret that
+  contains `:` is fingerprinted as a `username:password` pair with scrypt,
+  never with HMAC, so a judge or agent holding a username and password as a
+  token (`user:pass` in `credential_env`) matches the other side's Basic
+  pair, and a password never gets the cheap hash. Raw keys and passwords are
+  never logged.
 
 `TwoKey` refuses with `judge_matches_agent:` only when a judge is the
 monitored agent. That is either of these:
@@ -167,8 +168,9 @@ monitored agent. That is either of these:
   side holds counts, whether or not its connector sends it: a judge with
   `auth_header: none` (an Ollama judge's default) that is configured with
   the agent's key, and an `agents.yaml` `ollama` agent whose configured key
-  a judge also holds, are refused. The ledger records such keys under
-  `credential_fingerprint_held`. A placeholder that a
+  a judge also holds, are refused. The ledger records every credential a
+  side holds under `credential_fingerprint`, and whether it is sent under
+  `credential_sent`. A placeholder that a
   local server ignores (`EMPTY`) counts too: give each side its own value,
   or leave it off one side (`auth: {type: none}` on a judge,
   `credential: none` on the agent). On one shared server that ignores keys,
@@ -676,6 +678,16 @@ the next rotation refuses until it is dealt with:
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
 
+- A credential configured on a judge or an `agents.yaml` agent is read at
+  start-up even when its connector never sends it (`auth_header: none`, an
+  Ollama agent), so a callback or keyring credential runs then, and one that
+  cannot be read refuses to start. At call time it is read only to compare
+  with `agent_session`. Remove `auth:` from a connector that does not send
+  it.
+- A secret that contains `:` is fingerprinted with scrypt at start-up
+  (about 0.4 s and 128 MiB each). A host whose OpenSSL has no scrypt (some
+  FIPS builds) refuses to start with such a secret
+  (`password_fingerprint_failed:`).
 - Without `--witness-public-key` (`witness_public_key=`), the principal key
   and the ledger key together can rewrite the ledger under a new witness
   key. With it, the witness key is needed too, and the configured copy must

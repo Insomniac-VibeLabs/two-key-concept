@@ -1,6 +1,6 @@
 """The judge-is-not-the-agent rule (owner decision, 2026-10-08).
 
-A judge is not the monitored agent, and TwoKey refuses to start, when it holds the agent's credential (an API
+A judge must not be the monitored agent: TwoKey refuses to start when a judge holds the agent's credential (an API
 token, a username/password pair, or a session), at any address, sent or not, or when neither side sends a
 credential on the same address.
 Any model from any vendor is allowed; likely accidents are warned and recorded. Usernames and passwords are
@@ -21,7 +21,7 @@ from two_key.agents import AgentConfigError, MonitoredAgent, load_agents
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.identity import (AgentDeclaration, IdentityError, check_separation, compare, configured_agent_identity,
-                              judge_identity, separation_warnings)
+                              credential_fingerprint, judge_identity, separation_warnings)
 from two_key.judges.base import Ballot, Judge
 from two_key.judges.config import JudgeConfigError, build_credential, load_config
 from two_key.judges.credentials import BasicAuthCredential, CredentialError, StaticToken
@@ -78,11 +78,12 @@ class Rule(EnvVars):
         self.setenv(RULE_PLACEHOLDER="EMPTY")
         a = a.resolve(fp_key=FP)
         msg = compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1", "EMPTY"), FP))
-        self.assertRegex(msg, r"give each side its own value, or leave it off one side: auth: \{type: none\} on a "
-                              "judge, credential: none on the agent")
+        self.assertRegex(msg, r"leave the shared one off one side: auth: \{type: none\} on a judge, credential: none "
+                              "on the agent .for a placeholder a local server ignores, give each side its own value")
         same = compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8000/v1", "EMPTY"), FP))
-        self.assertRegex(same, "on the same address localhost:8000 .give the judge its own address, or its own "
-                               "credential that the server checks")
+        self.assertRegex(same, "on the same address localhost:8000; a credential identifies its holder at any "
+                               "address. Give the judge its own credential")
+        self.assertNotIn("its own address", same)       # a new address never clears it
         self.assertIsNone(compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1", "EMPTY-2"), FP)))
         self.assertIsNone(compare(a, judge_identity(side("qwen2.5:7b", "http://localhost:8001/v1"), FP)))
 
@@ -122,7 +123,10 @@ class Rule(EnvVars):
         cred = build_credential({"type": "env", "var": "RULE_UNSENT"})
         ollama = MonitoredAgent("local", "local", "llama3.1:8b", "http://localhost:11434", "local", cred, kind="ollama")
         self.assertEqual(ollama._headers(), {})
-        self.assertEqual(configured_agent_identity(ollama, FP).credentials, frozenset({"none"}))
+        ident = configured_agent_identity(ollama, FP)
+        self.assertEqual(ident.credentials, frozenset({credential_fingerprint("dummy", FP)}))   # held, not sent
+        self.assertFalse(ident.sends)
+        self.assertIs(ident.to_record()["credential_sent"], False)
         unreadable = MonitoredAgent("gw", "openai", "m", "https://localhost:8443/v1", "local",
                                     build_credential({"type": "env", "var": "RULE_NEVER_SET"}), kind="openai_compatible")
         with self.assertRaisesRegex(IdentityError, "credential could not be read at start-up"):
@@ -136,6 +140,28 @@ class Rule(EnvVars):
                 ident = judge_identity(j, FP)   # the Ollama judge holds its own key and never sends it
                 self.assertIsNone(compare(a, ident))
                 self.assertIn("same_address_one_side_keyless", [w["check"] for w in separation_warnings(a, ident)])
+
+
+    def test_an_unresolved_identity_is_warned_once(self):
+        a = self.agent(base_url="https://llm.corp.example/v1", model="agent-model")
+        judges = [judge_identity(side("claude-sonnet-4-5", "https://api.anthropic.com", f"k{i}", jid=f"j{i}"), FP)
+                  for i in range(3)]
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            report = check_separation([a], judges)
+        self.assertEqual([w["check"] for w in report.warnings], ["unresolved_identity"])
+        self.assertEqual(err.getvalue().count("(unresolved_identity)"), 1)
+
+    def test_refusal_message_and_warnings_are_raised_and_printed(self):
+        a = self.agent()
+        same = judge_identity(side("gpt-4o-mini", "https://api.openai.com/v1", "agent-key", jid="bad"), FP)
+        with self.assertRaisesRegex(IdentityError, "^judge_matches_agent: a judge must not be the monitored agent: judge 'bad'"):
+            check_separation([a], [same])
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            report = check_separation([a], [judge_identity(side("gpt-4o", "https://api.openai.com/v1", "k2"), FP)])
+        self.assertEqual([w["check"] for w in report.warnings], ["same_model_same_address"])
+        self.assertIn("two-key: WARNING: judge 'j' vs agent 'agent'", err.getvalue())
+        self.assertEqual(report.to_record()["warnings"], [dict(w) for w in report.warnings])
 
 
 class HeldCredential(EnvVars):
@@ -156,15 +182,16 @@ class HeldCredential(EnvVars):
                 j = OllamaJudge("o", "ollama", "qwen2.5:7b", url, StaticToken("agent-key"), allow_insecure_http=True)
                 self.assertEqual(j._auth_headers(), {})              # auth_header: none, the Ollama default
                 ident = judge_identity(j, FP)
-                self.assertEqual(ident.credentials, frozenset({"none"}))
-                self.assertRegex(compare(a, ident), "the same credential")
+                self.assertFalse(ident.sends)
+                self.assertRegex(compare(a, ident), "the same credential, held though not sent")
                 with self.assertRaisesRegex(IdentityError, "^judge_matches_agent:"):
                     check_separation([a], [ident])
         own = judge_identity(OllamaJudge("o", "ollama", "qwen2.5:7b", "http://localhost:11434",
                                          StaticToken("judge-key")), FP)
         self.assertIsNone(compare(a, own))
-        self.assertEqual(own.to_record()["credential_fingerprint"], ["none"])
-        self.assertEqual(len(own.to_record()["credential_fingerprint_held"]), 1)
+        rec = own.to_record()
+        self.assertEqual(rec["credential_fingerprint"], [credential_fingerprint("judge-key", FP)])
+        self.assertIs(rec["credential_sent"], False)
 
     def test_an_unsent_judge_key_that_cannot_be_read_refuses(self):
         os.environ.pop("HELD_NEVER_SET", None)
@@ -179,7 +206,7 @@ class HeldCredential(EnvVars):
         agent = MonitoredAgent("local", "local", "llama3.1:8b", "http://localhost:11434", "local", cred, kind="ollama")
         self.assertEqual(agent._headers(), {})
         a = configured_agent_identity(agent, FP)
-        self.assertEqual(a.credentials, frozenset({"none"}))
+        self.assertFalse(a.sends)
         far = judge_identity(side("claude-sonnet-4-5", "https://api.anthropic.com", "ollama-agent-key"), FP)
         self.assertRegex(compare(a, far), "the same credential")
         other = judge_identity(side("claude-sonnet-4-5", "https://api.anthropic.com", "judge-key"), FP)
@@ -205,8 +232,11 @@ class HeldCredential(EnvVars):
         other = judge_identity(side("m2", "https://other.example/v1",
                                     credential=BasicAuthCredential("HELD_USER", "HELD_PASS")), FP)
         self.assertIsNone(compare(token_agent, other))
-        plain = judge_identity(side("m2", "https://other.example/v1", "sk-no-colon"), FP)
-        self.assertIsNone(plain.to_record()["credential_fingerprint_held"])    # no scrypt for a token without ':'
+        # One fingerprint per credential, by content: scrypt for a secret with ':', never also the cheap HMAC.
+        [held] = token_judge.credentials
+        self.assertTrue(held.startswith("scrypt-n17-r8-p1:"))
+        [plain] = judge_identity(side("m2", "https://other.example/v1", "sk-no-colon"), FP).credentials
+        self.assertTrue(plain.startswith("hmac-sha256:"))
 
     def test_twokey_refuses_to_start(self):
         a = {"id": "agent", "model": "gpt-4o", "provider": "openai", "base_url": "https://api.openai.com/v1",
@@ -226,26 +256,20 @@ class HeldCredential(EnvVars):
         self.assertEqual(j.score_bound("c", SEARCH, "", None, agent_session="agent-key").error,
                          "cloud_judge_reused_agent_session")
 
-    def test_an_unresolved_identity_is_warned_once(self):
-        a = self.agent(base_url="https://llm.corp.example/v1", model="agent-model")
-        judges = [judge_identity(side("claude-sonnet-4-5", "https://api.anthropic.com", f"k{i}", jid=f"j{i}"), FP)
-                  for i in range(3)]
-        with contextlib.redirect_stderr(io.StringIO()) as err:
-            report = check_separation([a], judges)
-        self.assertEqual([w["check"] for w in report.warnings], ["unresolved_identity"])
-        self.assertEqual(err.getvalue().count("(unresolved_identity)"), 1)
+    def test_call_time_reads_an_unsent_key_only_to_compare_with_a_session(self):
+        from two_key.judges.credentials import CredentialProvider
 
-    def test_refusal_message_and_warnings_are_raised_and_printed(self):
-        a = self.agent()
-        same = judge_identity(side("gpt-4o-mini", "https://api.openai.com/v1", "agent-key", jid="bad"), FP)
-        with self.assertRaisesRegex(IdentityError, "^judge_matches_agent: a judge must not be the monitored agent: judge 'bad'"):
-            check_separation([a], [same])
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            report = check_separation([a], [judge_identity(side("gpt-4o", "https://api.openai.com/v1", "k2"), FP)])
-        self.assertEqual([w["check"] for w in report.warnings], ["same_model_same_address"])
-        self.assertIn("two-key: WARNING: judge 'j' vs agent 'agent'", err.getvalue())
-        self.assertEqual(report.to_record()["warnings"], [dict(w) for w in report.warnings])
+        class Counting(CredentialProvider):
+            kind, calls = "callback", 0
+
+            def get_token(self):
+                Counting.calls += 1
+                raise CredentialError("keyring locked")
+        j = OllamaJudge("o", "ollama", "qwen2.5:7b", "http://localhost:11434", Counting(),
+                        transport=lambda *a: {"message": {"content": BALLOT}})
+        self.assertEqual(j.score_bound("c", SEARCH, "", None).vote, "yes")     # no session: not read
+        self.assertEqual(Counting.calls, 0)
+        self.assertRegex(j.score_bound("c", SEARCH, "", None, agent_session="s").error, "^credential: ")
 
 
 class Basic(EnvVars):

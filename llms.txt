@@ -30,10 +30,10 @@ model from any vendor. A judge is not the monitored agent: TwoKey refuses to
 start (judge_matches_agent:) when a judge holds the agent's credential (the
 same API token, or the same username and password; compared by fingerprint
 under a per-install key, HMAC-SHA256 for a token, scrypt N=2^17 r=8 p=1 for a
-username and password as one pair, a token containing ':' also as a pair;
+username and password as one pair, and for any secret containing ':';
 Basic over HTTPS only) at any address, sent or not, or both sides
 keyless on one address (host:port as configured, local aliases folded, no
-DNS). A judge presenting agent_session abstains at any address. Other
+DNS). A judge holding agent_session, sent or not, abstains at any address. Other
 overlaps start with a warning on stderr and in constitution_loaded:
 same_address_one_side_keyless, same_model_same_address,
 same_model_shared_route, same_model_unknown_proxy, shared_tenant,

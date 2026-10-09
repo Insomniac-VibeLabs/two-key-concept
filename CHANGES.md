@@ -750,15 +750,20 @@ commit messages of PRs #43 and #61.
     token (`user:pass` in `credential_env` or a token provider) next to a
     Basic pair.
   Every credential each side holds is now compared for the same-credential
-  refusal, and a token that contains `:` is also fingerprinted as a
-  `username:password` pair (scrypt, about 0.4 s at start-up per such token).
-  The rule for two keyless sides on one address still looks only at what is
-  sent. A key that is never sent is now read at start-up, so one that cannot
-  be read refuses (`credential could not be read at start-up`). The resolved
-  identities in `constitution_loaded` gain `credential_fingerprint_held`. At
-  call time a judge's key that it holds but never sends is compared with
-  `agent_session` too. The refusal reads `judge_matches_agent: a judge must
-  not be the monitored agent: ...` (was `a judge is the monitored agent`).
+  refusal, sent or not, and a fingerprint is chosen by content: any secret
+  that contains `:` is fingerprinted as a `username:password` pair with
+  scrypt (about 0.4 s at start-up), never with HMAC. The rule for two
+  keyless sides on one address still looks only at what is sent. A key
+  that is never sent is now read at start-up, so one that cannot be read
+  refuses (`credential could not be read at start-up`); at call time it is
+  read only to compare with `agent_session`. Each resolved identity in
+  `constitution_loaded` lists every credential it holds under
+  `credential_fingerprint` and gains `credential_sent`; the rule id
+  (`same_agent`) is `same_held_credential_or_keyless_same_address`, and the
+  fingerprint `input` text says what is fingerprinted. The refusal reads
+  `judge_matches_agent: a judge must not be the monitored agent: ...` (was
+  `a judge is the monitored agent`), and says to give the judge its own
+  credential: a new address never clears it.
 - **The ledger pins its witness public key (#58).** 0.2.2 read the witness
   key from the head it was checking, so a replaced `witness.pem` was
   accepted and the principal key plus the ledger key could sign a head.

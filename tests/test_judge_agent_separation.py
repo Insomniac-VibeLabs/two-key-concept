@@ -1,7 +1,7 @@
 """A judge must not be the monitored agent. Checked at start-up from operator config only.
 
-Owner rule (2026-10-08, restated 2026-10-09): a judge may run any model from any vendor. A judge is not the
-monitored agent, and TwoKey refuses to start, when it holds the agent's credential (the same API token, or the
+Owner rule (2026-10-08, restated 2026-10-09): a judge may run any model from any vendor. A judge must not be the
+monitored agent: TwoKey refuses to start when a judge holds the agent's credential (the same API token, or the
 same username and password), at any address, or when neither side sends a credential on the same address.
 Everything else starts; likely accidents (the same model on the same address, a shared tenant, a proxy, an
 unresolved identity) are warned on stderr and recorded in constitution_loaded.
@@ -246,7 +246,7 @@ class SameProvider(Env):
         rec = [e for e in tk.ledger.entries if e.kind == "constitution_loaded"][-1].body["judge_agent_separation"]
         self.assertTrue(rec["ok"])
         self.assertEqual(rec["same_provider"], "allowed")
-        self.assertEqual(rec["same_agent"], "same_credential_or_keyless_same_address")
+        self.assertEqual(rec["same_agent"], "same_held_credential_or_keyless_same_address")
         self.assertEqual(rec["checks"], ["same_credential", "same_address_no_credential"])
         self.assertNotIn("same_credential_other_address", rec["warning_checks"])
         self.assertEqual(rec["warnings"], [])

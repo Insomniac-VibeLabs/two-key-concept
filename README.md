@@ -148,13 +148,14 @@ and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 `organization`, `project`, `account`, or `deployment`, plus what the URL
 shows), and a credential fingerprint under a per-install key, whitespace
 stripped (HMAC-SHA256 for an API token; scrypt, N=2^17, r=8, p=1, for a
-username and password, fingerprinted as one pair).
+username and password, fingerprinted as one pair, and for any secret that
+contains `:`). Every credential a side holds is fingerprinted, sent or not.
 
 A judge may run any model from any vendor. A judge is not the monitored agent, and
 `TwoKey` refuses to start (`judge_matches_agent:`), when it holds the monitored
 agent's credential (the same API token, or the same username and password),
 at any address: a credential identifies its holder wherever it is sent. Two
-sides with no credential are the same agent only on the same address (the
+sides that send no credential are the same agent only on the same address (the
 endpoint `host:port`, every alias of this machine folded to `localhost`),
 where nothing tells them apart. Everything else starts. Likely accidents
 are allowed with a `two-key: WARNING:` line on stderr and recorded in

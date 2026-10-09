@@ -248,7 +248,7 @@ class LLMJudge(Judge):
             except (ValueError, UnicodeDecodeError):
                 pass
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
-        if self.auth_header == "none" and getattr(self.credential, "kind", None) != "none":
+        if sessions and self.auth_header == "none" and getattr(self.credential, "kind", None) != "none":
             # A key this judge holds but never sends is still the agent's if it equals the session.
             try:
                 tokens.append(self.credential.get_token() or "")
