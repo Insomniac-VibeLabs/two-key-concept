@@ -150,8 +150,8 @@ shows), and a credential fingerprint under a per-install key, whitespace
 stripped (HMAC-SHA256 for an API token; scrypt, N=2^17, r=8, p=1, for a
 username and password, fingerprinted as one pair).
 
-A judge may run any model from any vendor. It is the monitored agent, and
-`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the
+A judge may run any model from any vendor. A judge is not the monitored agent, and
+`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the monitored
 agent's credential (the same API token, or the same username and password),
 at any address: a credential identifies its holder wherever it is sent. Two
 sides with no credential are the same agent only on the same address (the
