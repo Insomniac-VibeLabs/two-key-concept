@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.2/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.3/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -327,9 +327,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from the 0.2.2 prototype to a 1.0 release. It states intent, not a
+The plan from the 0.2.3 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing below exists in 0.2.2. The detail is in [ROADMAP.md](ROADMAP.md).
+Nothing after 0.2.3 exists yet. The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -346,7 +346,7 @@ flowchart LR
 
 | Target | What |
 | --- | --- |
-| 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
+| 0.2.3 (this release) | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
 | 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
@@ -358,18 +358,21 @@ flowchart LR
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.2.
-Tag `v0.2.2` is on `main` and on `working`. Tag `v0.2.0` stays on commit
-`2f756ac`. 0.2.2 changes configuration and refuses some setups 0.2.1
-accepted: read "Upgrading from 0.2.1" in [CHANGES.md](CHANGES.md) before
-upgrading (and "Upgrading from 0.1.12" from older versions).
+Install from git. It is not published to PyPI. Package version 0.2.3.
+Tag `v0.2.3` is on `main` and on `working`. Tag `v0.2.0` stays on commit
+`2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
+some judges 0.2.2 accepted (one holding the agent's credential without
+sending it, or in the other form), and pins each ledger's witness key on
+its first open: read "Upgrading from 0.2.2" in
+[CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
+"Upgrading from 0.1.12" from older versions).
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.3"
 ```
 
 ## Run the offline demo
@@ -407,7 +410,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.2 to 1.0 |
+| `ROADMAP.md` | Planned work from 0.2.3 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |

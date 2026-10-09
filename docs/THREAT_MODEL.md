@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.2 (tag `v0.2.2` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.2 changes when a judge counts as the monitored agent, adds HTTP Basic auth with scrypt-fingerprinted passwords, and describes the witness key as it is (not pinned, #58).
+This is the design model for `two-key-concept` 0.2.3 (tag `v0.2.3` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth with scrypt-fingerprinted passwords.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -279,7 +279,7 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.2, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.3, and nothing in
 this section describes current behavior. Each item is added to the sections
 above in the release that ships it.
 

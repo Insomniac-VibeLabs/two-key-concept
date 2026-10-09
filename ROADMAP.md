@@ -1,9 +1,9 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from the 0.2.2 prototype to a
+This is the plan for taking `two-key-concept` from the 0.2.3 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
 version numbers are targets, not dates. Nothing listed here after the 0.2.x
-baseline exists in 0.2.2.
+baseline exists in 0.2.3.
 
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
@@ -44,16 +44,19 @@ flowchart LR
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
 
-### 0.2.3 (planned)
+### 0.2.3 (shipped)
 
 Two changes, both breaking, both needing the maintainer security review
-that AGENTS.md asks for.
+that AGENTS.md asks for. Both shipped in 0.2.3 as described here; the plan
+is kept as the design record. CHANGES "0.2.3" lists what was built,
+including the CLI (`--witness-public-key`, `two-key rotate-witness`, and
+`two-key audit`, which reports both pins).
 
 **Pin the ledger's witness public key (#58, rated Low by the owner).**
-Today `Ledger._verify_head` reads `witness_public_key` from the stored head
-and checks the witness signature against that same key, and `checkpoint`
-writes whatever key `witness.pem` holds. So replacing `witness.pem` is
-accepted silently, and the principal key plus the ledger key are enough to
+In 0.2.2 `Ledger._verify_head` read `witness_public_key` from the stored head
+and checked the witness signature against that same key, and `checkpoint`
+wrote whatever key `witness.pem` held. So replacing `witness.pem` was
+accepted silently, and the principal key plus the ledger key were enough to
 sign a head. A pin stored only inside the ledger would not change that:
 whoever holds the principal key and the ledger key can rewrite the chain
 from its first entry, pin included. So the plan has two pins:

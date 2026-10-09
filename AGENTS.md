@@ -21,7 +21,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.2.2 is tag `v0.2.2` on `main` and `working`. Do not move `v0.2.0`
+- Package 0.2.3 is tag `v0.2.3` on `main` and `working`. Do not move `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
@@ -31,7 +31,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.2.2`, tag `v0.2.2`. Not on PyPI.
+version `0.2.3`, tag `v0.2.3`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -47,7 +47,7 @@ python -m two_key demo
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.3"`
 
 ## Tests and docs
 
