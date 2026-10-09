@@ -80,7 +80,7 @@ a prototype, report security findings as public issues, per
 - Both paths run once the call is well-formed and within limits.
 - `authorize_from_agent` does not execute a tool.
 - `require_path_a_first` is not a skip.
-- JSON/YAML inputs refuse duplicate keys. Oversized or malformed calls deny
+- JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
 - Default quorum needs one judge and has no diversity floors;
   `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from

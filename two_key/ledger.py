@@ -51,7 +51,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from .canonical import EncodingError, canonical_bytes, canonical_hash
 from .agent_meta import cap_ledger_text, type_tag
 from .keys import (
-    generate_private_key, load_private_key, load_public_key, public_from_raw, public_key,
+    generate_private_key, load_private_key_file, load_public_key, public_from_raw, public_key,
     public_raw, save_private_key, save_public_key, sign, verify,
 )
 
@@ -224,6 +224,10 @@ class Ledger:
         """
         if witness_public_key is not None and not isinstance(witness_public_key, Ed25519PublicKey):
             raise LedgerError("witness_public_key must be an Ed25519 public key")
+        if public_key is not None and public_raw(private_key.public_key()) != public_raw(public_key):
+            # Every head it signed would fail "principal head signature failed" on the next open (#60 item 5).
+            raise LedgerError("principal key mismatch: the principal private key does not match the principal "
+                              "public key given for this ledger; refusing to open it")
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
         if self.path.resolve() == self.path.parent.resolve():
@@ -396,11 +400,26 @@ class Ledger:
                 raise LedgerError(f"witness_key_missing: {self.witness_path} does not exist, and a new witness key "
                                   "cannot match the configured witness public key")
             key = generate_private_key()
-            self.witness_path.parent.mkdir(parents=True, exist_ok=True)
-            save_private_key(self.witness_path, key)
+            save_private_key(self.witness_path, key, private_dir=self._default_witness_dir())   # dir 0700
             save_public_key(self.witness_path.with_suffix(".pub.pem"), public_key(key))
             return key
-        return load_private_key(self.witness_path)
+        if self._default_witness_dir():
+            try:
+                os.chmod(self.witness_path.parent, 0o700)   # <ledger>.witness is Two-Key's own directory
+            except OSError:
+                pass                                        # not ours to change; the key file is still checked
+        return self._load_witness()
+
+    def _default_witness_dir(self) -> bool:
+        return self.witness_path.parent == self.path.parent / f"{self.path.name}.witness"
+
+    def _load_witness(self):
+        """``witness.pem`` through the safe loader, as the ledger key is read: no symlink, a regular file, and no
+        group or other access (#57)."""
+        try:
+            return load_private_key_file(self.witness_path)
+        except ValueError as e:
+            raise LedgerError(f"witness key: {e}") from None
 
     def _load(self) -> None:
         with self._exclusive(check_stale=False):
@@ -419,7 +438,7 @@ class Ledger:
                 prev = entry.entry_hash
             self._verify_head()
             # Read again under the lock: a rotation in another process may have finished since __init__ read it.
-            self._witness = load_private_key(self.witness_path)
+            self._witness = self._load_witness()
             if self._witness_pin is None:
                 self._pin_witness()
             else:
@@ -507,7 +526,7 @@ class Ledger:
         """Load ``witness.pem`` for a write and refuse it if it is missing or does not match a pin."""
         if not self.witness_path.exists():
             raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
-        key = load_private_key(self.witness_path)
+        key = self._load_witness()
         self._check_witness(key, str(self.witness_path))
         return key
 
@@ -518,9 +537,6 @@ class Ledger:
         its head, and only if ``witness.pem`` is that key.
         """
         self._check_witness(self._witness, str(self.witness_path))     # the configured pin, if any
-        if public_raw(self.private_key.public_key()) != public_raw(self.public_key):
-            raise LedgerError("principal key mismatch: the principal private key does not match this ledger's "
-                              "principal public key; refusing to write the witness pin")
         raw = public_raw(self._witness.public_key())
         body = {"witness_public_key": raw}
         if self.entries:

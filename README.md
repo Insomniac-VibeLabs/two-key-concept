@@ -192,7 +192,9 @@ judge and agent identities written once in `constitution_loaded`: model,
 upstream, endpoint, tenant ids, and credential fingerprint, never a key.
 
 Every JSON and YAML input is parsed strictly: a repeated key at any depth
-is refused, never last-one-wins. Unknown top-level keys in judges.yaml or
+is refused, never last-one-wins, and so is a YAML merge key (`<<`), whose
+winning value the text does not show. An integer of more than 4,300 digits
+is refused or denied as `invalid_call`. Unknown top-level keys in judges.yaml or
 agents.yaml are refused. Tool arguments or a proposal over 256 KiB, or
 tool arguments, the action claim, or a structured proposal nested more than
 62 levels, are denied before they are ledgered.
@@ -257,7 +259,8 @@ scan the bytes for sensitive text. The principal key still signs the
 constitution and the ledger head. A token signed with that principal key
 does not redeem, and a capability key equal to the principal key is
 refused. The capability key is created once, mode 0600 in a 0700
-directory. Once a token has been issued it is never regenerated: a missing
+directory, and, like the witness key, is read only as a regular file that
+the group and others cannot read, never through a symlink. Once a token has been issued it is never regenerated: a missing
 or changed key refuses to start. Its fingerprint is recorded in
 `constitution_loaded` and the gateway checks it.
 
@@ -399,7 +402,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/identity.py`, `netloc.py` | Judge ≠ monitored agent check; local vs. cloud host |
-| `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys refused) |
+| `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys, merge keys, and huge integers refused) |
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |

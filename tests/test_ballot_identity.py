@@ -6,7 +6,7 @@ import unittest
 from two_key.action import normalize_action
 from two_key.judges.base import Ballot, Judge
 from two_key.quorum import QuorumPolicy, convene
-from two_key.testing import FixedJudge
+from two_key.testing import FixedJudge, RaisingJudge
 
 SEARCH = normalize_action({"tool": "search", "data_class": "public", "irreversible": False})
 
@@ -37,10 +37,17 @@ class Impersonation(unittest.TestCase):
         self.assertEqual([b.judge_id for b in q.ballots], ["local", "cloud", "c"])
 
     def test_provider_comes_from_the_judge(self):
-        q = convene([ProviderLiar(), FixedJudge("c", "yes", provider="openai")], "c", SEARCH, "p",
-                    QuorumPolicy(required_yes=2, min_distinct_providers=2))
+        # Two providers are configured, but the anthropic judge abstains: only the liar's claimed
+        # "some-other-vendor" could make a second responding provider, and it is not used.
+        q = convene([ProviderLiar(), FixedJudge("c", "yes", provider="openai"), RaisingJudge("r", "anthropic")],
+                    "c", SEARCH, "p", QuorumPolicy(required_yes=2, min_distinct_providers=2))
         self.assertEqual(q.ballots[0].provider, "openai")
         self.assertEqual((q.passed, q.reason), (False, "insufficient_distinct_providers:1<2"))
+
+    def test_too_few_configured_providers_calls_no_judge(self):
+        q = convene([ProviderLiar(), FixedJudge("c", "yes", provider="openai")], "c", SEARCH, "p",
+                    QuorumPolicy(required_yes=2, min_distinct_providers=2))
+        self.assertEqual((q.passed, q.reason, q.ballots), (False, "insufficient_distinct_providers:1<2", ()))
 
     def test_honest_judges_still_pass(self):
         loc = FixedJudge("local", "yes", provider="ollama", maker="ollama", local_weights=True)

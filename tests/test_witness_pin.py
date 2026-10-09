@@ -287,9 +287,12 @@ class Rotation(unittest.TestCase):
             self.led.rotate_witness(self.key.public_key())
         with self.assertRaisesRegex(LedgerError, "at most 200"):
             self.led.rotate_witness(reason="x" * 201)
-        wrong = Ledger(self.path, generate_private_key(), self.key.public_key())
+        with self.assertRaisesRegex(LedgerError, "principal key mismatch"):
+            Ledger(self.path, generate_private_key(), self.key.public_key())
+        other = Ledger(self.path, self.key)
+        other.private_key = generate_private_key()          # changed after the open
         with self.assertRaisesRegex(LedgerError, "principal private key does not match"):
-            wrong.rotate_witness()
+            other.rotate_witness()
         swap_witness(self.led)
         with self.assertRaisesRegex(LedgerError, "witness_key_changed"):
             self.led.rotate_witness()

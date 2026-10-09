@@ -4,22 +4,19 @@ No vendor SDK. Each thread keeps one connection per origin and reuses it.
 Redirects are not followed, so a judge credential is never sent to a second
 host. Transient failures (connection drop, 429, 502, 503, 504) are retried
 inside the caller's timeout, at most twice. A response that was parsed is
-never retried.
-
-TWOKEY_DOCCHECK_FAKE_LLM=1 keeps urllib.request.urlopen so the documentation
-checker's fake can intercept calls. That path is not used otherwise.
+never retried. There is no other path: 0.2.3 removed the
+``TWOKEY_DOCCHECK_FAKE_LLM`` switch, which sent calls through
+``urllib.request.urlopen`` and so followed redirects with the credential (#47).
 """
 
 from __future__ import annotations
 
 import http.client
 import json
-import os
 import ssl
 import threading
 import time
 import urllib.error
-import urllib.request
 from urllib.parse import urlsplit
 
 from ..strict import StrictParseError, loads_json
@@ -34,16 +31,6 @@ class TransientHTTPError(Exception):
     def __init__(self, original: BaseException):
         super().__init__(str(original))
         self.original = original
-
-
-def urllib_transport(url: str, headers: dict, body: dict, timeout: float) -> dict:
-    parts = urlsplit(url)
-    if parts.scheme not in ("https", "http") or not parts.hostname:
-        raise ValueError(f"invalid judge url {url!r}")
-    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
-                                 headers={"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310
-        return loads_json(r.read(_MAX_BODY + 1).decode("utf-8"))
 
 
 def _pool() -> dict:
@@ -123,8 +110,6 @@ def _once(url: str, headers: dict, payload: bytes, timeout: float) -> dict:
 
 def pooled_transport(url: str, headers: dict, body: dict, timeout: float) -> dict:
     """Reuse a per-thread connection. Retries only transient failures inside timeout."""
-    if os.environ.get("TWOKEY_DOCCHECK_FAKE_LLM") == "1":
-        return urllib_transport(url, headers, body, timeout)
     deadline = time.monotonic() + max(0.0, float(timeout))
     payload = json.dumps(body).encode()
     last: BaseException | None = None

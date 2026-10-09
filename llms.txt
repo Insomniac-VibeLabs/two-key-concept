@@ -18,7 +18,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(443 tests, no network).
+(459 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
@@ -41,7 +41,8 @@ same_address_one_side_keyless, same_model_same_address,
 same_model_shared_route, same_model_unknown_proxy, shared_tenant,
 unresolved_identity. allow_same_model_distinct_tenant and
 allow_same_provider_judge are deprecated no-ops. Local means local_weights true, host loopback / RFC 1918 / fc00::/7 (names not resolved), and not a :cloud/-cloud model.
-JSON and YAML inputs refuse duplicate keys. Arguments or proposals over
+JSON and YAML inputs refuse duplicate keys, YAML merge keys (<<), and integers over 4,300
+digits. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
 require_path_a_first is not a skip. There is no scanner, no PKI, and no anchor.
 The ledger head is signed by the principal and a witness key. The witness public key is pinned

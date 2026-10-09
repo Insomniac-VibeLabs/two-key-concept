@@ -738,7 +738,9 @@ removed. Two more, from the owner during this release: a judge that holds
 the monitored agent's credential is refused even when neither side sends
 it, and whether it is held as a token or as a username and password; and
 passwords are fingerprinted with PBKDF2, an approved function, instead of
-scrypt. Read "Upgrading from 0.2.2" below before upgrading.
+scrypt. It also fixes the small open issues the owner picked for this
+release: #47, #48, #51, #52, #54, #56, #57, and #60 items 1 and 5. Read
+"Upgrading from 0.2.2" below before upgrading.
 
 ### Changed (breaking)
 
@@ -857,6 +859,53 @@ scrypt. Read "Upgrading from 0.2.2" below before upgrading.
   it, and it fingerprinted whatever it was given as one of the agent's
   credentials.
 
+### Fixed
+
+- **#47**: the `TWOKEY_DOCCHECK_FAKE_LLM=1` switch is removed. It sent judge
+  and agent calls through `urllib.request.urlopen`, which followed 301, 302,
+  and 303 redirects and resent the `Authorization` header to the new host.
+  The pooled transport, which refuses every redirect, is now the only path.
+- **#48**: once a `TwoKey` with `private_key=` has run on a ledger (its
+  capability key exists, or tokens were issued), a start without it is
+  refused (`keyless_start_refused:`). Its `constitution_loaded` would pin no
+  capability key and block every later keyed start with
+  `capability_key_unpinned`, whose message now names that cause too.
+- **#51**: an integer of more than 4,300 digits (or more than a lower
+  `PYTHONINTMAXSTRDIGITS`) is refused the same way on every path and every
+  Python version: `integer too large` from the strict
+  JSON and YAML parsers (and so from `--args` and agent replies), an
+  `invalid_call` deny from `authorize` and from the gateway (which now
+  records `gateway_denied`), `malformed_action` for the action claim, and
+  `malformed_proposal` for a proposal. 0.2.2 gave `internal_error`, a
+  `ValueError` out of `ToolGateway.invoke`, or a misleading `*_too_large`.
+- **#52**: a YAML merge key (`<<`) is refused (`YAML merge key '<<' at
+  line N is refused`): which value wins depended on precedence the text
+  does not show. Anchors and aliases without `<<` still load. An unknown
+  key inside an `auth:` mapping (`vars:`, `servce:`) is refused instead of
+  dropped.
+- **#54**: a quorum floor the configured judges can never meet is refused
+  when `TwoKey` starts, and `convene` denies such a round before calling any
+  judge, so the call is no longer sent to every judge only to be denied:
+  `required_yes` or `min_responding` above the number of judges
+  (`too_few_judges_configured:`), and `min_distinct_providers` above the
+  number of distinct judge providers (`insufficient_distinct_providers:`).
+  The judges.yaml loader still checks only `required_yes` itself; `TwoKey`
+  checks the rest.
+- **#56**: CodeQL runs on pushes to `working`.
+- **#57**: the witness and capability private keys are read with the same
+  safe loader as `--key`: no symlink, a regular file, and no group or other
+  access (`witness key: key_file_insecure:`, `capability key:
+  key_file_insecure:`). `<ledger>.witness` is created at 0700 and set back
+  to 0700 on open.
+- **#60 item 1**: a ledger write that fails with something other than
+  `LedgerError` (an `OSError` from a full disk) after the gateway's
+  `redemption_started` returns `ledger_failed:<type>` instead of raising
+  out of `ToolGateway.invoke`.
+- **#60 item 5**: `Ledger` refuses a principal private key that does not
+  match the principal public key given to it, before it writes anything
+  (`principal key mismatch`). 0.2.2 wrote heads that failed `principal head
+  signature failed` on the next open.
+
 ### Docs
 
 - README, THREAT_MODEL, SECURITY.md, SCOPE, FIT, llms.txt, and AGENTS.md
@@ -923,6 +972,20 @@ scrypt. Read "Upgrading from 0.2.2" below before upgrading.
 11. A secret that contains `:` now costs about 0.15 s of PBKDF2 at
     start-up. A FIPS-only OpenSSL, which refused every username and
     password under 0.2.2, now accepts them.
+12. Configuration that 0.2.2 loaded and 0.2.3 refuses: a YAML merge key
+    (`<<`) anywhere (write the keys out), an unknown key inside `auth:`,
+    a `required_yes` or `min_responding` above the number of judges, and a
+    `min_distinct_providers` above the number of distinct judge providers
+    (`QuorumPolicy.without_diversity_floors()` with one judge is one: it
+    defaults `required_yes` to 2).
+13. A `witness.pem` or `capability.pem` that the group or others can read,
+    that is a symlink, or that is not a regular file now refuses; `chmod 600`
+    it, or replace the link with the file.
+14. A `TwoKey` without `private_key=` on a ledger where a keyed one has run
+    now refuses (`keyless_start_refused:`). A `Ledger` given a principal
+    public key that does not match its private key now refuses on open.
+15. `TWOKEY_DOCCHECK_FAKE_LLM` no longer does anything; a test double that
+    relied on it should replace the judge's `transport=`.
 
 ### Reviews
 
@@ -955,6 +1018,17 @@ scrypt. Read "Upgrading from 0.2.2" below before upgrading.
   in the other docs with "A judge must not be the monitored agent: `TwoKey`
   refuses to start when a judge holds..."; the README keeps the owner's
   sentence. Run by an AI assistant in this session.
+- The code-review skill on the open-issue fixes at high effort: 10
+  findings. Fixed: a non-string `auth.type` that crashed with `TypeError`,
+  a lower `PYTHONINTMAXSTRDIGITS` that still let a bare `ValueError` out,
+  an int subclass whose `__abs__` hid its size, a witness-directory `chmod`
+  that could fail the open, `min_distinct_providers` missing from #54 (and
+  an overstated line about the loader), and four cleanups (one
+  `ledger_failed` helper, one integer bound, `basic` in the auth-key table,
+  an O(1) digit count). Kept: #48 refuses a keyless start once a keyed one
+  has run, rather than carrying the previous pin forward; a keyless
+  `TwoKey` is undocumented and cannot mint, so requiring `private_key=` is
+  the fail-closed choice.
 - The switch from scrypt to PBKDF2 is the owner's decision, after asking
   whether scrypt fits the FIPS goal (it does not).
 - Maintainer security review (AGENTS.md, ROADMAP 0.2.3): pending. All
@@ -962,8 +1036,11 @@ scrypt. Read "Upgrading from 0.2.2" below before upgrading.
 
 ### Still open
 
-- Issues #45 to #57 and #59 to #62 are Low or Info. #58 is fixed in this
-  release. #62 (rollback or wipe of the ledger directory) is not detected
-  by either witness pin. #60 item 5 (a checkpoint signed with the wrong
-  principal key) still applies to appends and checkpoints; the first open's
-  pin now refuses that case before writing.
+- Fixed in this release: #47, #48, #51, #52, #54, #56, #57, #58, and #60
+  items 1 and 5. Still open, Low or Info: #45 (a gateway in its own
+  process), #46 (a persistent halt), #49 (a recovery command), #50 (ledger
+  cost as it grows), #53 (CLI claim defaults), #55 (the connection-reuse
+  claim), #59 (remaining doc errors), #60 items 2 and 3 (a ledger silently
+  created at a wrong path, a weak `agent_session` check), and #62 (a
+  rollback or wipe of the ledger directory, which neither witness pin
+  detects).

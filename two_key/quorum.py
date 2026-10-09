@@ -254,6 +254,19 @@ def _maker(j) -> str:
     return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
 
 
+def unmeetable_floor(judges: Sequence, policy: QuorumPolicy) -> str | None:
+    """The deny reason when the policy needs more judges or providers than are configured, which no round can
+    meet; None otherwise. ``TwoKey`` refuses to start on it, and ``convene`` denies without calling a judge (#54)."""
+    need = max(policy.required_yes, policy.effective_min_responding or 0)
+    if len(judges) < need:
+        return f"too_few_judges_configured:{len(judges)}<{need}"
+    # A ballot's provider is its judge's (_collect), so the configured providers bound the responding ones.
+    providers = {unicodedata.normalize("NFKC", str(getattr(j, "provider", "?"))).strip().casefold() for j in judges}
+    if len(providers) < policy.min_distinct_providers:
+        return f"insufficient_distinct_providers:{len(providers)}<{policy.min_distinct_providers}"
+    return None
+
+
 def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | None:
     makers = {_maker(j) for j in judges}
     local = sum(1 for j in judges if _local(j))
@@ -405,7 +418,9 @@ def convene(
     ids = [getattr(j, "judge_id", None) for j in judges]
     duplicate = len(set(ids)) != len(ids) or any(not isinstance(i, str) or not i for i in ids)
     selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
-    if judges and not duplicate and selection is None:
+    # A floor no round can meet: deny before any judge (or its vendor) sees the call.
+    unmeetable = unmeetable_floor(judges, policy) if judges and not duplicate else None
+    if judges and not duplicate and selection is None and unmeetable is None:
         ballots = [_bind(b, binding, policy)
                    for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
     responding = [b for b in ballots if b.responded]
@@ -424,8 +439,8 @@ def convene(
         return result(False, "duplicate_judge_id", counted=False)
     if selection is not None:
         return result(False, f"judge_set_not_heterogeneous:{selection}", counted=False)
-    if len(judges) < policy.required_yes:
-        return result(False, f"too_few_judges_configured:{len(judges)}<{policy.required_yes}", counted=False)
+    if unmeetable is not None:
+        return result(False, unmeetable, counted=False)
     if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
         return result(False, "cloud_judge_session_required")
     if any((b.error or "").startswith("cloud_judge_") for b in ballots):

@@ -100,7 +100,8 @@ the code wins, then this file should be corrected.
   start with a warning on stderr and in `constitution_loaded`. The agent
   is declared by the operator, never by the agent. A judge that presents
   the runtime agent's session abstains, wherever it connects.
-- A value read twice: every JSON and YAML input refuses a repeated key.
+- A value read twice: every JSON and YAML input refuses a repeated key and
+  a YAML merge key (`<<`).
   Oversized or too-deeply nested arguments are a deny before the ledger.
   Inputs stop at 62 levels, two under the encoder's 64, so the ledger and
   judge wrappers always encode.
@@ -364,5 +365,5 @@ above in the release that ships it.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
 - `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
-- `two_key/strict.py`: every JSON and YAML input refuses duplicate keys.
+- `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds.

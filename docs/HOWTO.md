@@ -258,6 +258,11 @@ it is `min(2, number of judges)`.
 `QuorumPolicy.without_diversity_floors()` is **not** that default: it sets the
 same floor values but defaults `required_yes` to 2. Prefer `QuorumPolicy()`
 (or omit / set `required_yes` to `null`) for the one-judge default threshold.
+A floor the judges can never meet refuses to start, and `convene` denies it
+without calling any judge: `required_yes` or `min_responding` above the
+number of judges (`too_few_judges_configured:`), and
+`min_distinct_providers` above the number of distinct judge providers
+(`insufficient_distinct_providers:`).
 
 `profile: high_assurance` in the quorum block, or
 `QuorumPolicy.high_assurance()`, needs judges from at least two makers
@@ -321,8 +326,13 @@ the rules file, judges.yaml and agents.yaml (JSON or YAML), the
 `monitored_agent:` block, judge ballots, provider responses, agent
 proposals, `--args`, and token payloads. A key repeated in one mapping, at
 any depth, is refused with `duplicate key '<k>'`; it never resolves
-last-one-wins. JSON `NaN` and `Infinity` are refused too (a ballot with
-them is malformed and abstains). YAML still loads with a safe loader.
+last-one-wins. A YAML merge key (`<<`) is refused too, because which value
+wins is not visible in the text; write the keys out (plain anchors and
+aliases still load). JSON `NaN` and `Infinity` are refused too (a ballot
+with them is malformed and abstains), and so is an integer of more than
+4,300 digits (`integer too large`; in tool arguments it denies as
+`invalid_call`, at authorize and at the gateway). Unknown keys inside an
+`auth:` mapping are refused. YAML still loads with a safe loader.
 
 judges.yaml accepts only the top-level keys `judges`, `quorum`, and
 `monitored_agent`; agents.yaml only `agents`. Anything else (a typo such as
@@ -425,9 +435,15 @@ are ciphertext. The append lock is `<ledger>.lock` next to the ledger
 directory. Redemption locks are `<ledger>.redeem-locks/` there too, not
 inside the ledger directory. First open writes `<ledger>.ledger-key/ledger.key` and
 `<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
-Both are created with O_EXCL at mode 0600; a ledger key that is group- or
-world-readable, a symlink, or not 32 bytes is refused (`ledger_key_insecure:`
-or `ledger_key_unreadable:`). First open also writes the ledger's first entry,
+Both are created with O_EXCL at mode 0600, `<ledger>.witness` at 0700 (and
+set back to 0700 on open); a ledger key that is group- or world-readable, a
+symlink, or not 32 bytes is refused (`ledger_key_insecure:` or
+`ledger_key_unreadable:`), and so is a witness or capability key that is
+group- or world-readable, a symlink, or not a regular file
+(`witness key: key_file_insecure:`, `capability key: key_file_insecure:`;
+`chmod 600` it). A principal private key that does not match the principal
+public key given to `Ledger` is refused before anything is written
+(`principal key mismatch`). First open also writes the ledger's first entry,
 `witness_pinned`; see "Pin the witness key" below.
 `--witness-public-key PEM` gives the witness pin kept outside the ledger.
 The authorize command does not accept test-double judges.
@@ -502,7 +518,10 @@ next to the ledger directory, not inside it. The public half is
 0700 directory. After a token has been issued it is never regenerated: a
 missing or different key refuses to start (`capability_key_missing`,
 `capability_key_changed`), and so does a ledger with issued tokens but no
-pinned key fingerprint (`capability_key_unpinned`). A capability key equal to the principal key is
+pinned key fingerprint (`capability_key_unpinned`). Once a `TwoKey` with
+`private_key=` has run on a ledger, a start without it is refused
+(`keyless_start_refused:`): it would record no capability key and block
+later keyed starts. A capability key equal to the principal key is
 refused. The principal key on the ledger signs the head. A token signed
 with that principal key does not redeem.
 

@@ -84,6 +84,11 @@ TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 QUORUM_PROFILES = {"default", "high_assurance"}
 
 
+# The keys each auth type takes; any other key is refused (#52).
+AUTH_KEYS = {"none": {"type"}, "env": {"type", "var"}, "keyring": {"type", "service", "username"},
+             "callback": {"type", "callback"}, "basic": {"type", "username_env", "password_env"}}
+
+
 class JudgeConfigError(ValueError):
     pass
 
@@ -106,6 +111,13 @@ def build_credential(auth: Any) -> CredentialProvider:
     t = auth["type"]
     if any(k in auth for k in ("key", "api_key", "password", "token", "secret")):
         raise JudgeConfigError("secrets must not be written in judges config; reference an env var or keyring")
+    if not isinstance(t, str):
+        raise JudgeConfigError(f"unknown auth type {t!r}")
+    allowed = AUTH_KEYS.get(t)
+    if allowed is not None and set(auth) - allowed:
+        # A misspelled key (vars:, servce:) must not be dropped silently (#52).
+        raise JudgeConfigError(f"auth type {t} takes only {sorted(allowed - {'type'}) or 'type'}, not "
+                               f"{sorted(map(str, set(auth) - allowed))}")
     if t == "none":
         return NoCredential()
     if t == "env":
@@ -113,9 +125,6 @@ def build_credential(auth: Any) -> CredentialProvider:
     if t == "keyring":
         return KeyringApiKey(auth["service"], auth["username"])
     if t == "basic":
-        extra = set(auth) - {"type", "username_env", "password_env"}
-        if extra:
-            raise JudgeConfigError(f"auth type basic takes username_env and password_env only, not {sorted(extra)}")
         names = auth.get("username_env"), auth.get("password_env")
         if any(not isinstance(n, str) or not n or n.startswith("REPLACE_") for n in names):
             raise JudgeConfigError("auth type basic needs username_env and password_env: the names of the "
