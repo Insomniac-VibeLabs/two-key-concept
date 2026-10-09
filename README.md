@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.1/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.2/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -44,12 +44,17 @@ is going, see [ROADMAP.md](ROADMAP.md).
    `internal_error:` deny, written to the ledger.
 2. Path B is a judge quorum. Judges are hooks for xAI/Grok, OpenAI,
    Anthropic, Gemini, and Ollama. The minimum is one judge, and that judge
-   must not be the monitored agent. A missing, malformed, errored, or
+   must not be the monitored agent: it may run any model from any vendor,
+   but never with the agent's credential, at any address. A missing,
+   malformed, errored, or
    timed-out ballot does not count as yes. The default policy has no
    diversity floors. `QuorumPolicy.high_assurance()` (or
-   `profile: high_assurance` in judges.yaml) turns on two vendors, one local
-   judge, and a yes from that local judge; use it for destructive,
-   irreversible, financial, or external-send tools. `require_local_yes`
+   `profile: high_assurance` in judges.yaml) needs judges from at least two
+   model makers, at least one local judge, and a yes from a local judge; use
+   it for destructive, irreversible, financial, or external-send tools. A
+   judge's maker is who made its model, as the operator labels it (`maker:`,
+   default: its `provider`). It is not verified, and it is a rule about the
+   judges only: it is never compared with the monitored agent. `require_local_yes`
    with no local judge does not start. A judge is local only when it says
    so (`local_weights: true`) and its `base_url` host is on an allowlist:
    loopback, RFC 1918, or IPv6 unique-local. A `:cloud`/`-cloud` model is
@@ -95,10 +100,10 @@ flowchart TD
   agent -->|"JSON proposal, never a tool call"| authorize["TwoKey.authorize or authorize_from_agent<br/>does not call the model"]
   bytecode --> pathA["Path A Policy VM"]
   authorize --> pathA
-  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B convene<br/>default: one judge, T-of-N<br/>high_assurance: 2 vendors, 1 local yes<br/>also runs when Path A denies"]
+  authorize -->|"record; tool args withheld after a derive deny"| pathB["Path B: judges vote<br/>needs 1+ judge; yes votes needed: required_yes,<br/>default min(2, judges)<br/>runs even when Path A denies<br/>high_assurance also needs: judges from 2+ makers,<br/>1+ local judge, and a local judge votes yes"]
   judgeText --> pathB
-  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: judge is not the agent"| judges
-  session["agent_session<br/>must not be a judge API key"] --> pathB
+  declared["monitored_agent<br/>declared by the operator"] -->|"start-up: refused on the agent's credential,<br/>at any address"| judges
+  session["agent_session<br/>no judge may present it"] --> pathB
   pathB -->|"parallel score, separate credentials"| judges["Judge(s)<br/>one or more; xAI, OpenAI, Anthropic, Gemini, Ollama"]
   judges -->|"yes, no, or abstain"| pathB
   pathA --> gate{"both allow?"}
@@ -108,7 +113,7 @@ flowchart TD
   gate -->|no| ledger
   gate -->|yes| token["Capability token<br/>signed by the capability key"]
   token --> ledger
-  token --> gateway["Tool gateway<br/>public key only, cannot mint"]
+  token --> gateway["Tool gateway<br/>capability public key only, cannot mint<br/>own process or host: designed, not built (#45)"]
   gateway -->|"redemption_started, then declared paths only"| tool["Registered tool"]
   gateway --> ledger
 ```
@@ -141,26 +146,28 @@ and dashes folded), the endpoint `host:port`, the upstream that serves it
 and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 `declared_upstream`), scoped tenant ids (a `tenant:` mapping of
 `organization`, `project`, `account`, or `deployment`, plus what the URL
-shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
-whitespace stripped). It refuses to start (`judge_matches_agent:`) only
-when a judge is the same agent: the same credential, a shared tenant id,
-the same model on the same endpoint (every alias of this machine is one
-endpoint), the same model reaching the same upstream (a declared upstream,
-the endpoint itself, or `ollama.com` for a `-cloud` model, even when the
-two sides declare different tenants), or the same
-model through a loopback, private, or unrecognized proxy or daemon that declares no
-`upstream:` (it could forward to the agent's own account without a key).
-An identity it cannot resolve also refuses, including a local proxy serving
-an alias model unless you declare its `upstream:`. The same provider with a different model is allowed and
-recorded. `allow_same_provider_judge` is accepted and has no effect. The
-quorum flag `allow_same_model_distinct_tenant: true` is a logged opt-in,
-off by default. It allows the agent's model on the same endpoint or upstream
-only when both sides declare different tenants and use different keys. It
-warns on stderr, is recorded as `same_model_tenant_optin` in
-`constitution_loaded`, and is part of `policy_digest`.
-Without a declaration it refuses with `monitored_agent_required:`. The
-result is in the `constitution_loaded` ledger entry. Provider labels are
-never compared. HOWTO has the details.
+shows), and a credential fingerprint under a per-install key, whitespace
+stripped (HMAC-SHA256 for an API token; scrypt, N=2^17, r=8, p=1, for a
+username and password, fingerprinted as one pair).
+
+A judge may run any model from any vendor. It is the monitored agent, and
+`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the
+agent's credential (the same API token, or the same username and password),
+at any address: a credential identifies its holder wherever it is sent. Two
+sides with no credential are the same agent only on the same address (the
+endpoint `host:port`, every alias of this machine folded to `localhost`),
+where nothing tells them apart. Everything else starts. Likely accidents
+are allowed with a `two-key: WARNING:` line on stderr and recorded in
+`constitution_loaded` (`judge_agent_separation.warnings`): the same model
+on the same address, the same model through a shared route or a local or
+unrecognized proxy with no declared `upstream:`, a shared tenant id, one
+side keyless on the same address, and an identity whose upstream cannot be
+resolved. Addresses are compared as configured; DNS names are not
+resolved. A username and password are sent as HTTP Basic over HTTPS only.
+`allow_same_provider_judge` and `allow_same_model_distinct_tenant` are
+accepted and have no effect. Without a declaration it refuses with
+`monitored_agent_required:`. Provider labels are never compared. HOWTO has
+the details.
 
 Judges vote in parallel under one hard deadline. A missing, malformed, or
 timed-out ballot is an abstention, and an abstention is not a yes. No
@@ -169,9 +176,9 @@ ballot is paired with its judge by position and takes its judge id from
 the judge; a ballot that names another judge abstains
 (`judge_id_mismatch`). A judge
 that is not on a loopback host makes the round deny when `agent_session`
-is missing. If that string equals any judge's credential, local or cloud,
-the ballot abstains with `cloud_judge_reused_agent_session` and the round
-denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
+is missing. If that string equals the credential of any judge, local or
+cloud, wherever it connects, the ballot abstains with
+`cloud_judge_reused_agent_session` and the round denies. `X-Two-Key-Judge-Session` is a call id minted here. It is not a
 session at the model host.
 
 Without a local judge, the constitution prose, the action record, and any
@@ -241,7 +248,7 @@ outside the ledger directory). It is bound to the tool, the argument hash,
 the ledger Merkle root and size at issuance, the constitution hashes,
 `spec_hash`, and the derived form. The gateway is constructed with
 `issuer.verifier()` or with the issuer; either way it keeps only the public
-key. It recomputes the form from the same bytes. It checks the
+half of the capability key. It recomputes the form from the same bytes. It checks the
 signature, expiry, a lifetime no longer than the TTL (`ttl_too_long`), an
 issue time at most 5 s ahead (`issued_in_future`), and that nothing revoked
 or reloaded the constitution after issuance. It writes `redemption_started` before the tool runs. It does not
@@ -252,6 +259,15 @@ refused. The capability key is created once, mode 0600 in a 0700
 directory. Once a token has been issued it is never regenerated: a missing
 or changed key refuses to start. Its fingerprint is recorded in
 `constitution_loaded` and the gateway checks it.
+
+The gateway is meant to run in its own process or on its own host, holding
+the capability public key and a gateway-only ledger role: it reads the
+ledger, refreshes without ending outstanding tokens, and records
+redemptions, without the principal or witness private key. That role is
+designed, not yet built
+([#45](https://github.com/Insomniac-VibeLabs/two-key-concept/issues/45)).
+Today the gateway shares the ledger object of the `TwoKey` process, and
+that object holds the principal, witness, and ledger keys.
 
 ## What this repo leaves out
 
@@ -276,14 +292,21 @@ Crypto here is Ed25519 and SHA-256 via the `cryptography` package. Ledger
 entries and the signed head are AES-256-GCM at rest. The data key is wrapped
 by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
-directory. A stolen principal key cannot decrypt the log or sign a new head.
+directory. A stolen principal key alone cannot decrypt the log or sign a new
+head. With the ledger key as well it can: the head carries its own witness
+public key, which is not pinned yet (#58; a pin outside the ledger is
+planned for 0.2.3).
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 ## Known limits
 
 - No independent review and no production deployment.
-- No external anchor for the ledger. Someone holding the principal, witness,
-  and ledger keys can rewrite a ledger that never leaves the machine.
+- No external anchor for the ledger. Someone holding the principal and
+  ledger keys can rewrite a ledger that never leaves the machine. The
+  witness key adds nothing until it is pinned outside the ledger (#58,
+  planned for 0.2.3). Anyone who can write the ledger directory can roll it
+  back to an earlier signed head or wipe it, with no key, and both still
+  open and verify (#62).
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
@@ -296,9 +319,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from the 0.2.1 prototype to a 1.0 release. It states intent, not a
+The plan from the 0.2.2 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing below exists in 0.2.1. The detail is in [ROADMAP.md](ROADMAP.md).
+Nothing below exists in 0.2.2. The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -315,6 +338,7 @@ flowchart LR
 
 | Target | What |
 | --- | --- |
+| 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
 | 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
@@ -326,17 +350,18 @@ flowchart LR
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.1.
-Tag `v0.2.1` is on `main` and on `working`. Tag `v0.2.0` stays on commit
-`2f756ac`. 0.2.0 changed configuration: read "Upgrading from 0.1.12" in
-[CHANGES.md](CHANGES.md) before upgrading.
+Install from git. It is not published to PyPI. Package version 0.2.2.
+Tag `v0.2.2` is on `main` and on `working`. Tag `v0.2.0` stays on commit
+`2f756ac`. 0.2.2 changes configuration and refuses some setups 0.2.1
+accepted: read "Upgrading from 0.2.1" in [CHANGES.md](CHANGES.md) before
+upgrading (and "Upgrading from 0.1.12" from older versions).
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.1"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"
 ```
 
 ## Run the offline demo
@@ -374,7 +399,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.1 to 1.0 |
+| `ROADMAP.md` | Planned work from 0.2.2 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |

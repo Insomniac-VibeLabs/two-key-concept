@@ -2,7 +2,7 @@
 # A local OpenAI-compatible server stays on json_object. Set response_format: json_schema
 # or json_object to force one. xAI defaults to reasoning_effort: low; set reasoning_effort to override.
 # Anthropic caches the constitution, not the action record. No secrets in this file.
-# Path B judges: pick whichever AIs you want, local or vendor.
+# Path B judges: pick whichever AIs you want, local or cloud.
 # No secrets go in this file. API keys are read from environment variables
 # (or the OS keyring) at startup, for the judge-is-not-the-agent check, and
 # again at call time. A judge key that cannot be read refuses to start.
@@ -14,21 +14,21 @@
 # receives_proposal: true sends that judge the proposal.
 # A judge that is not on a loopback host denies the round unless authorize is
 # given the agent session (two-key authorize --agent-session-env NAME). A judge
-# whose key equals that session abstains (cloud_judge_reused_agent_session).
+# whose key equals that session abstains, wherever it connects
+# (cloud_judge_reused_agent_session).
 
 # Only the top-level keys judges, quorum, and monitored_agent are accepted,
 # and a key repeated in one mapping is refused.
 
-# The monitored agent, declared by you, never by the agent. Required. At
-# startup Two-Key refuses (judge_matches_agent:) only when a judge is the
-# same agent: the same credential, a shared tenant id, the same model on
-# the same endpoint host:port, the same model with a shared route
-# (same_model_same_upstream: declared upstream, the endpoint itself, or
-# ollama.com for a -cloud model), or the same model through a local or
-# unrecognized proxy/daemon with no upstream: that is non-overlapping with
-# the other side. An unresolved identity also refuses (for example a local
-# or unrecognized proxy serving an alias model; declare upstream:).
-# The same provider with a different model is allowed.
+# The monitored agent, declared by you, never by the agent. Required. A
+# judge may run any model from any vendor. At startup Two-Key refuses
+# (judge_matches_agent:) only when a judge is the same agent: the agent's
+# credential at any address (a key identifies its holder), or no credential
+# on either side of one address (host:port as written here, no DNS). Likely
+# accidents start with a warning on stderr, recorded in constitution_loaded:
+# one side keyless on the agent's address, the agent's model on its address
+# or through a shared or undeclared proxy (declare upstream:), a shared
+# tenant id, or an unresolved upstream.
 # This example agent is ChatGPT, which is not one of the judges below.
 monitored_agent:
   id: chatgpt
@@ -36,9 +36,12 @@ monitored_agent:
   provider: openai                   # a label; recorded, never compared
   base_url: https://api.openai.com/v1
   credential_env: OPENAI_AGENT_API_KEY   # the env var name, not the key
+  # username_env: AGENT_USER         # instead of credential_env: HTTP Basic, https only;
+  # password_env: AGENT_PASSWORD     #   the pair is fingerprinted together
   # credential: none                 # instead, only for a keyless loopback/private agent
   # tenant: {organization: org-123}  # optional mapping: organization, project, account, deployment; also on a judge
   # upstream: api.openai.com         # optional, for a local proxy: where it routes (attested, recorded, not verified)
+  # tenant and upstream only change which warnings print; they never let the same agent start.
 
 quorum:
   required_yes: 2            # k-of-n: how many judges must say "consistent"
@@ -46,10 +49,13 @@ quorum:
   min_distinct_providers: 1  # 1 = this provider count is not itself a floor
   timeout_seconds: 45        # required hard deadline; judges run in parallel; any judge not done by then abstains (null is refused)
   # The default needs one judge and has no diversity floors:
-  # min_vendors 1, min_local_judges 0, require_local_yes false.
-  # profile: high_assurance  # opt-in: min_vendors 2, min_local_judges 1, require_local_yes true.
+  # min_makers 1, min_local_judges 0, require_local_yes false.
+  # profile: high_assurance  # opt-in: min_makers 2, min_local_judges 1, require_local_yes true.
   #                          # Recommended for destructive, irreversible, financial, or external-send tools.
-  #                          # This file's judges (several vendors, one local Ollama judge) meet it.
+  #                          # This file's judges (four makers, one local Ollama judge) meet it.
+  # A judge's maker is who made its model, as you label it (maker:, default: provider). It is not
+  # verified, and it is not compared with the monitored agent. min_vendors and vendor: are the
+  # names through 0.2.1; 0.2.2 still loads them with a deprecation note, and 0.2.3 removes them.
   # require_local_yes: true needs at least one local judge, or Two-Key does not start.
   # allow_same_provider_judge: deprecated and ignored; the same provider is allowed by default
   # QuorumPolicy.section4() is high_assurance plus require_path_a_first. TwoKey.authorize
@@ -89,18 +95,19 @@ judges:
   - id: local-qwen
     type: ollama                     # Ollama on this machine, no key needed
     provider: local
-    vendor: alibaba
+    maker: alibaba                   # who made the model; provider (local) is who serves it
     base_url: http://localhost:11434
     model: qwen2.5:7b
     # local_weights defaults to true only for a loopback or private base_url host. A judge is local
     # (counts toward min_local_judges) only if the flag is true AND the host is loopback or private.
     # weights_sha256: <hash of the GGUF>   # optional, recorded in ballots, not verified
 
-# Optional per-judge keys: vendor (defaults to provider; compared case-insensitively), local_weights,
+# Optional per-judge keys: maker (defaults to provider; compared case-insensitively), local_weights,
 # weights_sha256, echo_binding, tenant (a mapping, as above), upstream (for a local proxy).
 # Judge ids must be unique.
 
 # Other working auth modes:
 #   auth: {type: keyring, service: two-key, username: openai}
 #   auth: {type: callback, callback: "my_hooks:get_token"}
-# Username/password and OAuth device-code are rejected on this line.
+#   auth: {type: basic, username_env: JUDGE_USER, password_env: JUDGE_PASSWORD}   # https only
+# OAuth device-code is rejected on this line.

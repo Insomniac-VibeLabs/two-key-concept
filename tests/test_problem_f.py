@@ -60,8 +60,8 @@ def _engine(tmp, specs=SPECS, rules=RULES):
     key = generate_private_key()
     env = sign_constitution(PROSE, rules, key, specs)
     ledger = Ledger(Path(tmp, "ledger"), key)
-    judges = [FixedJudge("j0", "yes", provider="p0", vendor="v0", local_weights=True),
-              FixedJudge("j1", "yes", provider="p1", vendor="v1")]
+    judges = [FixedJudge("j0", "yes", provider="p0", maker="v0", local_weights=True),
+              FixedJudge("j1", "yes", provider="p1", maker="v1")]
     constitution = verify_signed(env, key.public_key())
     tk = TwoKey(ledger, key.public_key(), constitution, judges, private_key=key,
                 quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
@@ -466,8 +466,8 @@ class ProblemFTests(unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmp:
                 ledger = Ledger(Path(tmp, "ledger"), key)
-                judges = [Rec("j0", "yes", provider="p0", vendor="v0", local_weights=True),
-                          Rec("j1", "yes", provider="p1", vendor="v1")]
+                judges = [Rec("j0", "yes", provider="p0", maker="v0", local_weights=True),
+                          Rec("j1", "yes", provider="p1", maker="v1")]
                 tk = TwoKey(ledger, key.public_key(), verify_signed(envelope, key.public_key()), judges,
                             private_key=key, quorum=policy, allow_test_doubles=True, monitored_agent=TEST_AGENT)
                 denied = tk.authorize(

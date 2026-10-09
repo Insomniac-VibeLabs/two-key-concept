@@ -34,7 +34,7 @@ class CloudModelAnyJudge(unittest.TestCase):
         self.assertTrue(OllamaJudge("o", "ollama", "qwen2.5:7b").is_local())
 
     def test_does_not_satisfy_the_local_floor(self):
-        policy = QuorumPolicy(required_yes=1, min_vendors=1, min_local_judges=1, require_local_yes=False)
+        policy = QuorumPolicy(required_yes=1, min_makers=1, min_local_judges=1, require_local_yes=False)
         self.assertEqual(heterogeneity_shortfall([oai("gpt-oss:120b-cloud")], policy), "insufficient_local_judges:0<1")
 
     def test_monitored_agent_hosting(self):

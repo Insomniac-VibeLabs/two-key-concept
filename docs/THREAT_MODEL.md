@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.1 (tag `v0.2.1` on `main`). `v0.2.0` stays on `2f756ac`. The model is unchanged from 0.2.0.
+This is the design model for `two-key-concept` 0.2.2 (tag `v0.2.2` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.2 changes when a judge counts as the monitored agent, adds HTTP Basic auth with scrypt-fingerprinted passwords, and describes the witness key as it is (not pinned, #58).
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -19,6 +19,13 @@ the code wins, then this file should be corrected.
   gateway receives only the public half.
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
+- The per-install fingerprint key (`<ledger>.ledger-key/fingerprint.key`),
+  which keys credential fingerprints. It sits beside the ledger key, so it
+  protects fingerprints only from someone without that directory. Against
+  someone with it, a random API token is safe by its length, a guessable
+  token (a placeholder such as `EMPTY`, or a short key chosen for a local
+  server) is not, and a password is protected only by scrypt's cost, which
+  slows guessing but does not stop it for a guessable password.
 - The wrapped data key stored inside the ledger directory.
 - Judge credentials and monitored-agent credentials. They are not the same secret.
 - The capability token and the argument bytes it is bound to.
@@ -70,19 +77,21 @@ the code wins, then this file should be corrected.
 - An allow when either path denies or does not answer. A missing, malformed,
   or timed-out ballot is an abstention, not a yes. A ballot that names
   another judge abstains (`judge_id_mismatch`). The default needs one judge
-  and has no diversity floors. `QuorumPolicy.high_assurance()` sets two
-  vendors, one local judge, and a yes from a local judge;
+  and has no diversity floors. `QuorumPolicy.high_assurance()` needs judges
+  from two model makers (the operator's `maker:` labels, not verified), one
+  local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
   still not a skip. `min_distinct_providers` still defaults to 1.
-- A judge that is the monitored agent: the same credential, a shared tenant
-  id, the same model on the same endpoint or upstream (different declared
-  tenants do not lift this unless the logged opt-in
-  `allow_same_model_distinct_tenant` is set and both sides have different
-  declared tenants and different keys), the same
-  model through a loopback or private proxy or daemon with no declared
-  `upstream:` (a keyless local proxy can forward to the agent's own
-  account), or an identity that cannot be resolved refuses to start. The agent is declared by the operator, never
-  by the agent. The same provider is allowed.
+- A judge that is the monitored agent refuses to start. The same agent
+  means the agent's credential (API token, or username and password over
+  HTTPS) at any address, or both sides keyless on one address, compared as
+  configured (`host:port`, local aliases folded, no DNS). Any model and any
+  vendor is allowed otherwise. The likely accidents (one side keyless on
+  the agent's address, the agent's model on its address or through a
+  shared or undeclared proxy, a shared tenant id, an unresolved upstream)
+  start with a warning on stderr and in `constitution_loaded`. The agent
+  is declared by the operator, never by the agent. A judge that presents
+  the runtime agent's session abstains, wherever it connects.
 - A value read twice: every JSON and YAML input refuses a repeated key.
   Oversized or too-deeply nested arguments are a deny before the ledger.
   Inputs stop at 62 levels, two under the encoder's 64, so the ledger and
@@ -90,18 +99,24 @@ the code wins, then this file should be corrected.
 - A token replay, a token used for different argument bytes, a token used
   after expiry (120 seconds unless you change it, at most 300), a token
   whose lifetime exceeds the TTL or whose issue time is in the future, and
-  a token used after revocation or a constitution reload.
+  a token issued before a revocation or a constitution reload and used after
+  it. `revoke` ends earlier tokens only: it does not stop new approvals and it
+  does not survive a restart (see HOWTO, "Revoke outstanding tokens").
 - A second run of a token after `redemption_started` has been checkpointed.
   A tool exception writes `redemption_aborted` and leaves the token usable.
 - A silent edit of a ledger record that still verifies, and opening the log
-  with only the principal key. The head needs the witness signature as well.
+  with only the principal key. The head needs a witness signature as well,
+  but the witness public key is read from the head itself and is not pinned
+  (#58), so the principal key and the ledger key together can sign a head
+  with a new witness key. A pin outside the ledger is planned for 0.2.3.
 
 ## Assumptions
 
 - The gateway is the only holder of tool credentials. This package cannot
   stop an agent that can call the tool by another path.
-- The principal key, the witness key, and the ledger key are not all in the
-  attacker's hands.
+- The principal key and the ledger key are not both in the attacker's
+  hands. The witness key adds to this only once it is pinned outside the
+  ledger (#58, planned for 0.2.3).
 - The action record describes the real call only for fields the tool spec
   names. Every loaded constitution has `tool_specs`. A tool with no spec
   does not redeem. A counterparty path requires `allow`. A party off that
@@ -112,8 +127,12 @@ the code wins, then this file should be corrected.
 - Judges are one key of two. The quorum does not prove the models are
   independent. The diversity floors are off by default; `high_assurance`
   turns them on. A judge that is not the same agent may still share a
-  provider and its blind spots with the agent. A declared `upstream:` and a
-  `model_prefix` resolution are operator-attested and not verified.
+  provider and its blind spots with the agent, or run the agent's model
+  under another key (allowed; warned on the same address or through a
+  shared or undeclared route, silent through a recognized router). A declared `upstream:` and a
+  `model_prefix` resolution are operator-attested and not verified; they
+  change which warnings print, not what is refused. Two names for one
+  server (a CNAME, or a host name and its IP) are two addresses.
 - Without a local judge, the constitution prose, the action record, and any
   attached tool arguments go to the cloud judges' vendors.
 
@@ -174,10 +193,18 @@ claims to close.
   cannot.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
-  capability private key does. Stealing the witness key as well as the
-  principal key can forge a head. There is no external anchor, so those
-  keys plus the ledger key are enough to rewrite a ledger that never leaves
-  the machine.
+  capability private key does. Stealing the principal key and the ledger
+  key is enough to forge a head, because the witness public key is not
+  pinned (#58): a new witness key can sign it. A pin outside the ledger is
+  planned for 0.2.3. There is no external anchor, so those two keys are
+  enough to rewrite a ledger that never leaves the machine.
+- Anyone who can write the ledger directory can roll the ledger back to an
+  earlier signed head (a saved `head.json` and a truncated `entries.jsonl`)
+  or delete `entries.jsonl` and `head.json`, with no key. Both open and
+  verify, and a rolled-back ledger forgets later redemptions. With the
+  principal key and write access to `<ledger>.ledger-key` and
+  `<ledger>.witness`, a whole replacement ledger under a new ledger key
+  verifies. Without an external anchor, neither is detected (#62).
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
   counterparty, and counterparties read from the argument bytes), reasons,
@@ -189,8 +216,9 @@ claims to close.
   retry, even if the tool did not run. Exactly-once execution is not claimed.
 - Where `fcntl` is absent, another process can still append. This package
   does not claim cross-process exclusion on those platforms.
-- There is no TEE. Username/password and OAuth device-code judge auth are
-  rejected. Use `env`, `keyring`, or `callback`.
+- There is no TEE. OAuth device-code judge auth is rejected. A username and
+  password is accepted only as HTTP Basic over HTTPS (`type: basic`). Use
+  `env`, `keyring`, `callback`, or `basic`.
 - The signatures are not quantum resistant. Ed25519 signs the constitution,
   the ledger head (principal and witness), and capability tokens. A
   sufficiently capable quantum computer could forge an Ed25519 signature.
@@ -220,16 +248,17 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.1, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.2, and nothing in
 this section describes current behavior. Each item is added to the sections
 above in the release that ships it.
 
 - Key backup (target 0.3). New asset: the backup bundle. It holds the same
   secrets as the keys above, so it is treated as equal to them. The ledger
   key and the witness key are meant to be backed up separately from each
-  other, because the residual risks above say that those keys plus the
-  principal key can rewrite a ledger. A weak passphrase becomes a new
-  residual risk.
+  other, so that one bundle never holds every key a head needs once the
+  witness key is pinned outside the ledger (#58). Until then, the residual
+  risks above say the principal key and the ledger key alone can rewrite a
+  ledger. A weak passphrase becomes a new residual risk.
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
@@ -298,9 +327,9 @@ above in the release that ships it.
 
 - `two_key/core.py`: both paths run once the call is well-formed and within limits, and `authorize_from_agent` does not call a tool. A spec disagreement denies after both paths answer.
 - `two_key/derive.py`: JSON paths only. A claim can raise a data class and cannot lower one. Disagreement denies. `deny_unmapped` defaults off and drops unnamed keys at the tool. A counterparty path requires `allow`. Payload `shape` checks kind only. A declared path with no shape covers its children.
-- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), vendor names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
+- `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
-- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; HMAC credential fingerprints; local means the loopback, RFC 1918, or fc00::/7 allowlist.
+- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, scrypt (N=2^17, r=8, p=1) for a username and password as one pair; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
 - `two_key/strict.py`: every JSON and YAML input refuses duplicate keys.
 - `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append.

@@ -12,9 +12,12 @@ What is implemented:
 - ``CallbackTokenProvider``: calls a user-supplied function that returns
   a bearer token. This is the generic hook for any SSO/OAuth/session flow
   the user wires up.
+- ``BasicAuthCredential``: a username and a password, each read from its own
+  environment variable, sent as HTTP Basic auth. HTTPS only: a judge or agent
+  with this credential and a plain-HTTP ``base_url`` refuses to start.
 
-Username/password login and the OAuth device-code grant are not in this
-concept line. Bring a token in through ``env`` or ``callback``.
+The OAuth device-code grant is not in this concept line. Bring such a token
+in through ``env`` or ``callback``.
 
 Secrets are never hardcoded, logged, or written to the ledger, and
 ``repr()`` output is redacted.
@@ -23,6 +26,7 @@ Secrets are never hardcoded, logged, or written to the ledger, and
 from __future__ import annotations
 
 import abc
+import base64
 import os
 from typing import Callable
 
@@ -114,3 +118,37 @@ class CallbackTokenProvider(CredentialProvider):
         if not t or not isinstance(t, str):
             raise CredentialError("token callback returned no token")
         return t
+
+
+class BasicAuthCredential(CredentialProvider):
+    """A username and password from two environment variables, sent as HTTP Basic auth over HTTPS only.
+
+    ``get_token`` returns the ``username:password`` pair. Two-Key fingerprints that pair (scrypt under the
+    per-install key, ``identity.password_fingerprint``) to tell a judge from the monitored agent; the pair itself
+    is never stored or logged."""
+
+    kind = "basic"
+
+    def __init__(self, username_var: str, password_var: str):
+        for v in (username_var, password_var):
+            if not v or not isinstance(v, str):
+                raise ValueError("basic credential requires username_env and password_env variable names")
+        self.username_var, self.password_var = username_var, password_var
+
+    def get_token(self) -> str:
+        user, password = os.environ.get(self.username_var), os.environ.get(self.password_var)
+        if not user:
+            raise CredentialError(f"environment variable {self.username_var} is not set")
+        if not password:
+            raise CredentialError(f"environment variable {self.password_var} is not set")
+        if ":" in user:
+            raise CredentialError(f"the username in {self.username_var} must not contain ':' (HTTP Basic)")
+        return f"{user}:{password}"
+
+    def __repr__(self) -> str:
+        return f"<BasicAuthCredential user={self.username_var} password={self.password_var} [redacted]>"
+
+
+def basic_authorization(pair: str) -> dict:
+    """The HTTP Basic ``Authorization`` header for a ``username:password`` pair (HTTPS only; callers check)."""
+    return {"Authorization": "Basic " + base64.b64encode(pair.encode("utf-8")).decode("ascii")}

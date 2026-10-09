@@ -51,9 +51,10 @@ def ollama(text=None, exc=None):
 
 
 # The in-process TEST_AGENT is accepted only when every judge is a test double; with a real
-# (Ollama) judge, declare a real agent: another model on the same local daemon.
+# (Ollama) judge, declare a real agent: another model on another local daemon. (Two keyless sides on one
+# address are refused: nothing tells them apart.)
 LOCAL_AGENT = {"id": "local-agent", "model": "llama3.1:8b", "provider": "ollama",
-               "base_url": "http://localhost:11434", "credential": "none"}
+               "base_url": "http://localhost:11435", "credential": "none"}
 
 
 def engine(tmp, judges, quorum=None, **kw):

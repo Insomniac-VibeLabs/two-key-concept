@@ -1,9 +1,13 @@
 # Security
 
-This is a prototype. Report vulnerabilities privately to the repository
-admins of Insomniac-VibeLabs: open the repository's Security tab and choose
-"Report a vulnerability" (GitHub private vulnerability reporting). Do not
-open a public issue for an unfixed security bug.
+This is a prototype and a public concept. It has had no independent review and
+has no production use. Security findings are welcome as public issues on this
+repository: the project would rather have them seen and argued over than
+hidden. State what the code does, what the docs claim, and how you checked.
+
+Private vulnerability reporting (the repository's Security tab, "Report a
+vulnerability") will become the channel once the product is more mature and in
+use. This file will say so when that happens.
 
 The threat model is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). This file
 is how to report a vulnerability. It is not the model.
@@ -11,12 +15,15 @@ is how to report a vulnerability. It is not the model.
 ## In scope
 
 - Fail-open on either path (a deny or a missing ballot must not become allow)
-- Token replay, argument substitution, or redemption after revocation
+- Token replay, argument substitution, or redemption of a token issued before
+  a revocation (`revoke` ends earlier tokens; it does not stop new approvals)
 - Ledger tampering that still verifies
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - A redeeming gateway that can mint a token it will accept
-- A judge that is the monitored agent being accepted at start-up
+- A judge that is the monitored agent being accepted at start-up: the
+  agent's credential at any address, or both sides keyless on one
+  address. Other overlaps start with a warning by design.
 
 ## Out of scope for this repository
 
@@ -30,8 +37,11 @@ outside the ledger directory. Stealing only the principal key does not decrypt
 the log, does not sign a new head, and does not mint a capability token.
 The minting key is `<ledger>.capability/capability.pem`, also outside the
 ledger directory. The gateway is given only the public half. Stealing the
-ledger key decrypts. Stealing the witness key as well as the principal key
-allows a forged head. Stealing the capability private key mints tokens.
+ledger key decrypts. Stealing the principal key and the ledger key allows a
+forged head, because the witness public key is not pinned yet (#58; a pin
+outside the ledger is planned for 0.2.3). Write access to the ledger
+directory alone can roll the ledger back to an earlier signed head or wipe
+it (#62). Stealing the capability private key mints tokens.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

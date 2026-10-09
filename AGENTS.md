@@ -21,7 +21,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.2.1 is tag `v0.2.1` on `main` and `working`. Do not move `v0.2.0`
+- Package 0.2.2 is tag `v0.2.2` on `main` and `working`. Do not move `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
@@ -31,7 +31,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.2.1`, tag `v0.2.1`. Not on PyPI.
+version `0.2.2`, tag `v0.2.2`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -47,7 +47,7 @@ python -m two_key demo
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.1"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"`
 
 ## Tests and docs
 
@@ -70,9 +70,9 @@ live outside the ledger directory. The gateway must verify only; it must not
 mint.
 
 Before changing authorization, tokens, the gateway, the ledger, or judge ≠
-agent identity checks: get a security review from the maintainer. Report
-vulnerabilities per [SECURITY.md](SECURITY.md); do not open a public issue for
-an unfixed security bug.
+agent identity checks: get a security review from the maintainer. While this is
+a prototype, report security findings as public issues, per
+[SECURITY.md](SECURITY.md).
 
 ## Fail-closed defaults to preserve
 
@@ -83,10 +83,12 @@ an unfixed security bug.
 - JSON/YAML inputs refuse duplicate keys. Oversized or malformed calls deny
   before either path.
 - Default quorum needs one judge and has no diversity floors;
-  `QuorumPolicy.high_assurance` / `profile: high_assurance` adds two vendors,
-  one local judge, and a local yes.
+  `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
+  two makers (`min_makers`), one local judge, and a local yes.
 - `tool_specs` is required. A disagreeing claim is a deny.
-- No judge may be the monitored agent.
+- No judge may be the monitored agent: the agent's credential at any
+  address, or both keyless on one address, is refused. Other overlaps warn
+  and are recorded. Addresses are compared as configured, without DNS.
 - The gateway verifies only; it never mints.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

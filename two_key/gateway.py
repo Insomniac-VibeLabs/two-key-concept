@@ -94,7 +94,11 @@ class ToolGateway:
         self._fingerprint = capability_key_fingerprint(self.issuer.public_key)
         self.compiled = compiled
         self.tools = tools or {}
+        # One in-process lock per jti being redeemed. #42: _lock_refs counts the threads that hold or
+        # wait on each lock, under _locks_guard; the entry is removed when the count reaches zero, so the
+        # map holds only jtis in flight. No LRU cap: evicting a held lock would split one jti in two.
         self._locks: dict[str, threading.Lock] = {}
+        self._lock_refs: dict[str, int] = {}
         self._locks_guard = threading.Lock()
         # After a successful gateway_denied append for a jti, further denies still refuse but
         # do not append. Marked only after append+checkpoint succeed (#16). LRU-capped.
@@ -283,13 +287,28 @@ class ToolGateway:
                 return entry.body.get("capability_key_fingerprint")
         return None
 
+    def _unref(self, jti: str) -> None:
+        """Drop one holder of ``jti``'s lock; remove the entry when none is left (#42)."""
+        with self._locks_guard:
+            n = self._lock_refs[jti] - 1
+            if n:
+                self._lock_refs[jti] = n
+            else:
+                del self._lock_refs[jti]
+                del self._locks[jti]
+
     def _hold(self, jti: str):
         gateway = self
         class _Hold:
             def __enter__(self):
                 with gateway._locks_guard:
                     self.lock = gateway._locks.setdefault(jti, threading.Lock())
-                self.lock.acquire()
+                    gateway._lock_refs[jti] = gateway._lock_refs.get(jti, 0) + 1
+                try:
+                    self.lock.acquire()
+                except BaseException:
+                    gateway._unref(jti)
+                    raise
                 self.fd = None
                 if fcntl is None:
                     return self
@@ -302,11 +321,17 @@ class ToolGateway:
                     if self.fd is not None:
                         os.close(self.fd)
                     self.lock.release()
+                    gateway._unref(jti)
                     raise
 
             def __exit__(self, *exc):
-                if self.fd is not None:
-                    fcntl.flock(self.fd, fcntl.LOCK_UN)
-                    os.close(self.fd)
-                self.lock.release()
+                try:
+                    if self.fd is not None:
+                        try:
+                            fcntl.flock(self.fd, fcntl.LOCK_UN)
+                        finally:
+                            os.close(self.fd)
+                finally:
+                    self.lock.release()
+                    gateway._unref(jti)
         return _Hold()

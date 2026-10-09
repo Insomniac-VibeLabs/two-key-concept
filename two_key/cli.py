@@ -72,8 +72,8 @@ def _demo(_args) -> int:
         # The ledger is a subdirectory so its key, witness, capability, and lock directories
         # (siblings of the ledger) are removed with the temporary directory too.
         ledger = Ledger(Path(tmp) / "ledger", key)
-        judges = [FixedJudge("a", "yes", provider="local-a", vendor="local", local_weights=True),
-                  FixedJudge("b", "yes", provider="cloud-b", vendor="other")]
+        judges = [FixedJudge("a", "yes", provider="local-a", maker="local", local_weights=True),
+                  FixedJudge("b", "yes", provider="cloud-b", maker="other")]
         tk = TwoKey(ledger, key.public_key(), __import__("two_key.constitution", fromlist=["verify_signed"]).verify_signed(envelope, key.public_key()),
                     judges, private_key=key, quorum=QuorumPolicy(required_yes=2), allow_test_doubles=True, monitored_agent=TEST_AGENT)
         denied = tk.authorize({"tool": "wire_transfer", "amount_usd": 10, "data_class": "public", "irreversible": True},

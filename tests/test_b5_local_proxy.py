@@ -1,11 +1,11 @@
-"""B5: a keyless local proxy or daemon serving the agent's exact model is refused unless its upstream is declared.
+"""B5: a local proxy or daemon serving the agent's exact model.
 
-The agent's identity is the operator's declaration. A loopback or private endpoint can forward the same
-model to the agent's provider and account without a key of its own, so with the same normalized model
-its upstream and tenant are unknown until it declares ``upstream:``. A declared upstream counts as an
-endpoint (a shared one is refused even with different declared tenants), tenants are scoped by the
-family a proxy reaches (not its address), upstream labels are normalized, and local aliases of this
-machine are one endpoint.
+Owner rule (2026-10-08): a judge is the monitored agent when it holds the agent's credential, at any address,
+or when neither side has a credential on the same address. A loopback or private endpoint serving the agent's model, a shared declared
+upstream, or a shared tenant is therefore allowed, and each is a likely accident that is warned and recorded
+(``identity.separation_warnings``). Tenants are still scoped by the family a proxy reaches (not its address),
+upstream labels are normalized, and every local alias of this machine is one address, so two keyless sides on
+it are refused.
 """
 
 import os
@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from two_key.constitution import sign_constitution, verify_signed
 from two_key.core import TwoKey, TwoKeyConfigError
 from two_key.identity import (AgentDeclaration, _own_addresses, check_separation, compare, endpoint_key,
-                              judge_identity, local_alias, normalize_upstream, IdentityError)
+                              judge_identity, local_alias, normalize_upstream, separation_warnings, IdentityError)
 from two_key.judges.credentials import StaticToken
 from two_key.judges.openai_compat import OpenAICompatibleJudge
 from two_key.keys import generate_private_key
@@ -29,8 +29,9 @@ OPENAI_AGENT = {"id": "agent", "model": "gpt-4o", "provider": "openai", "base_ur
 OLLAMA_AGENT = {"id": "agent", "model": "gpt-oss:120b-cloud", "provider": "ollama",
                 "base_url": "https://ollama.com", "credential_env": "B5_AGENT_KEY"}
 FP = b"k" * 32
-UNKNOWN = "through a local or unrecognized proxy or daemon"
-SAME_UPSTREAM = "through the same upstream"
+UNKNOWN = "same_model_unknown_proxy"
+SAME_UPSTREAM = "same_model_shared_route"
+NO_CREDENTIAL = "no credential on either side"
 
 
 def judge(model, base_url, key=None, tenant=None, upstream=None, jid="j"):
@@ -43,58 +44,73 @@ class B5(unittest.TestCase):
         os.environ["B5_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "B5_AGENT_KEY", None)
 
+    def resolved(self, agent: dict, j):
+        return AgentDeclaration.from_mapping(agent).resolve(fp_key=FP), judge_identity(j, FP)
+
     def verdict(self, agent: dict, j) -> str | None:
-        a = AgentDeclaration.from_mapping(agent).resolve(fp_key=FP)
-        return compare(a, judge_identity(j, FP))
+        return compare(*self.resolved(agent, j))
+
+    def checks(self, agent: dict, j) -> list[str]:
+        return [w["check"] for w in separation_warnings(*self.resolved(agent, j))]
 
     def denied(self, agent, j, pattern):
         reason = self.verdict(agent, j)
         self.assertIsNotNone(reason, "expected a refusal")
         self.assertRegex(reason, pattern)
 
+    def warned(self, agent, j, *checks):
+        self.assertIsNone(self.verdict(agent, j), "expected the pairing to be allowed")
+        got = self.checks(agent, j)
+        for check in checks:
+            self.assertIn(check, got)
+
     def allowed(self, agent, j):
         self.assertIsNone(self.verdict(agent, j))
 
-    # ------------------------------------------------------------ the reported gaps, now refused
+    # ------------------------------------------------------------ the reported gaps, now warned
     def test_keyless_local_proxy_with_the_agents_model(self):
         for model in ("gpt-4o", "openai/gpt-4o", "gpt-4o-2024-08-06"):
             with self.subTest(model=model):
-                self.denied(OPENAI_AGENT, judge(model, "http://localhost:4000"), UNKNOWN)
+                self.warned(OPENAI_AGENT, judge(model, "http://localhost:4000"), UNKNOWN)
 
     def test_private_address_proxy(self):
-        self.denied(OPENAI_AGENT, judge("gpt-4o", "https://192.168.1.9:4000"), UNKNOWN)
-        self.denied(OPENAI_AGENT, judge("gpt-4o", "https://192.168.1.9:4000", key="other-key"), UNKNOWN)
+        self.warned(OPENAI_AGENT, judge("gpt-4o", "https://192.168.1.9:4000"), UNKNOWN)
+        self.warned(OPENAI_AGENT, judge("gpt-4o", "https://192.168.1.9:4000", key="other-key"), UNKNOWN)
 
     def test_declared_upstream_is_compared(self):
         for up in ("api.openai.com", "https://API.OpenAI.com:443/v1", "api.openai.com.", ["api.openai.com"]):
             with self.subTest(upstream=up):
-                self.denied(OPENAI_AGENT, judge("gpt-4o", "http://localhost:4000", upstream=up), SAME_UPSTREAM)
+                self.warned(OPENAI_AGENT, judge("gpt-4o", "http://localhost:4000", upstream=up), SAME_UPSTREAM)
+                self.assertNotIn(UNKNOWN, self.checks(OPENAI_AGENT, judge("gpt-4o", "http://localhost:4000",
+                                                                          upstream=up)))
 
     def test_shared_declared_tenant_behind_a_proxy(self):
         agent = dict(OPENAI_AGENT, tenant={"project": "p1"})
-        self.denied(agent, judge("gpt-4o", "http://localhost:4000", tenant={"project": "p1"}), UNKNOWN)
-        self.denied(agent, judge("gpt-4o", "http://localhost:4000", tenant={"project": "P1"},
-                                 upstream="api.openai.com"), SAME_UPSTREAM)
+        self.warned(agent, judge("gpt-4o", "http://localhost:4000", tenant={"project": "p1"}), UNKNOWN, "shared_tenant")
+        self.warned(agent, judge("gpt-4o", "http://localhost:4000", tenant={"project": "P1"},
+                                 upstream="api.openai.com"), SAME_UPSTREAM, "shared_tenant")
         # Tenant ids are scoped by provider family, so a proxy's p1 is OpenAI's p1 even on another model.
-        self.denied(agent, judge("gpt-4o-mini", "http://localhost:4000", tenant={"project": "P1"},
-                                 upstream="api.openai.com"), "same tenant openai:project:p1")
+        j = judge("gpt-4o-mini", "http://localhost:4000", tenant={"project": "P1"}, upstream="api.openai.com")
+        self.warned(agent, j, "shared_tenant")
+        [w] = separation_warnings(*self.resolved(agent, j))
+        self.assertEqual(w["detail"], "a shared tenant openai:project:p1")
 
     def test_declared_upstream_on_a_remote_router_counts_as_an_endpoint(self):
         agent = dict(OPENAI_AGENT, base_url="https://llm-router.example.com/v1", upstream="api.openai.com")
-        self.denied(agent, judge("gpt-4o", "https://api.openai.com/v1", key="judge-key"), SAME_UPSTREAM)
+        self.warned(agent, judge("gpt-4o", "https://api.openai.com/v1", key="judge-key"), SAME_UPSTREAM)
 
     def test_ollama_cloud_model_through_a_local_daemon(self):
         j = judge("gpt-oss:120b-cloud", "http://localhost:11434")
-        self.denied(OLLAMA_AGENT, j, UNKNOWN)
-        self.denied(OLLAMA_AGENT, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com"),
+        self.warned(OLLAMA_AGENT, j, UNKNOWN, SAME_UPSTREAM)
+        self.warned(OLLAMA_AGENT, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com"),
                     SAME_UPSTREAM)
         same_account = dict(OLLAMA_AGENT, tenant={"account": "acct-a"})
-        self.denied(same_account, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com",
-                                        tenant={"account": "acct-a"}), SAME_UPSTREAM)
-        self.denied(same_account, judge("qwen3-coder:480b-cloud", "http://localhost:11434", upstream="ollama.com",
-                                        tenant={"account": "acct-a"}), "same tenant ollama:account:acct-a")
+        self.warned(same_account, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com",
+                                        tenant={"account": "acct-a"}), SAME_UPSTREAM, "shared_tenant")
+        self.warned(same_account, judge("qwen3-coder:480b-cloud", "http://localhost:11434", upstream="ollama.com",
+                                        tenant={"account": "acct-a"}), "shared_tenant")
         # The agent's model without the -cloud suffix is the same model.
-        self.denied(dict(OLLAMA_AGENT, model="gpt-oss:120b"), j, UNKNOWN)
+        self.warned(dict(OLLAMA_AGENT, model="gpt-oss:120b"), j, UNKNOWN)
 
     def test_local_aliases_are_one_endpoint(self):
         agent = {"id": "agent", "model": "llama3.1:8b", "provider": "ollama", "base_url": "http://localhost:11434",
@@ -106,8 +122,9 @@ class B5(unittest.TestCase):
             with self.subTest(host=host):
                 self.assertTrue(local_alias(host.strip("[]")), host)
                 self.assertEqual(endpoint_key(f"http://{host}:11434"), "localhost:11434")
+                # Every alias is the one address, and neither side has a credential: refused.
                 self.denied(agent, judge("llama3.1:8b", f"http://{host}:11434", upstream=f"{host}:11434"),
-                            "same model 'llama3.1-8b' on the same endpoint localhost:11434")
+                            "the same address localhost:11434 and " + NO_CREDENTIAL)
 
     def test_this_machines_own_address_is_a_local_alias(self):
         from unittest import mock
@@ -118,7 +135,7 @@ class B5(unittest.TestCase):
                 with self.subTest(host=host):
                     self.assertEqual(endpoint_key(f"http://{host}:11434"), "localhost:11434")
                     self.denied(agent, judge("llama3.1:8b", f"http://{host}:11434", upstream=f"{host}:11434"),
-                                "on the same endpoint localhost:11434")
+                                "the same address localhost:11434")
             self.assertFalse(local_alias("10.20.30.41"))
 
     def test_upstream_normalization(self):
@@ -148,14 +165,15 @@ class B5(unittest.TestCase):
         remote = dict(OPENAI_AGENT, model="llama3.1:8b", base_url="https://api.together.xyz/v1")
         self.allowed(remote, judge("llama3.1:8b", "http://localhost:11434", upstream="localhost:11434"))
 
-    def test_different_declared_tenants_on_a_shared_upstream_are_refused(self):
-        # As in two-key: one model from one upstream is the same model, whichever account pays for it.
+    def test_different_declared_tenants_on_a_shared_upstream_are_warned(self):
+        # One model from one upstream on different accounts: allowed, and the shared route is recorded.
         agent = dict(OLLAMA_AGENT, tenant={"account": "acct-a"})
-        self.denied(agent, judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com",
-                                 tenant={"account": "acct-b"}), SAME_UPSTREAM + " ollama.com")
+        j = judge("gpt-oss:120b-cloud", "http://localhost:11434", upstream="ollama.com", tenant={"account": "acct-b"})
+        self.warned(agent, j, SAME_UPSTREAM)
+        self.assertNotIn("shared_tenant", self.checks(agent, j))
         agent = dict(OPENAI_AGENT, tenant={"project": "p1"})
-        self.denied(agent, judge("gpt-4o", "http://localhost:4000", upstream="api.openai.com",
-                                 tenant={"project": "p2"}), SAME_UPSTREAM + " api.openai.com")
+        self.warned(agent, judge("gpt-4o", "http://localhost:4000", upstream="api.openai.com",
+                                 tenant={"project": "p2"}), SAME_UPSTREAM)
 
     def test_same_provider_on_a_different_model_or_endpoint_is_allowed(self):
         self.allowed(OPENAI_AGENT, judge("gpt-4o-mini", "https://api.openai.com/v1", key="judge-key"))
@@ -185,13 +203,17 @@ class UnrecognizedHost(unittest.TestCase):
     def verdict(self, j):
         return compare(self.agent, judge_identity(j, FP))
 
+    def checks(self, j):
+        return [w["check"] for w in separation_warnings(self.agent, judge_identity(j, FP))]
+
     def check(self, base_url):
-        reason = self.verdict(judge("openai/gpt-4o", base_url))
-        self.assertIsNotNone(reason, base_url)
-        self.assertRegex(reason, "through a local or unrecognized proxy or daemon .*no declared upstream")
-        self.assertRegex(self.verdict(judge("openai/gpt-4o", base_url, upstream="api.openai.com")), SAME_UPSTREAM)
-        self.assertIsNone(self.verdict(judge("openai/gpt-4o", base_url, upstream="api.groq.com")))
-        self.assertIsNone(self.verdict(judge("openai/gpt-4o-mini", base_url)))     # a different model
+        for j in (judge("openai/gpt-4o", base_url), judge("openai/gpt-4o", base_url, upstream="api.openai.com"),
+                  judge("openai/gpt-4o", base_url, upstream="api.groq.com"), judge("openai/gpt-4o-mini", base_url)):
+            self.assertIsNone(self.verdict(j), base_url)        # another address: never the same agent
+        self.assertIn(UNKNOWN, self.checks(judge("openai/gpt-4o", base_url)))
+        self.assertEqual(self.checks(judge("openai/gpt-4o", base_url, upstream="api.openai.com")), [SAME_UPSTREAM])
+        self.assertEqual(self.checks(judge("openai/gpt-4o", base_url, upstream="api.groq.com")), [])
+        self.assertEqual(self.checks(judge("openai/gpt-4o-mini", base_url)), [])     # a different model
 
     def test_litellm(self):
         self.check(self.HOSTS[0])
@@ -218,17 +240,22 @@ class UnrecognizedHost(unittest.TestCase):
 
 
 class EndToEnd(unittest.TestCase):
-    def test_twokey_refuses_a_keyless_local_proxy_with_the_agents_model(self):
+    def test_twokey_starts_with_a_keyless_local_proxy_and_records_the_warning(self):
+        import contextlib
+        import io
         os.environ["B5_AGENT_KEY"] = "agent-key-K"
         self.addCleanup(os.environ.pop, "B5_AGENT_KEY", None)
         key = generate_private_key()
         env = sign_constitution("Searching is fine.", [{"id": "t", "allow_only_tools": ["search"]}], key,
                                 {"search": {"irreversible": False, "data_class_floor": "public"}})
         proxy = OpenAICompatibleJudge("proxy", "litellm", "gpt-4o", "http://localhost:4000/v1")
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(TwoKeyConfigError, "judge_matches_agent: .*through a local or unrecognized proxy or daemon"):
-                TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
-                       [proxy], private_key=key, quorum=QuorumPolicy(required_yes=1), monitored_agent=OPENAI_AGENT)
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
+            tk = TwoKey(Ledger(Path(tmp, "ledger"), key), key.public_key(), verify_signed(env, key.public_key()),
+                        [proxy], private_key=key, quorum=QuorumPolicy(required_yes=1), monitored_agent=OPENAI_AGENT)
+            [loaded] = [e.body for e in tk.ledger.entries if e.kind == "constitution_loaded"]
+        self.assertIn("two-key: WARNING: judge 'proxy' vs agent 'agent'", err.getvalue())
+        self.assertIn(UNKNOWN, [w["check"] for w in loaded["judge_agent_separation"]["warnings"]])
 
 
 if __name__ == "__main__":

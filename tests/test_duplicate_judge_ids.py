@@ -17,9 +17,9 @@ A = normalize_action({"tool": "pay"})
 
 
 def dup():
-    return [FixedJudge("a", "no", provider="l", vendor="local", local_weights=True),
-            FixedJudge("a", "yes", provider="c1", vendor="v1"),
-            FixedJudge("c", "yes", provider="c2", vendor="v2")]
+    return [FixedJudge("a", "no", provider="l", maker="local", local_weights=True),
+            FixedJudge("a", "yes", provider="c1", maker="v1"),
+            FixedJudge("c", "yes", provider="c2", maker="v2")]
 
 
 class DuplicateJudgeIds(unittest.TestCase):

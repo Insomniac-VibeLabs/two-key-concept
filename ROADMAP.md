@@ -1,8 +1,9 @@
 # Roadmap
 
-This is the plan for taking `two-key-concept` from the 0.2.1 prototype to a
+This is the plan for taking `two-key-concept` from the 0.2.2 prototype to a
 1.0 release. It states intent, not a promise. The order may change, and
-version numbers are targets, not dates. Nothing listed here exists in 0.2.1.
+version numbers are targets, not dates. Nothing listed here after the 0.2.x
+baseline exists in 0.2.2.
 
 Read [SCOPE.md](docs/SCOPE.md) and [THREAT_MODEL.md](docs/THREAT_MODEL.md)
 for what the package does today. When an item below ships, both files change
@@ -36,9 +37,68 @@ flowchart LR
 
 ## 0.2.x: Baseline
 
-- Close the remaining open issues and freeze features.
+- 0.2.2 carries two owner decisions made after this plan was written: when a
+  judge counts as the monitored agent (its credential at any address, or
+  both sides keyless on one address), and HTTP Basic auth for judges and
+  agents. After 0.2.2, close the remaining open issues and freeze features.
 - Keep the README's "Known limits" section current: no independent review,
   no external anchor, not FIPS validated, signatures not quantum resistant.
+
+### 0.2.3 (planned)
+
+Two changes, both breaking, both needing the maintainer security review
+that AGENTS.md asks for.
+
+**Pin the ledger's witness public key (#58, rated Low by the owner).**
+Today `Ledger._verify_head` reads `witness_public_key` from the stored head
+and checks the witness signature against that same key, and `checkpoint`
+writes whatever key `witness.pem` holds. So replacing `witness.pem` is
+accepted silently, and the principal key plus the ledger key are enough to
+sign a head. A pin stored only inside the ledger would not change that:
+whoever holds the principal key and the ledger key can rewrite the chain
+from its first entry, pin included. So the plan has two pins:
+
+1. **In the ledger:** a new ledger records its witness public key in a
+   `witness_pinned` entry, the first entry after creation, checkpointed.
+   `_verify_head` and `checkpoint` refuse a head signed by another witness
+   key (`witness_key_changed`), and `checkpoint` refuses to sign with a
+   `witness.pem` that does not match. This catches a swapped or silently
+   replaced `witness.pem` on a chain that is not rewritten. It does not
+   stop someone who holds the principal key and the ledger key.
+2. **Outside the ledger:** the operator can give the verifier the witness
+   public key as configuration, as the gateway is given the capability
+   public key (`Ledger(..., witness_public_key=...)`, and a CLI option), kept
+   where whoever writes the ledger directory cannot change it. With it, a
+   head also needs the witness private key, so the principal key and the
+   ledger key alone no longer forge one.
+3. A ledger made by 0.2.2 or earlier pins the key in its current head on its
+   first open under 0.2.3 (trust on first use), with a ledgered
+   `witness_pinned` entry that says so. A key swapped before the upgrade
+   cannot be detected; CHANGES and THREAT_MODEL say this.
+4. Changing the witness key becomes an explicit, ledgered `witness_rotated`
+   entry, signed by the principal and both the old and the new witness key;
+   an out-of-ledger pin is updated by the operator. A lost witness key means
+   a new ledger until 0.3's key backup can restore it.
+5. `Ledger.verify()` and `audit` report both pins. Tests cover a swapped
+   `witness.pem` (refused), a head signed by a key other than the
+   configured one (refused), an old ledger pinning on first open, and a
+   rotation.
+6. README, THREAT_MODEL, and SECURITY.md say what each pin detects. With the
+   out-of-ledger pin configured, forging a head needs the principal,
+   witness, and ledger keys together; without it, the principal key and the
+   ledger key stay enough. Rolling the ledger back to an earlier signed
+   head, or wiping it, stays undetected without an external anchor, with or
+   without either pin.
+
+**Remove the `vendor` / `min_vendors` aliases (owner's decision).** Every
+`TODO(remove-vendor-alias)` site in `two_key/`: the `vendor:` and
+`min_vendors:` config keys (then refused as unknown keys), the `vendor=` and
+`min_vendors=` arguments, the `.vendor` and `.min_vendors` properties, the
+`_vendor` fallback, `maker_from_vendor`, `rename_min_vendors`, and the
+`QuorumPolicy.__init__` wrapper. The old-name tests become tests that the
+old names are refused, and CHANGES gets an "Upgrading from 0.2.2" step.
+The unused `extra_secrets` argument of `AgentDeclaration.resolve`, which
+HMACs whatever it is given, goes in the same release.
 
 ## 0.3: Key backup and recovery
 

@@ -5,10 +5,10 @@ and Path B (a judge quorum) both allow. Prototype. Apache-2.0.
 
 Package: two-key-concept
 Import: two_key
-Package version: 0.2.1. Tag v0.2.1 is on main and working.
+Package version: 0.2.2. Tag v0.2.2 is on main and working.
 Tag v0.2.0 stays on commit 2f756ac. v0.1.12 and v0.1.6 stay on their trees.
-Not on PyPI. Install from git ref v0.2.1.
-0.2.0 changed configuration: CHANGES.md "Upgrading from 0.1.12". 0.2.1 is docs and version only.
+Not on PyPI. Install from git ref v0.2.2 (two-key-concept[yaml] for YAML configs).
+0.2.2 changes configuration: CHANGES.md "Upgrading from 0.2.1" (and "Upgrading from 0.1.12" for older).
 
 Does: signed constitution, Path A bytecode, Path B judges (xAI/Grok, OpenAI,
 Anthropic, Gemini, Ollama), monitored agents, encrypted ledger, single-use token.
@@ -16,20 +16,27 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(362 tests, no network).
+(403 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
 malformed call is an early deny before either path). The default needs one judge and has no diversity
 floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
-(profile: high_assurance) sets 2 vendors, 1 local judge, and a local yes.
-TwoKey needs monitored_agent, declared by the operator. It refuses a judge
-that is the same agent: same credential fingerprint (HMAC, per-install key),
-shared tenant id, same model on the same endpoint or upstream (even with
-different tenants, unless the logged opt-in allow_same_model_distinct_tenant
-is set and tenants and keys differ), same model through a local or unrecognized host, proxy, or daemon
-without a non-overlapping declared upstream, or an unresolved identity.
-The same provider is allowed. Local means local_weights true, host loopback / RFC 1918 / fc00::/7 (names not resolved), and not a :cloud/-cloud model.
+(profile: high_assurance) needs judges from 2 makers (min_makers; maker: is the operator's
+label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
+and a local yes. vendor/min_vendors are deprecated aliases in 0.2.2, removed in 0.2.3.
+TwoKey needs monitored_agent, declared by the operator. A judge may run any
+model from any vendor. It refuses a judge that is the same agent: the same
+credential fingerprint (per-install key; HMAC-SHA256 for an API token,
+scrypt N=2^17 r=8 p=1 for a username and password as one pair, Basic over
+HTTPS only) at any address, or both sides
+keyless on one address (host:port as configured, local aliases folded, no
+DNS). A judge presenting agent_session abstains at any address. Other
+overlaps start with a warning on stderr and in constitution_loaded:
+same_address_one_side_keyless, same_model_same_address,
+same_model_shared_route, same_model_unknown_proxy, shared_tenant,
+unresolved_identity. allow_same_model_distinct_tenant and
+allow_same_provider_judge are deprecated no-ops. Local means local_weights true, host loopback / RFC 1918 / fc00::/7 (names not resolved), and not a :cloud/-cloud model.
 JSON and YAML inputs refuse duplicate keys. Arguments or proposals over
 256 KiB are denied. Ballots are paired with judges by position.
 require_path_a_first is not a skip. There is no scanner, no PKI, and no anchor.

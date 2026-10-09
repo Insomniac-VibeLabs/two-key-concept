@@ -25,6 +25,7 @@ Every connector:
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import uuid
@@ -37,8 +38,8 @@ from .transport import pooled_transport
 from ..action import Action
 from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
-from .base import Ballot, Judge
-from .credentials import CredentialError, CredentialProvider, NoCredential
+from .base import Ballot, Judge, maker_from_vendor
+from .credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
 from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
 
@@ -133,15 +134,17 @@ LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 class LLMJudge(Judge):
     """Base class. Subclasses implement ``_request`` and ``_extract_text``."""
 
-    default_auth_header = "bearer"  # bearer | x-api-key | x-goog-api-key | none
+    default_auth_header = "bearer"  # bearer | x-api-key | x-goog-api-key | none (basic comes with auth type basic)
 
     def __init__(self, judge_id: str, provider: str, model: str, base_url: str,
                  credential: CredentialProvider | None = None, *, timeout: float = 30.0,
                  transport: Transport | None = None, auth_header: str | None = None,
-                 allow_insecure_http: bool = False, vendor: str | None = None,
+                 allow_insecure_http: bool = False, maker: str | None = None,
                  local_weights: bool | None = None, weights_sha256: str | None = None,
                  echo_binding: bool = False, ballot_key: str | None = None, ballot_key_env: str | None = None,
-                 receives_proposal: bool = False):
+                 receives_proposal: bool = False, vendor: str | None = None):
+        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
+        maker = maker_from_vendor(maker, vendor)
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -155,8 +158,15 @@ class LLMJudge(Judge):
         self.timeout = timeout
         self.transport = transport or pooled_transport
         self.auth_header = auth_header or self.default_auth_header
-        if vendor:
-            self.vendor = vendor
+        basic = getattr(self.credential, "kind", None) == "basic"
+        if basic or self.auth_header == "basic":
+            if not basic or auth_header not in (None, "basic"):
+                raise ValueError("auth_header basic goes only with auth type basic (username_env and password_env)")
+            if u.scheme != "https":
+                raise ValueError(f"refusing a username and password over plain HTTP {base_url!r}; use https")
+            self.auth_header = "basic"
+        if maker:
+            self.maker = maker
         if local_weights is not None:
             self.local_weights = bool(local_weights)
         self.weights_sha256 = weights_sha256
@@ -185,6 +195,8 @@ class LLMJudge(Judge):
             return {}
         if self.auth_header == "bearer":
             return {"Authorization": f"Bearer {token}"}
+        if self.auth_header == "basic":
+            return basic_authorization(token)
         if self.auth_header in ("x-api-key", "x-goog-api-key"):
             return {self.auth_header: token}
         raise ValueError(f"unknown auth_header {self.auth_header!r}")
@@ -206,6 +218,8 @@ class LLMJudge(Judge):
 
     def score_bound(self, constitution_text: str, action: Action, proposal: str, binding,
                     agent_session: str | None = None) -> Ballot:
+        """Score one action. A judge that presents the agent session abstains, wherever it connects: a credential
+        identifies its holder (the start-up rule, again at call time)."""
         echo = self.echo_binding and binding is not None
         if not isinstance(constitution_text, str) or not constitution_text.strip():
             return self.abstain("empty constitution text")
@@ -213,17 +227,28 @@ class LLMJudge(Judge):
             headers = self._auth_headers()
         except (CredentialError, NotImplementedError, ValueError) as e:
             return self.abstain(cap_ledger_text(f"credential: {e}"))
-        sessions = {agent_session} if isinstance(agent_session, str) else set(agent_session or ())
-        sessions = {s.strip() for s in sessions if isinstance(s, str)}   # as for fingerprints
+        if agent_session is None or isinstance(agent_session, str):
+            sessions = {agent_session} if agent_session else set()
+        elif (isinstance(agent_session, (list, tuple, set, frozenset))
+              and all(isinstance(s, str) for s in agent_session)):
+            sessions = set(agent_session)
+        else:   # bytes or another type would silently skip the check below, so fail closed
+            return self.abstain("agent_session must be a string")
+        sessions = {s.strip() for s in sessions}   # as for fingerprints
         sessions.discard("")
         if self.is_cloud() and not sessions:
             return self.abstain("cloud_judge_session_required")
-        # Second layer behind the start-up check (identity.py), for every judge, local or cloud:
-        # a judge must not call its model with the monitored agent's own credential.
+        # Second layer behind the start-up check (identity.py), for every judge, local or cloud: a judge
+        # must not be the agent, that is, present the agent's own credential, to any address.
         tokens = []
         auth = headers.get("Authorization", "")
         if auth.lower().startswith("bearer "):
             tokens.append(auth.split(" ", 1)[1].strip())
+        elif auth.lower().startswith("basic "):
+            try:
+                tokens.append(base64.b64decode(auth.split(" ", 1)[1].strip(), validate=True).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                pass
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
         if any(token and token.strip() in sessions for token in tokens):
             return self.abstain("cloud_judge_reused_agent_session")
