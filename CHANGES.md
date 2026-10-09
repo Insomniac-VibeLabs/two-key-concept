@@ -542,8 +542,13 @@ commit messages of PRs #43 and #61.
   sits beside the ledger key, so anyone who can decrypt the ledger holds it
   too; for a guessable password only the scrypt cost slows an offline
   guess. This clears the two high CodeQL alerts
-  (py/weak-sensitive-data-hashing) the new password support raised.
-  `constitution_loaded` records `password_alg` beside `alg`.
+  (py/weak-sensitive-data-hashing) the new password support raised. Any
+  credential sent as HTTP Basic (a provider whose `kind` is `basic`) is
+  fingerprinted as a pair, so a judge and the agent with the same pair still
+  match. The pair is stripped of whitespace at its two ends only. A scrypt
+  failure (memory, or no scrypt in a FIPS-only OpenSSL) refuses with
+  `password_fingerprint_failed:`. `constitution_loaded` records
+  `password_alg` beside `alg`.
 - `quorum` passes a judge's `score_bound` the keyword arguments its
   signature accepts, instead of retrying on `TypeError`, so a `TypeError`
   inside a judge is an abstention, not a second call without the agent
@@ -597,8 +602,9 @@ commit messages of PRs #43 and #61.
 - The witness key is described as it is: the head carries its own witness
   public key, which is not pinned (#58), so the principal key and the
   ledger key together can sign a head. Pinning is planned for 0.2.3.
-- The identity docstring and HOWTO no longer claim the per-install
-  fingerprint key stops a ledger reader from testing guesses.
+- The identity docstring no longer claims the per-install fingerprint key
+  stops a ledger reader from testing guesses. README, HOWTO, llms.txt, and
+  THREAT_MODEL describe HMAC-SHA256 for tokens and scrypt for passwords.
 - New `ROADMAP.md` (0.3 key backup through 1.0) and the README roadmap
   table; SCOPE and THREAT_MODEL "planned" sections; AGENTS.md puts PKI,
   hybrid ML-DSA, and a FIPS approved mode in scope for this repository

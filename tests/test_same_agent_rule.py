@@ -3,7 +3,7 @@
 A judge is the same specific agent when it holds the agent's credential (an API token, a username/password
 pair, or a session), at any address, or when neither side has a credential on the same address.
 Any model from any vendor is allowed; likely accidents are warned and recorded. Usernames and passwords are
-HTTP Basic over HTTPS only and are compared as one HMAC-fingerprinted pair.
+HTTP Basic over HTTPS only and are compared as one scrypt-fingerprinted pair.
 """
 
 import base64
@@ -189,6 +189,39 @@ class Basic(EnvVars):
         with self.assertRaisesRegex(IdentityError, "fingerprint_key_required"):
             AgentDeclaration.from_mapping(decl).resolve()
         self.assertEqual(AgentDeclaration.from_mapping(decl).resolve(fp_key=FP).credentials, {fp})
+
+    def test_any_credential_sent_as_basic_is_a_pair(self):
+        from two_key.judges.credentials import CredentialProvider
+
+        class VaultBasic(CredentialProvider):       # a custom provider, not BasicAuthCredential
+            kind = "basic"
+
+            def get_token(self):
+                return "alice:s3cret"
+        self.setenv(BA_USER="alice", BA_PASS="s3cret")
+        decl = {"id": "agent", "model": "m", "provider": "x", "base_url": "https://h.example/v1",
+                "username_env": "BA_USER", "password_env": "BA_PASS"}
+        agent = AgentDeclaration.from_mapping(decl).resolve(fp_key=FP)
+        judge = OpenAICompatibleJudge("cj", "x", "m2", "https://other.example/v1", VaultBasic())
+        self.assertEqual(judge._auth_headers(),
+                         {"Authorization": "Basic " + base64.b64encode(b"alice:s3cret").decode()})
+        [fp] = judge_identity(judge, FP).credentials
+        self.assertTrue(fp.startswith("scrypt-n17-r8-p1:"))
+        self.assertRegex(compare(agent, judge_identity(judge, FP)), "the same credential")
+        mon = MonitoredAgent("a", "x", "m", "https://h.example/v1", "cloud", VaultBasic(), kind="openai_compatible")
+        self.assertEqual(configured_agent_identity(mon, FP).credentials, frozenset({fp}))
+
+    def test_a_scrypt_failure_and_a_missing_key_are_named(self):
+        from unittest import mock
+        from two_key.identity import password_fingerprint
+        with mock.patch("two_key.identity.hashlib.scrypt", side_effect=ValueError("memory limit exceeded")):
+            with self.assertRaisesRegex(IdentityError, r"^password_fingerprint_failed: scrypt \(scrypt-n17-r8-p1"):
+                password_fingerprint("alice:s3cret", FP)
+        self.setenv(BA_USER="alice", BA_PASS="s3cret")
+        mon = MonitoredAgent("a", "x", "m", "https://h.example/v1", "cloud", BasicAuthCredential("BA_USER", "BA_PASS"),
+                             kind="openai_compatible")
+        with self.assertRaisesRegex(IdentityError, "agent 'a': fingerprint_key_required"):
+            configured_agent_identity(mon, None)
 
     def test_config(self):
         cred = build_credential({"type": "basic", "username_env": "U", "password_env": "P"})

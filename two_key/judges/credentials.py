@@ -123,8 +123,9 @@ class CallbackTokenProvider(CredentialProvider):
 class BasicAuthCredential(CredentialProvider):
     """A username and password from two environment variables, sent as HTTP Basic auth over HTTPS only.
 
-    ``get_token`` returns the ``username:password`` pair. Two-Key fingerprints that pair (HMAC under the
-    per-install key) to tell a judge from the monitored agent; the pair itself is never stored or logged."""
+    ``get_token`` returns the ``username:password`` pair. Two-Key fingerprints that pair (scrypt under the
+    per-install key, ``identity.password_fingerprint``) to tell a judge from the monitored agent; the pair itself
+    is never stored or logged."""
 
     kind = "basic"
 

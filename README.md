@@ -146,8 +146,9 @@ and dashes folded), the endpoint `host:port`, the upstream that serves it
 and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 `declared_upstream`), scoped tenant ids (a `tenant:` mapping of
 `organization`, `project`, `account`, or `deployment`, plus what the URL
-shows), and a credential fingerprint (HMAC-SHA256 under a per-install key,
-whitespace stripped; a username and password are one pair).
+shows), and a credential fingerprint under a per-install key, whitespace
+stripped (HMAC-SHA256 for an API token; scrypt, N=2^17, r=8, p=1, for a
+username and password, fingerprinted as one pair).
 
 A judge may run any model from any vendor. It is the monitored agent, and
 `TwoKey` refuses to start (`judge_matches_agent:`), when it holds the

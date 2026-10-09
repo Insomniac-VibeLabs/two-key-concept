@@ -84,6 +84,8 @@ sign a head. The plan:
 `_vendor` fallback, `maker_from_vendor`, `rename_min_vendors`, and the
 `QuorumPolicy.__init__` wrapper. The old-name tests become tests that the
 old names are refused, and CHANGES gets an "Upgrading from 0.2.2" step.
+The unused `extra_secrets` argument of `AgentDeclaration.resolve`, which
+HMACs whatever it is given, goes in the same release.
 
 ## 0.3: Key backup and recovery
 

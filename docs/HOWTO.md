@@ -139,17 +139,22 @@ At startup each judge and agent is resolved to:
   its model maker, never the proxy's own address. So `project: p1` behind a
   local proxy to OpenAI is the same tenant as `project: p1` at
   api.openai.com;
-- a credential fingerprint: HMAC-SHA256 of the key with surrounding
-  whitespace stripped, under a per-install key,
-  `<ledger>.ledger-key/fingerprint.key` (32 random bytes, created once with
-  O_EXCL, mode 0600). A username and password are fingerprinted as one
-  `username:password` pair. Raw keys and passwords are never logged.
+- a credential fingerprint of the key with surrounding whitespace stripped,
+  under a per-install key, `<ledger>.ledger-key/fingerprint.key` (32 random
+  bytes, created once with O_EXCL, mode 0600): HMAC-SHA256 for an API token
+  (`hmac-sha256:`), and scrypt (N=2^17, r=8, p=1: 128 MiB, about 0.4 s;
+  `scrypt-n17-r8-p1:`) for a username and password, fingerprinted as one
+  `username:password` pair with whitespace stripped from its two ends only.
+  The key sits beside the ledger key, so it does not stop someone who holds
+  that directory; there a password is protected only by scrypt's cost. Raw
+  keys and passwords are never logged.
 
 `TwoKey` refuses with `judge_matches_agent:` only when a judge is the
 monitored agent. That is either of these:
 
 - the same credential, at any address: the same API token or the same
-  username and password (as fingerprints, whitespace stripped). A credential
+  username and password (as fingerprints, whitespace stripped from the ends
+  of the token or of the `username:password` pair). A credential
   identifies its holder wherever it is sent, so a judge with the agent's key
   behind a pass-through proxy, under another name for the agent's server, or
   at a provider's alternate host is still the agent. A placeholder that a

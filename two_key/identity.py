@@ -213,7 +213,8 @@ PASSWORD_FINGERPRINT_ALG = "scrypt-n17-r8-p1"
 
 
 def password_fingerprint(pair: str | None, key: bytes | None) -> str:
-    """Fingerprint of a ``username:password`` pair, whitespace stripped: scrypt under the per-install key.
+    """Fingerprint of a ``username:password`` pair, whitespace stripped from its two ends only: scrypt under the
+    per-install key.
 
     A key is required; there is no unkeyed form for a password."""
     pair = (pair or "").strip()
@@ -223,8 +224,12 @@ def password_fingerprint(pair: str | None, key: bytes | None) -> str:
         raise IdentityError("fingerprint_key_required: a username and password are fingerprinted only under the "
                             "per-install key")
     k = PASSWORD_KDF
-    derived = hashlib.scrypt(FINGERPRINT_DOMAIN + pair.encode("utf-8", "surrogatepass"), salt=key, n=k["n"],
-                             r=k["r"], p=k["p"], maxmem=4 * 128 * k["r"] * k["n"], dklen=k["dklen"])
+    try:
+        derived = hashlib.scrypt(FINGERPRINT_DOMAIN + pair.encode("utf-8", "surrogatepass"), salt=key, n=k["n"],
+                                 r=k["r"], p=k["p"], maxmem=4 * 128 * k["r"] * k["n"], dklen=k["dklen"])
+    except (ValueError, MemoryError, AttributeError) as e:   # out of memory, or no scrypt in this OpenSSL (FIPS)
+        raise IdentityError(f"password_fingerprint_failed: scrypt ({PASSWORD_FINGERPRINT_ALG}, 128 MiB) failed "
+                            f"({type_tag(e)})") from None
     return f"{PASSWORD_FINGERPRINT_ALG}:{derived.hex()}"
 
 
@@ -712,12 +717,13 @@ def _secret_from(credential: Any) -> str:
 
 def _fingerprint(credential: Any, fp_key: bytes | None) -> str:
     """Read a judge's or agent's credential once and fingerprint it: a username and password with scrypt
-    (``password_fingerprint``), anything else with HMAC (``credential_fingerprint``)."""
-    from .judges.credentials import BasicAuthCredential, CredentialError
-    if isinstance(credential, BasicAuthCredential):
+    (``password_fingerprint``), anything else with HMAC (``credential_fingerprint``). A credential is a pair when
+    it is sent as HTTP Basic, which the judge and agent connectors decide by ``kind == "basic"``."""
+    from .judges.credentials import BasicAuthCredential
+    if isinstance(credential, BasicAuthCredential) or getattr(credential, "kind", None) == "basic":
         try:
             pair = credential.get_token()
-        except CredentialError as e:
+        except Exception as e:      # as _secret_from: any failure to read refuses
             raise IdentityError(f"credential could not be read at start-up ({type_tag(e)}); "
                                 "Two-Key cannot show it differs from the monitored agent's") from None
         return password_fingerprint(pair, fp_key)
@@ -849,8 +855,8 @@ def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> Resolv
         credential = None
     try:
         fp = _fingerprint(credential, fp_key)
-    except IdentityError:
-        raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
+    except IdentityError as e:
+        raise IdentityError(f"agent {agent.agent_id!r}: {e}") from None
     return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {fp},
                      getattr(agent, "provider", None),
                      validate_tenant(getattr(agent, "tenant", None), f"agent {agent.agent_id!r}"),
