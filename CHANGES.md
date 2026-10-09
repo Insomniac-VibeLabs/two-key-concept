@@ -734,6 +734,31 @@ commit messages of PRs #43 and #61.
 
 ### Changed (breaking)
 
+- **A judge that holds the monitored agent's credential is refused, sent
+  or not, in either form** (the owner's rule, restated in the README:
+  "A judge is not the monitored agent, and `TwoKey` refuses to start
+  (`judge_matches_agent:`), when it holds the monitored agent's credential
+  (the same API token, or the same username and password), at any
+  address"). 0.2.2 compared only what each side sends, and never compared a
+  token with a username and password, so three setups started that the rule
+  refuses:
+  - a judge configured with the agent's key and `auth_header: none` (an
+    Ollama judge's default), which holds the key but never sends it;
+  - a judge holding the key configured for an `agents.yaml` `ollama` agent,
+    which never sends it;
+  - a judge or agent holding the other side's username and password as a
+    token (`user:pass` in `credential_env` or a token provider) next to a
+    Basic pair.
+  Every credential each side holds is now compared for the same-credential
+  refusal, and a token that contains `:` is also fingerprinted as a
+  `username:password` pair (scrypt, about 0.4 s at start-up per such token).
+  The rule for two keyless sides on one address still looks only at what is
+  sent. A key that is never sent is now read at start-up, so one that cannot
+  be read refuses (`credential could not be read at start-up`). The resolved
+  identities in `constitution_loaded` gain `credential_fingerprint_held`. At
+  call time a judge's key that it holds but never sends is compared with
+  `agent_session` too. The refusal reads `judge_matches_agent: a judge must
+  not be the monitored agent: ...` (was `a judge is the monitored agent`).
 - **The ledger pins its witness public key (#58).** 0.2.2 read the witness
   key from the head it was checking, so a replaced `witness.pem` was
   accepted and the principal key plus the ledger key could sign a head.

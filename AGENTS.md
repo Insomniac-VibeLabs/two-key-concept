@@ -86,8 +86,10 @@ a prototype, report security findings as public issues, per
   `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
   two makers (`min_makers`), one local judge, and a local yes.
 - `tool_specs` is required. A disagreeing claim is a deny.
-- No judge may be the monitored agent: the agent's credential at any
-  address, or both keyless on one address, is refused. Other overlaps warn
+- No judge may be the monitored agent: a judge holding the agent's
+  credential (the same API token, or the same username and password) is
+  refused at any address, whether or not either side sends it; so are two
+  sides that send no credential on one address. Other overlaps warn
   and are recorded. Addresses are compared as configured, without DNS.
 - The ledger's witness public key is pinned: a head or `witness.pem` that
   does not match the pin in the ledger, or the configured

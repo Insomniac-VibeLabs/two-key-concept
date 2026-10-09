@@ -22,9 +22,11 @@ is how to report a vulnerability. It is not the model.
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - A redeeming gateway that can mint a token it will accept
-- A judge that is the monitored agent being accepted at start-up: the
-  agent's credential at any address, or both sides keyless on one
-  address. Other overlaps start with a warning by design.
+- A judge that is the monitored agent being accepted at start-up: a judge
+  holding the agent's credential (the same API token, or the same username
+  and password) at any address, whether or not either side sends it, or
+  both sides keyless on one address. Other overlaps start with a warning
+  by design.
 
 ## Out of scope for this repository
 

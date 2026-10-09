@@ -21,10 +21,12 @@
 # and a key repeated in one mapping is refused.
 
 # The monitored agent, declared by you, never by the agent. Required. A
-# judge may run any model from any vendor. At startup Two-Key refuses
-# (judge_matches_agent:) only when a judge is the same agent: the agent's
-# credential at any address (a key identifies its holder), or no credential
-# on either side of one address (host:port as written here, no DNS). Likely
+# judge may run any model from any vendor. A judge is not the monitored
+# agent: at startup Two-Key refuses (judge_matches_agent:) when a judge holds
+# the agent's credential (the same API token, or the same username and
+# password) at any address, sent or not (a key identifies its holder), or
+# when neither side sends a credential on one address (host:port as written
+# here, no DNS). Likely
 # accidents start with a warning on stderr, recorded in constitution_loaded:
 # one side keyless on the agent's address, the agent's model on its address
 # or through a shared or undeclared proxy (declare upstream:), a shared

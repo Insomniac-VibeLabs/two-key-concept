@@ -26,10 +26,12 @@ floors; required_yes defaults to min(2, judges). QuorumPolicy.high_assurance
 label for who made a judge's model, not verified, never compared with the agent), 1 local judge,
 and a local yes. The old names vendor/min_vendors are refused (removed in 0.2.3).
 TwoKey needs monitored_agent, declared by the operator. A judge may run any
-model from any vendor. It refuses a judge that is the same agent: the same
-credential fingerprint (per-install key; HMAC-SHA256 for an API token,
-scrypt N=2^17 r=8 p=1 for a username and password as one pair, Basic over
-HTTPS only) at any address, or both sides
+model from any vendor. A judge is not the monitored agent: TwoKey refuses to
+start (judge_matches_agent:) when a judge holds the agent's credential (the
+same API token, or the same username and password; compared by fingerprint
+under a per-install key, HMAC-SHA256 for a token, scrypt N=2^17 r=8 p=1 for a
+username and password as one pair, a token containing ':' also as a pair;
+Basic over HTTPS only) at any address, sent or not, or both sides
 keyless on one address (host:port as configured, local aliases folded, no
 DNS). A judge presenting agent_session abstains at any address. Other
 overlaps start with a warning on stderr and in constitution_loaded:

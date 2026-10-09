@@ -248,6 +248,12 @@ class LLMJudge(Judge):
             except (ValueError, UnicodeDecodeError):
                 pass
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
+        if self.auth_header == "none" and getattr(self.credential, "kind", None) != "none":
+            # A key this judge holds but never sends is still the agent's if it equals the session.
+            try:
+                tokens.append(self.credential.get_token() or "")
+            except (CredentialError, NotImplementedError, ValueError) as e:
+                return self.abstain(cap_ledger_text(f"credential: {e}"))
         if any(token and token.strip() in sessions for token in tokens):
             return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():

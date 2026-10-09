@@ -85,10 +85,12 @@ the code wins, then this file should be corrected.
   local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
   still not a skip. `min_distinct_providers` still defaults to 1.
-- A judge that is the monitored agent refuses to start. The same agent
-  means the agent's credential (API token, or username and password over
-  HTTPS) at any address, or both sides keyless on one address, compared as
-  configured (`host:port`, local aliases folded, no DNS). Any model and any
+- A judge is not the monitored agent: `TwoKey` refuses to start when a
+  judge holds the agent's credential (the same API token, or the same
+  username and password) at any address, whether or not either side sends
+  it and whether it is held as a token or as a Basic pair, or when both
+  sides send no credential on one address, compared as configured
+  (`host:port`, local aliases folded, no DNS). Any model and any
   vendor is allowed otherwise. The likely accidents (one side keyless on
   the agent's address, the agent's model on its address or through a
   shared or undeclared proxy, a shared tenant id, an unresolved upstream)

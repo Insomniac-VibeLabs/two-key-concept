@@ -1,7 +1,8 @@
 """A judge must not be the monitored agent. Checked at start-up from operator config only.
 
-Owner rule (2026-10-08): a judge may run any model from any vendor. It is the same specific agent when it
-holds the agent's credential, at any address, or when neither side has a credential on the same address.
+Owner rule (2026-10-08, restated 2026-10-09): a judge may run any model from any vendor. A judge is not the
+monitored agent, and TwoKey refuses to start, when it holds the agent's credential (the same API token, or the
+same username and password), at any address, or when neither side sends a credential on the same address.
 Everything else starts; likely accidents (the same model on the same address, a shared tenant, a proxy, an
 unresolved identity) are warned on stderr and recorded in constitution_loaded.
 """

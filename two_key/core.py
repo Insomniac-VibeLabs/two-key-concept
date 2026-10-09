@@ -7,8 +7,9 @@ Hosting (local or cloud) is recorded and never treated as trust.
 ``TwoKey`` refuses to start (``TwoKeyConfigError``) with no judge, with no
 Path B deadline, with duplicate judge ids, without an operator declaration
 of the monitored agent (``monitored_agent_required:``), or when a judge
-is that agent: the agent's credential at any address, or no credential on
-either side of one address (``judge_matches_agent:``; see identity.py).
+holds the monitored agent's credential (the same API token, or the same
+username and password) at any address, sent or not, or when neither side
+sends a credential on one address (``judge_matches_agent:``; see identity.py).
 """
 
 from __future__ import annotations

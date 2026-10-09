@@ -91,11 +91,12 @@ HTTP error abstains.
 ## The monitored agent and the judge-is-not-the-agent rule
 
 The minimum is one judge, and no judge may be the monitored agent. A judge
-may run any model from any vendor. It is the same specific agent when it
-holds the agent's credential, at any address, or when neither side has a
-credential on the same address. You
-declare who the agent is; Two-Key refuses the same agent, and makes likely
-accidents visible rather than blocking them.
+may run any model from any vendor. A judge is not the monitored agent, and
+`TwoKey` refuses to start (`judge_matches_agent:`), when it holds the
+monitored agent's credential (the same API token, or the same username and
+password), at any address, or when neither side sends a credential on the
+same address. You declare who the agent is; Two-Key refuses a judge that is
+the agent, and makes likely accidents visible rather than blocking them.
 
 Declare the agent yourself, never from what the agent reports: the
 `monitored_agent:` block in judges.yaml (the CLI reads it), or
@@ -148,10 +149,11 @@ At startup each judge and agent is resolved to:
   The key sits beside the ledger key, so it does not stop someone who holds
   that directory; there a random token is safe by its length, a guessable
   token (a placeholder such as `EMPTY`) is not, and a password is protected
-  only by scrypt's cost. A pair and a token are never compared: an agent
-  declared with `credential_env` whose value is `user:pass` does not match
-  a judge's Basic pair, so declare a Basic agent with `username_env` and
-  `password_env`. Raw keys and passwords are never logged.
+  only by scrypt's cost. A token that contains `:` is also fingerprinted as
+  a `username:password` pair (scrypt, so about 0.4 s more at start-up), so
+  a judge or agent holding a username and password as a token (`user:pass`
+  in `credential_env`) matches the other side's Basic pair. Raw keys and
+  passwords are never logged.
 
 `TwoKey` refuses with `judge_matches_agent:` only when a judge is the
 monitored agent. That is either of these:
@@ -161,7 +163,12 @@ monitored agent. That is either of these:
   of the token or of the `username:password` pair). A credential
   identifies its holder wherever it is sent, so a judge with the agent's key
   behind a pass-through proxy, under another name for the agent's server, or
-  at a provider's alternate host is still the agent. A placeholder that a
+  at a provider's alternate host is still the agent. Every credential either
+  side holds counts, whether or not its connector sends it: a judge with
+  `auth_header: none` (an Ollama judge's default) that is configured with
+  the agent's key, and an `agents.yaml` `ollama` agent whose configured key
+  a judge also holds, are refused. The ledger records such keys under
+  `credential_fingerprint_held`. A placeholder that a
   local server ignores (`EMPTY`) counts too: give each side its own value,
   or leave it off one side (`auth: {type: none}` on a judge,
   `credential: none` on the agent). On one shared server that ignores keys,
@@ -172,9 +179,9 @@ monitored agent. That is either of these:
   `localhost`. Two keyless sides on one address, such as two models on one
   local Ollama daemon, have nothing to tell them apart, so they are refused
   whatever their models. Give the judge its own daemon or port, or its own
-  credential. For a connector Two-Key drives, a side counts as keyless when
-  it sends no credential, whatever is configured: a judge with
-  `auth_header: none` (an Ollama judge's default) and an `agents.yaml`
+  credential. For this address rule only, a connector Two-Key drives counts
+  as keyless when it sends no credential, whatever is configured: a judge
+  with `auth_header: none` (an Ollama judge's default) and an `agents.yaml`
   `ollama` agent without Basic auth send none. Two-Key sees only what its
   own connectors send: a `monitored_agent:` declaration with
   `credential_env` or `username_env` counts as keyed even when its server
@@ -208,9 +215,9 @@ key is still refused as `unknown quorum keys`.
 
 Judge and agent credentials are read at startup for this check, so a
 configured key that cannot be read refuses to start, for a local agent as
-well as a cloud one, unless it is never sent (an `agents.yaml` `ollama`
-agent without Basic auth, or a judge with `auth_header: none`), in which
-case it is not read. The result is the `judge_agent_separation`
+well as a cloud one, and also when its connector never sends it (an
+`agents.yaml` `ollama` agent without Basic auth, or a judge with
+`auth_header: none`): Two-Key cannot show it differs from the agent's. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
 `identities_digest`. The entry also holds the full quorum policy
@@ -226,7 +233,8 @@ from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
 A judge whose credential equals that session (whitespace stripped, a
-username and password compared as their pair) abstains with
+username and password compared as their pair, a key it holds but never
+sends included) abstains with
 `cloud_judge_reused_agent_session`, wherever it connects, and the round
 denies. This is the start-up rule again, at call time, with the session the
 agent really uses: it catches a judge holding the agent's key even when

@@ -1,15 +1,19 @@
 """
 Two-Key: a Path B judge must not be the monitored agent
 =======================================================
-The rule (the owner's, revised 2026-10-08): at least one judge, and no judge
-may be the *same specific agent* as the monitored agent. A judge may run any
-model from any vendor. It is the same agent when it holds the agent's
-credential, wherever it connects: a key, token, or password identifies its
-holder, so the address it is sent to does not matter. Two sides with no
-credential have only their address to tell them apart, so they are the same
-agent on the same address. ``TwoKey`` checks it when it starts and refuses
-with ``TwoKeyConfigError``. The operator configures who the agent is; Two-Key
-refuses the same agent and makes likely accidents visible.
+The rule (the owner's, revised 2026-10-08, restated 2026-10-09): at least one
+judge, and no judge may be the monitored agent. A judge may run any model from
+any vendor. A judge is not the monitored agent, and ``TwoKey`` refuses to start
+(``judge_matches_agent:``), when it holds the monitored agent's credential (the
+same API token, or the same username and password), at any address: a
+credential identifies its holder, so the address it is sent to does not matter.
+That holds whether or not either side sends the credential (a judge with
+``auth_header: none``, an ``agents.yaml`` Ollama agent) and whichever form it is
+held in (a token ``user:pass`` and a Basic pair ``user`` / ``pass`` are the same
+username and password). Two sides that send no credential have only their
+address to tell them apart, so they are refused on the same address. The
+operator configures who the agent is; Two-Key refuses a judge that is the agent
+and makes likely accidents visible.
 
 The agent's identity comes only from operator configuration
 (``TwoKey(monitored_agent=...)``, the ``monitored_agent:`` block of
@@ -77,13 +81,16 @@ Each judge and agent is resolved to:
 Refusals, judge against agent, message prefix ``judge_matches_agent:``:
 
 - the same credential fingerprint, at any address: an API token, a
-  username/password pair, or any credential the agent declares. A
+  username/password pair, or any credential the agent declares. Every
+  credential each side holds is compared, sent or not, and a token that
+  contains ``:`` is compared as a username/password pair too (``held`` on the
+  resolved identity, ``credential_fingerprint_held`` in the ledger). A
   placeholder value that a local server ignores (``EMPTY``) counts too: give
   each side its own value, or leave it off one side (``auth: {type: none}``
   on a judge, ``credential: none`` on the agent);
 - the same address (normalized ``endpoint``, ``host:port``, every alias of
-  this machine folded to ``localhost``) with no credential on either side:
-  Two-Key has nothing to tell them apart by.
+  this machine folded to ``localhost``) with no credential sent on either
+  side: Two-Key has nothing to tell them apart by.
 
 Two-Key also refuses to start, with its own message, when a judge's or the
 agent's address or credential cannot be read at start-up.
@@ -660,6 +667,10 @@ class ResolvedIdentity:
     routes: frozenset[str] = field(default_factory=frozenset)   # endpoint + declared upstreams (+ ollama.com)
     tenant_declared: bool = False     # the operator declared a non-empty tenant: mapping
     proxy: bool = False               # local, or a host that is no recognized vendor, router, or inference host
+    # Fingerprints of credentials this side holds beyond what it sends: a key its connector never sends
+    # (auth_header: none, an agents.yaml ollama agent), and the username:password form of a token that
+    # contains ':'. Compared for the same-credential refusal; never for the keyless-address rule.
+    held: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def unresolved(self) -> bool:
@@ -669,6 +680,7 @@ class ResolvedIdentity:
         return {"role": self.role, "id": self.id, "model": self.model, "model_declared": self.model_declared,
                 "upstream": sorted(self.upstreams) or None, "router": self.router, "endpoint": self.endpoint,
                 "credential_fingerprint": sorted(self.credentials) or None,
+                "credential_fingerprint_held": sorted(self.held) or None,
                 "tenant": sorted(self.tenants) or None, "resolved_by": self.resolved_by,
                 "upstream_declared": sorted(self.declared_upstreams) or None, "local_endpoint": self.local,
                 "routes": sorted(self.routes) or None, "tenant_declared": self.tenant_declared,
@@ -678,7 +690,7 @@ class ResolvedIdentity:
 
 def _identity(role: str, ident: str, model: str, base_url: str, credentials: Iterable[str],
               provider_label: str | None, tenant: Mapping[str, str] | None = None,
-              upstream: frozenset[str] = frozenset()) -> ResolvedIdentity:
+              upstream: frozenset[str] = frozenset(), held: Iterable[str] = ()) -> ResolvedIdentity:
     upstreams, router, by = resolve_upstream_info(base_url, model)
     upstream = frozenset(normalize_upstream(u) for u in upstream)
     if upstream:                       # operator-attested; ledgered, not verified
@@ -695,10 +707,12 @@ def _identity(role: str, ident: str, model: str, base_url: str, credentials: Ite
     routes = {normalize_upstream(base_url)} | set(upstream)
     if model_is_cloud(model):
         routes.add("ollama.com")
+    credentials = frozenset(credentials)
     return ResolvedIdentity(role, ident, model, normalize_model(model), endpoint_key(base_url), upstreams,
-                            router, frozenset(credentials), provider_label,
+                            router, credentials, provider_label,
                             resolve_tenants(base_url, tenant, model=model, upstreams=upstream), by,
-                            upstream, local, frozenset(routes - {""}), bool(tenant), proxy)
+                            upstream, local, frozenset(routes - {""}), bool(tenant), proxy,
+                            frozenset(held) - credentials - {NO_CREDENTIAL})
 
 
 def _secret_from(credential: Any) -> str:
@@ -715,10 +729,19 @@ def _secret_from(credential: Any) -> str:
     return token
 
 
-def _fingerprint(credential: Any, fp_key: bytes | None) -> str:
-    """Read a judge's or agent's credential once and fingerprint it: a username and password with scrypt
-    (``password_fingerprint``), anything else with HMAC (``credential_fingerprint``). A credential is a pair when
-    it is sent as HTTP Basic, which the judge and agent connectors decide by ``kind == "basic"``."""
+def _pair_form(token: str, fp_key: bytes | None) -> set[str]:
+    """A token that contains ``:`` may be a username and password: its pair fingerprint too, so a side that holds the
+    other's username and password as a token (``user:pass``) matches the other's pair, and the reverse. Only under
+    the per-install key (TwoKey always has one); there is no unkeyed form for a password."""
+    token = (token or "").strip()
+    return {password_fingerprint(token, fp_key)} if ":" in token and fp_key is not None else set()
+
+
+def _fingerprints(credential: Any, fp_key: bytes | None) -> tuple[str, set[str]]:
+    """Read a judge's or agent's credential once and fingerprint it. Returns the fingerprint of the credential as
+    it is sent (a username and password with scrypt, ``password_fingerprint``; anything else with HMAC,
+    ``credential_fingerprint``) and the other form it is also compared in (``_pair_form``). A credential is a pair
+    when it is sent as HTTP Basic, which the judge and agent connectors decide by ``kind == "basic"``."""
     from .judges.credentials import BasicAuthCredential
     if isinstance(credential, BasicAuthCredential) or getattr(credential, "kind", None) == "basic":
         try:
@@ -728,8 +751,9 @@ def _fingerprint(credential: Any, fp_key: bytes | None) -> str:
                                 "Two-Key cannot show it differs from the monitored agent's") from None
         if not isinstance(pair, str) or not pair.strip():   # as _secret_from: an empty credential refuses
             raise IdentityError("credential is empty at start-up")
-        return password_fingerprint(pair, fp_key)
-    return credential_fingerprint(_secret_from(credential), fp_key)
+        return password_fingerprint(pair, fp_key), set()
+    secret = _secret_from(credential)
+    return credential_fingerprint(secret, fp_key), _pair_form(secret, fp_key)
 
 
 def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
@@ -743,16 +767,17 @@ def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     if not isinstance(model, str) or not model or not isinstance(base_url, str) or not base_url:
         raise IdentityError(f"judge {jid!r} declares no model and base_url; Two-Key cannot show it is not "
                             "the monitored agent")
-    # A connector that never sends its credential (auth_header: none, an Ollama judge's default) reaches its
-    # address keyless, so it is fingerprinted keyless, whatever credential is configured.
-    credential = None if getattr(judge, "auth_header", None) == "none" else getattr(judge, "credential", None)
     try:
-        fp = _fingerprint(credential, fp_key)
+        fp, also = _fingerprints(getattr(judge, "credential", None), fp_key)
     except IdentityError as e:
         raise IdentityError(f"judge {jid!r}: {e}") from None
+    # A connector that never sends its credential (auth_header: none, an Ollama judge's default) reaches its
+    # address keyless. It still holds that credential, which the same-credential rule compares.
+    sent, held = (NO_CREDENTIAL, {fp} | also) if getattr(judge, "auth_header", None) == "none" else (fp, also)
     tenant = validate_tenant(getattr(judge, "tenant", None), f"judge {jid!r}")
     upstream = validate_upstream(getattr(judge, "upstream", None), f"judge {jid!r}")
-    return _identity("judge", jid, model, base_url, {fp}, getattr(judge, "provider", None), tenant, upstream)
+    return _identity("judge", jid, model, base_url, {sent}, getattr(judge, "provider", None), tenant, upstream,
+                     held)
 
 
 @dataclass(frozen=True)
@@ -820,6 +845,7 @@ class AgentDeclaration:
     def resolve(self, *, allow_in_process: bool = False, fp_key: bytes | None = None) -> ResolvedIdentity:
         self.validate(allow_in_process=allow_in_process)
         fps: set[str] = set()
+        held: set[str] = set()
         if self.username_env is not None:
             from .judges.credentials import BasicAuthCredential, CredentialError
             try:   # the pair, read exactly as a judge's is, so the two fingerprints match
@@ -832,11 +858,12 @@ class AgentDeclaration:
             if not value:
                 raise IdentityError(f"monitored_agent {self.id!r}: credential_env {self.credential_env} is not set")
             fps.add(credential_fingerprint(value, fp_key))
+            held |= _pair_form(value, fp_key)
         else:
             fps.add(NO_CREDENTIAL)
         return _identity("agent", self.id, self.model, self.base_url, fps, self.provider,
                          validate_tenant(self.tenant, f"monitored_agent {self.id!r}"),
-                         validate_upstream(self.upstream, f"monitored_agent {self.id!r}"))
+                         validate_upstream(self.upstream, f"monitored_agent {self.id!r}"), held)
 
     def to_record(self) -> dict:
         return {"id": self.id, "model": self.model, "provider": self.provider, "base_url": self.base_url,
@@ -847,19 +874,20 @@ class AgentDeclaration:
 
 
 def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
-    """A MonitoredAgent from agents.yaml is operator configuration too. Fingerprinted by what it sends: an
-    Ollama agent sends no key unless it uses Basic auth, so it is keyless whatever key is configured."""
+    """A MonitoredAgent from agents.yaml is operator configuration too. An Ollama agent sends no key unless it uses
+    Basic auth, so it reaches its address keyless; a key configured for it still counts as the agent's credential
+    for the same-credential rule."""
     credential = getattr(agent, "credential", None)
-    if getattr(agent, "kind", None) == "ollama" and getattr(credential, "kind", None) != "basic":
-        credential = None
     try:
-        fp = _fingerprint(credential, fp_key)
+        fp, also = _fingerprints(credential, fp_key)
     except IdentityError as e:
         raise IdentityError(f"agent {agent.agent_id!r}: {e}") from None
-    return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {fp},
+    unsent = getattr(agent, "kind", None) == "ollama" and getattr(credential, "kind", None) != "basic"
+    sent, held = (NO_CREDENTIAL, {fp} | also) if unsent else (fp, also)
+    return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {sent},
                      getattr(agent, "provider", None),
                      validate_tenant(getattr(agent, "tenant", None), f"agent {agent.agent_id!r}"),
-                     validate_upstream(getattr(agent, "upstream", None), f"agent {agent.agent_id!r}"))
+                     validate_upstream(getattr(agent, "upstream", None), f"agent {agent.agent_id!r}"), held)
 
 
 @dataclass(frozen=True)
@@ -897,12 +925,13 @@ def compare(agent: ResolvedIdentity, judge: ResolvedIdentity, *,
             allow_same_model_distinct_tenant: bool = False) -> str | None:
     """The refusal for one judge against one agent, or None.
 
-    A judge is the monitored agent when it holds the agent's credential, at any address (a credential identifies
-    its holder), or when it connects to the agent's address with no credential on either side, which leaves
-    Two-Key nothing to tell them apart by. Any other pairing is allowed; ``separation_warnings`` lists the likely
-    accidents among them. ``allow_same_model_distinct_tenant`` is accepted for older callers and ignored."""
+    A judge is refused when it holds the monitored agent's credential, at any address (a credential identifies its
+    holder): any credential either side holds, sent or not, compared as a token and as a username:password pair.
+    It is also refused when it connects to the agent's address with no credential sent on either side, which
+    leaves Two-Key nothing to tell them apart by. Any other pairing is allowed; ``separation_warnings`` lists the
+    likely accidents among them. ``allow_same_model_distinct_tenant`` is accepted for older callers and ignored."""
     who = f"judge {judge.id!r} vs agent {agent.id!r}"
-    if (agent.credentials & judge.credentials) - {NO_CREDENTIAL}:
+    if ((agent.credentials | agent.held) & (judge.credentials | judge.held)) - {NO_CREDENTIAL}:
         if agent.endpoint == judge.endpoint:
             return (f"{who}: the same credential on the same address {judge.endpoint} (give the judge its own "
                     "address, or its own credential that the server checks)")
@@ -956,7 +985,8 @@ def separation_warnings(agent: ResolvedIdentity, judge: ResolvedIdentity) -> lis
 def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[ResolvedIdentity],
                      allow_same_provider_judge: bool | None = None, *,
                      allow_same_model_distinct_tenant: bool = False) -> SeparationReport:
-    """Refuse any judge that is the monitored agent (``compare``); warn on, and record, the likely accidents.
+    """Refuse any judge that holds the monitored agent's credential, or shares its address with no credential sent
+    on either side (``compare``); warn on, and record, the likely accidents.
 
     ``allow_same_provider_judge`` and ``allow_same_model_distinct_tenant`` are deprecated no-ops; each prints a
     note on stderr when set."""
@@ -971,7 +1001,7 @@ def check_separation(agents: Sequence[ResolvedIdentity], judges: Sequence[Resolv
         print(TENANT_OPTIN_DEPRECATED, file=sys.stderr)
     refusals = [r for a in agents for j in judges if (r := compare(a, j))]
     if refusals:
-        raise IdentityError("judge_matches_agent: a judge is the monitored agent: " + "; ".join(refusals))
+        raise IdentityError("judge_matches_agent: a judge must not be the monitored agent: " + "; ".join(refusals))
     found, reported = [], set()
     for w in (w for a in agents for j in judges for w in separation_warnings(a, j)):
         if "side" in w:
