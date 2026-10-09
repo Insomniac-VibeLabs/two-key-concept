@@ -9,10 +9,27 @@ key can neither decrypt the log nor sign a new head, and it does not mint
 tokens. Appends and checkpoints take `<ledger>.lock` next to the
 ledger directory. A write is refused if another writer changed the file.
 Redemption locks live in `<ledger>.redeem-locks`, also outside the directory.
+
+The witness public key is pinned twice (#58):
+
+* In the ledger: the first entry of a new ledger is ``witness_pinned``. A
+  ledger made before 0.2.3 pins the key that signed its current head on its
+  first open (``source: first_use``, trust on first use). A head signed by
+  another witness key, and a ``witness.pem`` that does not match, are refused
+  (``witness_key_changed``). The key changes only by ``rotate_witness``, a
+  ``witness_rotated`` entry signed by the principal and the old and new
+  witness keys. Whoever holds the principal key and the ledger key can still
+  rewrite the chain from its first entry, pin included.
+* Outside the ledger (optional): ``Ledger(..., witness_public_key=...)``, kept
+  where whoever writes the ledger directory cannot change it. With it, a head
+  also needs the witness private key. The operator updates it after a rotation.
+
+Neither pin detects a rollback to an earlier signed head, or a wipe (#62).
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -26,6 +43,7 @@ try:
 except ImportError:  # pragma: no cover - POSIX only
     fcntl = None
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -44,6 +62,24 @@ _RECORD_AAD = b"two-key-concept-ledger-enc/1"
 
 
 LEDGER_KEY_BYTES = 32
+
+WITNESS_ROTATION_FORMAT = "two-key-concept-witness-rotation/1"
+# Written only by the ledger itself: Ledger.append refuses these kinds.
+_WITNESS_KINDS = frozenset({"witness_pinned", "witness_rotated"})
+# The signed statement of a witness_rotated entry; the entry body is these plus the three signatures.
+_ROTATION_FIELDS = ("format", "seq", "prev", "old_witness_public_key", "new_witness_public_key", "reason")
+
+
+def witness_key_fingerprint(raw: str) -> str:
+    """``sha256:`` and the hex SHA-256 of a raw witness public key (the base64 form the head carries)."""
+    return "sha256:" + hashlib.sha256(base64.b64decode(raw)).hexdigest()
+
+
+def _witness_public(raw, what: str):
+    try:
+        return public_from_raw(raw)
+    except Exception:
+        raise LedgerError(f"{what} is not an Ed25519 public key") from None
 
 
 def _write_new_secret(path, data: bytes) -> None:
@@ -175,7 +211,19 @@ class Entry:
 
 class Ledger:
     def __init__(self, path: Path | str, private_key, public_key=None, *,
-                 witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None):
+                 witness_path: Path | str | None = None, ledger_key_path: Path | str | None = None,
+                 witness_public_key: Ed25519PublicKey | None = None):
+        """Open or create the ledger at ``path``.
+
+        ``witness_public_key`` is the out-of-ledger witness pin: the witness public key, kept where whoever
+        writes the ledger directory cannot change it. With it, a head signed by any other witness key is
+        refused (``witness_key_changed``), and so is a ``witness.pem`` that does not match.
+
+        Opening a new ledger writes its ``witness_pinned`` entry. Opening a ledger made before 0.2.3 for the
+        first time pins the witness key that signed its head (trust on first use). Both are checkpointed.
+        """
+        if witness_public_key is not None and not isinstance(witness_public_key, Ed25519PublicKey):
+            raise LedgerError("witness_public_key must be an Ed25519 public key")
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
         if self.path.resolve() == self.path.parent.resolve():
@@ -192,6 +240,9 @@ class Ledger:
         self.entries: list[Entry] = []
         self._redeemed: set[str] = set()
         self._started: set[str] = set()
+        self._configured_witness = None if witness_public_key is None else public_raw(witness_public_key)
+        self._witness_pin: tuple[str, int, str] | None = None    # (raw key, seq, source) pinned in the ledger
+        self._head_witness: str | None = None                   # the witness key in the verified head
         self._ledger_key = self._open_ledger_key()
         self._data_key = self._open_data_key()
         self._witness = self._open_witness()
@@ -341,6 +392,9 @@ class Ledger:
         if not self.witness_path.exists():
             if self.head_path.exists():
                 raise LedgerError("witness key missing; refusing to open a head the principal key alone could replace")
+            if self._configured_witness is not None:
+                raise LedgerError(f"witness_key_missing: {self.witness_path} does not exist, and a new witness key "
+                                  "cannot match the configured witness public key")
             key = generate_private_key()
             self.witness_path.parent.mkdir(parents=True, exist_ok=True)
             save_private_key(self.witness_path, key)
@@ -350,10 +404,9 @@ class Ledger:
 
     def _load(self) -> None:
         with self._exclusive(check_stale=False):
-            if not self.entries_path.exists():
-                return
+            lines = self.entries_path.read_text(encoding="utf-8").splitlines() if self.entries_path.exists() else []
             prev = "0" * 64
-            for line in self.entries_path.read_text(encoding="utf-8").splitlines():
+            for line in lines:
                 if not line.strip():
                     continue
                 raw = json.loads(_open(self._data_key, line))
@@ -361,17 +414,102 @@ class Ledger:
                 expect = self._hash(entry.seq, entry.prev, entry.kind, entry.body)
                 if entry.entry_hash != expect or entry.prev != prev or entry.seq != len(self.entries):
                     raise LedgerError("ledger chain failed verification")
+                self._track(entry, verify=True)
                 self.entries.append(entry)
                 prev = entry.entry_hash
-                jti = entry.body.get("jti")
-                if entry.kind == "redemption" and jti:
-                    self._redeemed.add(jti)
-                    self._started.discard(jti)
-                elif entry.kind == "redemption_started" and jti:
-                    self._started.add(jti)
-                elif entry.kind == "redemption_aborted" and jti:
-                    self._started.discard(jti)
             self._verify_head()
+            if self._witness_pin is None:
+                self._pin_witness()
+            else:
+                self._check_witness(self._witness, str(self.witness_path))
+
+    def _track(self, entry: Entry, *, verify: bool) -> None:
+        """Update the redemption sets and the witness pin for ``entry``. ``verify`` checks a pin entry read
+        from disk: one ``witness_pinned``, and rotations that start from the pinned key and carry the three
+        signatures."""
+        jti = entry.body.get("jti")
+        if entry.kind == "redemption" and jti:
+            self._redeemed.add(jti)
+            self._started.discard(jti)
+        elif entry.kind == "redemption_started" and jti:
+            self._started.add(jti)
+        elif entry.kind == "redemption_aborted" and jti:
+            self._started.discard(jti)
+        elif entry.kind == "witness_pinned":
+            raw = entry.body.get("witness_public_key")
+            if verify:
+                if self._witness_pin is not None:
+                    raise LedgerError("ledger chain failed verification: a second witness_pinned entry "
+                                      f"at {entry.seq}; the witness key changes only by witness_rotated")
+                _witness_public(raw, f"witness_pinned at {entry.seq}")
+            self._witness_pin = (raw, entry.seq, str(entry.body.get("source")))
+        elif entry.kind == "witness_rotated":
+            if verify:
+                self._verify_rotation(entry)
+            self._witness_pin = (entry.body["new_witness_public_key"], entry.seq, "rotated")
+
+    def _verify_rotation(self, entry: Entry) -> None:
+        body = entry.body
+        try:
+            statement = {k: body[k] for k in _ROTATION_FIELDS}
+        except KeyError:
+            raise LedgerError(f"witness_rotated at {entry.seq} is malformed") from None
+        if (statement["format"] != WITNESS_ROTATION_FORMAT or statement["seq"] != entry.seq
+                or statement["prev"] != entry.prev):
+            raise LedgerError(f"witness_rotated at {entry.seq} does not belong at this place in the chain")
+        if self._witness_pin is None or statement["old_witness_public_key"] != self._witness_pin[0]:
+            raise LedgerError(f"witness_rotated at {entry.seq} does not start from the pinned witness key")
+        message = canonical_bytes(statement)
+        for public, field in ((self.public_key, "principal_signature"),
+                              (_witness_public(statement["old_witness_public_key"], "old witness key"),
+                               "old_witness_signature"),
+                              (_witness_public(statement["new_witness_public_key"], "new witness key"),
+                               "new_witness_signature")):
+            if not verify(public, message, body.get(field) or ""):
+                raise LedgerError(f"witness_rotated at {entry.seq}: {field} failed")
+
+    def _witness_mismatch(self, raw: str) -> str | None:
+        """What a witness public key fails to match: the pin in the ledger, then the configured pin."""
+        if self._witness_pin is not None and raw != self._witness_pin[0]:
+            return "the witness key pinned in the ledger"
+        if self._configured_witness is not None and raw != self._configured_witness:
+            return "the configured witness public key"
+        return None
+
+    def _check_witness(self, key, where: str) -> None:
+        expected = self._witness_mismatch(public_raw(key.public_key()))
+        if expected:
+            raise LedgerError(f"witness_key_changed: {where} does not match {expected}; restore that key, or "
+                              "change it with rotate_witness")
+
+    def _require_witness(self):
+        """Load ``witness.pem`` for a write and refuse it if it is missing or does not match a pin."""
+        if not self.witness_path.exists():
+            raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
+        key = load_private_key(self.witness_path)
+        self._check_witness(key, str(self.witness_path))
+        return key
+
+    def _pin_witness(self) -> None:
+        """Write the ``witness_pinned`` entry and checkpoint. Caller holds the lock.
+
+        A new ledger pins ``witness.pem``. A ledger with entries (made before 0.2.3) pins the key that signed
+        its head, and only if ``witness.pem`` is that key.
+        """
+        raw = public_raw(self._witness.public_key())
+        if self._configured_witness is not None and raw != self._configured_witness:
+            raise LedgerError(f"witness_key_changed: {self.witness_path} does not match the configured witness "
+                              "public key")
+        body = {"witness_public_key": raw}
+        if self.entries:
+            if raw != self._head_witness:
+                raise LedgerError(f"witness_key_changed: {self.witness_path} does not match the witness key that "
+                                  "signed the head; refusing to pin it")
+            body.update(source="first_use", head_size=len(self.entries))
+        else:
+            body["source"] = "new_ledger"
+        self._append_unlocked("witness_pinned", body)
+        self._checkpoint_unlocked(self._witness)
 
     def _hash(self, seq: int, prev: str, kind: str, body: dict) -> str:
         return canonical_hash({"seq": seq, "prev": prev, "kind": kind, "body": body})
@@ -388,47 +526,115 @@ class Ledger:
     def append(self, kind: str, body: dict) -> Entry:
         if not isinstance(body, dict):
             raise LedgerError("ledger body must be an object")
+        if kind in _WITNESS_KINDS:
+            raise LedgerError(f"{kind} entries are written by the ledger itself; change the witness key with "
+                              "rotate_witness")
         with self._exclusive():
-            prev = self.entries[-1].entry_hash if self.entries else "0" * 64
-            seq = len(self.entries)
-            entry_hash = self._hash(seq, prev, kind, body)
-            entry = Entry(seq, prev, kind, body, entry_hash)
-            line = _seal(self._data_key, json.dumps(entry.to_json(), separators=(",", ":"), sort_keys=True))
-            with self.entries_path.open("a", encoding="utf-8") as fh:
-                fh.write(line + "\n")
-                fh.flush()
-                os.fsync(fh.fileno())
-            self.entries.append(entry)
-            jti = body.get("jti")
-            if kind == "redemption" and jti:
-                self._redeemed.add(jti)
-                self._started.discard(jti)
-            elif kind == "redemption_started" and jti:
-                self._started.add(jti)
-            elif kind == "redemption_aborted" and jti:
-                self._started.discard(jti)
-            return entry
+            # Refuse before writing: an entry the next checkpoint cannot cover would keep the ledger from opening.
+            self._require_witness()
+            return self._append_unlocked(kind, body)
+
+    def _append_unlocked(self, kind: str, body: dict) -> Entry:
+        prev = self.entries[-1].entry_hash if self.entries else "0" * 64
+        seq = len(self.entries)
+        entry_hash = self._hash(seq, prev, kind, body)
+        entry = Entry(seq, prev, kind, body, entry_hash)
+        line = _seal(self._data_key, json.dumps(entry.to_json(), separators=(",", ":"), sort_keys=True))
+        with self.entries_path.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        self.entries.append(entry)
+        self._track(entry, verify=False)
+        return entry
 
     def checkpoint(self) -> dict:
         with self._exclusive():
-            if not self.witness_path.exists():
-                raise LedgerError("witness key missing; refusing to sign a head the principal key alone could forge")
-            self._witness = load_private_key(self.witness_path)
-            head = {
-                "size": len(self.entries),
-                "tip": self.entries[-1].entry_hash if self.entries else "0" * 64,
-                "merkle_root": self.merkle_root(),
-                "public_key": public_raw(self.public_key),
-                "witness_public_key": public_raw(self._witness.public_key()),
-            }
-            signed = canonical_bytes(head)
-            stored = dict(head)
-            stored["signature"] = sign(self.private_key, signed)
-            stored["witness_signature"] = sign(self._witness, signed)
-            tmp = self.head_path.with_suffix(".json.tmp")
-            tmp.write_text(_seal(self._data_key, json.dumps(stored)) + "\n", encoding="utf-8")
-            os.replace(tmp, self.head_path)
-            return stored
+            return self._checkpoint_unlocked()
+
+    def _checkpoint_unlocked(self, witness=None) -> dict:
+        if witness is None:
+            witness = self._require_witness()
+        else:
+            self._check_witness(witness, "the witness key")
+        self._witness = witness
+        head = {
+            "size": len(self.entries),
+            "tip": self.entries[-1].entry_hash if self.entries else "0" * 64,
+            "merkle_root": self.merkle_root(),
+            "public_key": public_raw(self.public_key),
+            "witness_public_key": public_raw(witness.public_key()),
+        }
+        signed = canonical_bytes(head)
+        stored = dict(head)
+        stored["signature"] = sign(self.private_key, signed)
+        stored["witness_signature"] = sign(witness, signed)
+        tmp = self.head_path.with_suffix(".json.tmp")
+        tmp.write_text(_seal(self._data_key, json.dumps(stored)) + "\n", encoding="utf-8")
+        os.replace(tmp, self.head_path)
+        self._head_witness = head["witness_public_key"]
+        return stored
+
+    def rotate_witness(self, new_witness: Ed25519PrivateKey | None = None, *, reason: str = "") -> dict:
+        """Replace the witness key with ``new_witness`` (a new key when omitted), as a ledgered change.
+
+        Writes a ``witness_rotated`` entry signed by the principal, the current ``witness.pem``, and the new
+        key, then a head signed by the new key, then moves the new key into ``witness.pem`` (and its public
+        half into ``witness.pub.pem``). The new key is staged first as ``witness.pem.new``. If the rotation
+        stops after the head is written and before the move, the ledger refuses to open with
+        ``witness_key_changed`` until ``witness.pem.new`` is moved to ``witness.pem``.
+
+        An out-of-ledger pin given to this ``Ledger`` follows the rotation in memory only. Update the stored
+        pin (the operator's copy of the witness public key) before the next open.
+        """
+        if new_witness is None:
+            new_witness = generate_private_key()
+        if not isinstance(new_witness, Ed25519PrivateKey):
+            raise LedgerError("the new witness key must be an Ed25519 private key")
+        if not isinstance(reason, str) or len(reason) > _KEEP_CHARS:
+            raise LedgerError(f"reason must be a string of at most {_KEEP_CHARS} characters")
+        staged = self.witness_path.with_name(self.witness_path.name + ".new")
+        with self._exclusive():
+            old = self._require_witness()
+            old_raw, new_raw = public_raw(old.public_key()), public_raw(new_witness.public_key())
+            if new_raw == old_raw:
+                raise LedgerError("witness_rotation_refused: the new witness key is the current one")
+            if new_raw == public_raw(self.public_key):
+                raise LedgerError("witness_rotation_refused: the witness key must not be the principal key")
+            statement = {"format": WITNESS_ROTATION_FORMAT, "seq": len(self.entries),
+                         "prev": self.entries[-1].entry_hash if self.entries else "0" * 64,
+                         "old_witness_public_key": old_raw, "new_witness_public_key": new_raw, "reason": reason}
+            message = canonical_bytes(statement)
+            body = {**statement, "principal_signature": sign(self.private_key, message),
+                    "old_witness_signature": sign(old, message), "new_witness_signature": sign(new_witness, message)}
+            if not verify(self.public_key, message, body["principal_signature"]):
+                raise LedgerError("witness_rotation_refused: the principal private key does not match this "
+                                  "ledger's principal public key")
+            try:
+                save_private_key(staged, new_witness)
+            except FileExistsError:
+                raise LedgerError(f"witness_rotation_refused: {staged} exists, left by an interrupted rotation; "
+                                  "see HOWTO \"Rotate the witness key\"") from None
+            configured = self._configured_witness
+            try:
+                self._append_unlocked("witness_rotated", body)
+                if configured is not None:
+                    self._configured_witness = new_raw
+                self._checkpoint_unlocked(new_witness)
+            except BaseException:
+                self._configured_witness = configured
+                os.unlink(staged)
+                raise
+            try:
+                os.replace(staged, self.witness_path)
+            except OSError as e:
+                raise LedgerError(f"witness rotated in the ledger, but {staged} could not be moved to "
+                                  f"{self.witness_path} ({e.strerror}); move it by hand") from None
+            save_public_key(self.witness_path.with_suffix(".pub.pem"), new_witness.public_key())
+        return {"seq": statement["seq"], "old_witness_key_fingerprint": witness_key_fingerprint(old_raw),
+                "new_witness_key_fingerprint": witness_key_fingerprint(new_raw),
+                "witness_public_key_path": str(self.witness_path.with_suffix(".pub.pem")),
+                "configured_pin_updated_in_memory": configured is not None}
 
     def _verify_head(self) -> None:
         if not self.entries:
@@ -442,6 +648,10 @@ class Ledger:
             raise LedgerError("principal head signature failed")
         if not verify(public_from_raw(body["witness_public_key"]), message, stored.get("witness_signature") or ""):
             raise LedgerError("witness head signature failed")
+        expected = self._witness_mismatch(body["witness_public_key"])
+        if expected:
+            raise LedgerError(f"witness_key_changed: the head is signed by a witness key other than {expected}")
+        self._head_witness = body["witness_public_key"]
         if body["public_key"] != public_raw(self.public_key):
             raise LedgerError("head principal public key does not match this ledger's principal key")
         if body["size"] != len(self.entries) or body["tip"] != self.entries[-1].entry_hash:
@@ -466,7 +676,8 @@ class Ledger:
     def kinds_after(self, size: int, kinds: set[str]) -> list[Entry]:
         return [e for e in self.entries[size:] if e.kind in kinds]
 
-    def verify(self) -> None:
+    def verify(self) -> dict:
+        """Check the chain and the signed head, and return ``witness_report()``. Raises ``LedgerError``."""
         prev = "0" * 64
         for i, entry in enumerate(self.entries):
             if entry.seq != i or entry.prev != prev:
@@ -475,3 +686,23 @@ class Ledger:
                 raise LedgerError(f"hash mismatch at {i}")
             prev = entry.entry_hash
         self._verify_head()
+        return self.witness_report()
+
+    def witness_report(self) -> dict:
+        """Both witness pins, as fingerprints (``sha256:`` of the raw public key).
+
+        ``head``: the key that signed the verified head. ``in_ledger``: the key pinned in the ledger, the
+        entry that pinned it, and how (``new_ledger``, ``first_use``, or ``rotated``). ``configured``: the
+        out-of-ledger pin, or None when none was given. ``history``: every pin entry
+        (``two_key.audit.witness_pins``).
+        """
+        from .audit import witness_pins
+        pin = self._witness_pin
+        return {
+            "head": None if self._head_witness is None else witness_key_fingerprint(self._head_witness),
+            "in_ledger": None if pin is None else {"fingerprint": witness_key_fingerprint(pin[0]),
+                                                   "seq": pin[1], "source": pin[2]},
+            "configured": (None if self._configured_witness is None
+                           else witness_key_fingerprint(self._configured_witness)),
+            "history": witness_pins(self),
+        }

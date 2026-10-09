@@ -734,6 +734,38 @@ commit messages of PRs #43 and #61.
 
 ### Changed (breaking)
 
+- **The ledger pins its witness public key (#58).** 0.2.2 read the witness
+  key from the head it was checking, so a replaced `witness.pem` was
+  accepted and the principal key plus the ledger key could sign a head.
+  Now:
+  - A new ledger's first entry is `witness_pinned` (`source: new_ledger`),
+    written and checkpointed when the `Ledger` is created.
+  - A ledger made by 0.2.2 or earlier pins the witness key that signed its
+    current head on its first open under 0.2.3 (`source: first_use`,
+    `head_size`), trust on first use, and only if `witness.pem` is that
+    key. A key swapped before the upgrade cannot be detected.
+  - A head signed by a key other than the pinned one, and a `witness.pem`
+    that does not match it, are refused with `witness_key_changed:`, on
+    open, on `append` (before anything is written), and on `checkpoint`.
+  - `Ledger(..., witness_public_key=...)` is a second pin, kept outside the
+    ledger where whoever writes the ledger directory cannot change it. With
+    it, forging a head needs the principal, witness, and ledger keys
+    together; without it, the principal key and the ledger key are still
+    enough, because they can rewrite the chain from its first entry, pin
+    included. With it, a new ledger needs that witness key in place
+    (`witness_key_missing:`).
+  - `Ledger.rotate_witness(new_key=None, reason="")` is the only way to
+    change the key: a `witness_rotated` entry signed by the principal and by
+    the old and the new witness key, checked on every open, then a head
+    signed by the new key. The new key is staged as `witness.pem.new` and
+    moved into place last. An out-of-ledger pin is updated by the operator.
+  - `Ledger.append` refuses the kinds `witness_pinned` and
+    `witness_rotated`. `Ledger.verify()` returns `witness_report()`: the
+    key that signed the head, the pin in the ledger and how it was set, the
+    configured pin, and the pin history (`two_key.audit.witness_pins`),
+    as `sha256:` fingerprints.
+  - Neither pin detects a rollback to an earlier signed head or a wipe of
+    the ledger directory (#62).
 - **The `vendor` / `min_vendors` aliases are removed** (owner's decision;
   deprecated in 0.2.2, #44). The judge key `vendor:` and the quorum key
   `min_vendors:` are refused as unknown keys. The `vendor=` argument of

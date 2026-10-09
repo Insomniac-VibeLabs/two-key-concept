@@ -246,7 +246,7 @@ class ConceptTests(unittest.TestCase):
             proc = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env,
                                   capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertEqual(proc.stdout.strip(), "1")
+            self.assertEqual(proc.stdout.strip(), "2")      # witness_pinned, then the note
 
     def test_stub_auth_rejected(self):
         with self.assertRaises(JudgeConfigError):
@@ -343,9 +343,9 @@ class ConceptTests(unittest.TestCase):
                 second.append("note", {"n": 3})
             self.assertIn("another writer", str(raised.exception))
             reopened = Ledger(path, key)
-            self.assertEqual(reopened.size(), 2)
+            self.assertEqual(reopened.size(), 3)            # witness_pinned and two notes
             reopened.append("note", {"n": 3})
-            self.assertEqual(reopened.size(), 3)
+            self.assertEqual(reopened.size(), 4)
             self.assertFalse((path / ".redeem-abc.lock").exists())
             self.assertTrue(first.lock_path().is_file())
             self.assertFalse(str(first.lock_path()).startswith(str(path) + os.sep))
