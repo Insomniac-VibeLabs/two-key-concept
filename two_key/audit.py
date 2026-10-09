@@ -12,6 +12,10 @@ their digests. Each later ``decision`` entry carries only ``identities_digest`` 
 The recipe by hand: ``identities_digest`` is ``canonical_hash({"agents": sep["agents"],
 "judges": sep["judges"]})`` and ``policy_digest`` is ``canonical_hash(quorum_policy)``,
 where ``canonical_hash`` is SHA-256 of sorted-key, compact, ASCII JSON (two_key.canonical).
+
+``witness_pins`` lists the ledger's witness pin entries (``witness_pinned`` and ``witness_rotated``); the last
+one names the witness key pinned now. ``Ledger.verify()`` returns it with the out-of-ledger pin and the key
+that signed the head (``Ledger.witness_report``).
 """
 
 from __future__ import annotations
@@ -61,3 +65,26 @@ def check_decision_digests(ledger) -> list[str]:
             if body.get("policy_digest") != current[1]:
                 problems.append(f"seq {entry.seq}: decision policy_digest does not match constitution_loaded")
     return problems
+
+
+def witness_pins(ledger) -> list[dict]:
+    """The ``witness_pinned`` and ``witness_rotated`` entries, oldest first, with key fingerprints.
+
+    Read from the entries as loaded. ``Ledger`` checks them when it opens: one ``witness_pinned``, and each
+    rotation starts from the pinned key and carries the principal, old witness, and new witness signatures.
+    """
+    from .ledger import witness_key_fingerprint
+    pins: list[dict] = []
+    for entry in ledger.entries:
+        body = entry.body
+        if entry.kind == "witness_pinned":
+            pin = {"seq": entry.seq, "kind": entry.kind, "source": body.get("source"),
+                   "fingerprint": witness_key_fingerprint(body["witness_public_key"])}
+            if "head_size" in body:
+                pin["head_size"] = body["head_size"]
+            pins.append(pin)
+        elif entry.kind == "witness_rotated":
+            pins.append({"seq": entry.seq, "kind": entry.kind, "reason": body.get("reason"),
+                         "old_fingerprint": witness_key_fingerprint(body["old_witness_public_key"]),
+                         "fingerprint": witness_key_fingerprint(body["new_witness_public_key"])})
+    return pins

@@ -23,7 +23,8 @@ from .canonical import canonical_bytes, canonical_hash
 from .strict import loads_json
 from cryptography.hazmat.primitives import serialization
 
-from .keys import generate_private_key, load_private_key, public_key, save_private_key, save_public_key, sign, verify
+from .keys import (generate_private_key, load_private_key_file, public_key, save_private_key, save_public_key, sign,
+                   verify)
 
 
 class TokenError(ValueError):
@@ -101,7 +102,10 @@ def open_capability_key(ledger, principal_public=None):
     issued = any(e.kind == "capability_issued" for e in getattr(ledger, "entries", []))
     if path.exists():
         os.chmod(path.parent, 0o700)
-        key = load_private_key(path)
+        try:   # the safe loader: no symlink, a regular file, no group or other access (#57)
+            key = load_private_key_file(path)
+        except ValueError as e:
+            raise CapabilityKeyError(f"capability key: {e}") from None
     else:
         if issued:
             raise CapabilityKeyError(
@@ -112,8 +116,9 @@ def open_capability_key(ledger, principal_public=None):
     pinned = _pinned(ledger)
     if issued and not (isinstance(pinned, str) and pinned):
         raise CapabilityKeyError(
-            "capability_key_unpinned: the ledger has capability_issued entries but no pinned key fingerprint; "
-            "refusing to mint with a key the ledger cannot vouch for")
+            "capability_key_unpinned: the ledger has capability_issued entries but the last constitution_loaded "
+            "pins no key fingerprint (a ledger from before pinning, an edited one, or a TwoKey started without "
+            "private_key= before 0.2.3); refusing to mint with a key the ledger cannot vouch for")
     if issued and pinned != capability_key_fingerprint(key.public_key()):
         raise CapabilityKeyError("capability_key_changed: the key does not match the fingerprint pinned in the ledger")
     if principal_public is not None and _raw(key.public_key()) == _raw(principal_public):

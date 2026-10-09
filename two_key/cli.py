@@ -4,6 +4,9 @@
   two-key sign-constitution --key KEY --prose FILE --rules FILE --out FILE
   two-key authorize --key KEY --ledger DIR --constitution FILE --judges FILE --tool NAME
                     [--agent-session-env NAME] [--ttl-seconds N] [--emit-token PATH]
+                    [--witness-public-key PEM]
+  two-key rotate-witness --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]
+  two-key audit --key KEY --ledger DIR [--witness-public-key PEM]
   two-key demo
 
 ``authorize`` never prints the bearer token. It prints the decision with the token's
@@ -11,6 +14,13 @@ jti and digest (the ledger's ``capability_issued.token_hash``). ``--emit-token P
 writes the token itself to a new file with mode 0600. The agent session secret is
 read from the environment variable named by ``--agent-session-env``; it is never
 taken on argv, where other local users and shell history can see it.
+
+``--witness-public-key PEM`` is the witness pin outside the ledger: a copy of the
+witness public key kept where whoever writes the ledger directory cannot change it.
+``rotate-witness`` changes the witness key as a ledgered ``witness_rotated`` entry;
+update that copy afterwards. ``audit`` verifies the ledger and the decision digests
+and prints both witness pins as JSON. Opening a ledger made before 0.2.3 pins its
+witness key (trust on first use), whichever command opens it.
 """
 
 from __future__ import annotations
@@ -22,7 +32,7 @@ import sys
 from pathlib import Path
 
 from .constitution import load_unsigned, save_envelope, sign_constitution
-from .keys import generate_private_key, load_private_key_file, save_private_key, save_public_key
+from .keys import generate_private_key, load_private_key_file, load_public_key, save_private_key, save_public_key
 
 
 def _init_key(args) -> int:
@@ -93,6 +103,66 @@ def _demo(_args) -> int:
 
 
 
+def _witness_pin(args):
+    """The out-of-ledger witness pin named by --witness-public-key, or None. An empty value is refused, so an
+    unset variable in a script does not turn the pin off."""
+    if args.witness_public_key is None:
+        return None
+    if not args.witness_public_key.strip():
+        raise SystemExit("--witness-public-key: empty path; give the file, or leave the option out")
+    try:
+        return load_public_key(args.witness_public_key)
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"--witness-public-key: {args.witness_public_key}: {e}") from None
+
+
+def _open_ledger(args, key):
+    """Open an existing ledger for rotate-witness and audit; a refusal is printed, not raised. A path with no
+    ledger is refused rather than created."""
+    from .ledger import Ledger, LedgerError
+    if not (Path(args.ledger) / "entries.jsonl").is_file():
+        print(json.dumps({"ok": False, "error": f"no ledger at {args.ledger}"}, indent=2))
+        return None
+    try:
+        return Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
+    except LedgerError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return None
+
+
+def _rotate_witness(args) -> int:
+    from .ledger import LedgerError
+    key = load_private_key_file(args.key)
+    ledger = _open_ledger(args, key)
+    if ledger is None:
+        return 1
+    try:
+        result = ledger.rotate_witness(reason=args.reason)
+    except LedgerError as e:
+        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+        return 1
+    print(json.dumps({"ok": True, **result,
+                      "next": "copy the new witness public key to where your --witness-public-key copy is "
+                              "kept; the old copy no longer opens this ledger"
+                              + ("" if result["witness_public_key_path"] else
+                                 ". witness.pub.pem could not be written; the next open of the ledger writes it")},
+                     indent=2))
+    return 0
+
+
+def _audit(args) -> int:
+    from .audit import check_decision_digests
+    key = load_private_key_file(args.key)
+    ledger = _open_ledger(args, key)
+    if ledger is None:
+        return 1
+    witness = ledger.witness_report()       # opening verified the chain, the head, and both pins
+    problems = check_decision_digests(ledger)
+    print(json.dumps({"ok": not problems, "size": ledger.size(), "witness": witness,
+                      "decision_digest_problems": problems}, indent=2))
+    return 0 if not problems else 1
+
+
 def _write_token(path: Path, token: str) -> None:
     """Write the bearer token to a new file, mode 0600 from creation. Never overwrite."""
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
@@ -106,7 +176,7 @@ def _authorize(args) -> int:
     from .core import TwoKey
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
-    from .ledger import Ledger
+    from .ledger import Ledger, LedgerError
     if args.agent_session is not None:
         print("--agent-session took the secret on the command line and is no longer accepted; "
               "put it in an environment variable and pass --agent-session-env NAME", file=sys.stderr)
@@ -133,7 +203,11 @@ def _authorize(args) -> int:
     judges, policy = load_config_file(Path(args.judges))
     # The monitored agent is declared by the operator in the judges file, never by the agent.
     agent = load_monitored_agent_file(Path(args.judges))
-    ledger = Ledger(args.ledger, key)
+    try:
+        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
+    except LedgerError as e:
+        print(f"ledger refused: {e}", file=sys.stderr)
+        return 1
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
                      private_key=key, quorum=policy, monitored_agent=agent,
                      ttl_seconds=args.ttl_seconds)
@@ -153,6 +227,10 @@ def _authorize(args) -> int:
         record["token_file"] = str(token_path)
     print(json.dumps(record, indent=2))
     return 0 if decision.allowed else 2
+
+
+_WITNESS_HELP = ("the witness public key (PEM), kept where whoever writes the ledger directory cannot change it; "
+                 "a head signed by any other witness key is refused")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -188,7 +266,19 @@ def main(argv: list[str] | None = None) -> int:
                       help="token lifetime in seconds, 1 to 300; the gateway refuses longer tokens (default 120)")
     auth.add_argument("--emit-token", default=None, metavar="PATH",
                       help="write the token to a new 0600 file; it is never printed")
+    auth.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
     auth.set_defaults(func=_authorize)
+    rotate = sub.add_parser("rotate-witness", help="replace the ledger's witness key with a new one, ledgered")
+    rotate.add_argument("--key", required=True)
+    rotate.add_argument("--ledger", required=True)
+    rotate.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    rotate.add_argument("--reason", default="", help="recorded in the witness_rotated entry (at most 200 characters)")
+    rotate.set_defaults(func=_rotate_witness)
+    audit = sub.add_parser("audit", help="verify the ledger and print its witness pins and digest checks")
+    audit.add_argument("--key", required=True)
+    audit.add_argument("--ledger", required=True)
+    audit.add_argument("--witness-public-key", default=None, metavar="PEM", help=_WITNESS_HELP)
+    audit.set_defaults(func=_audit)
     demo = sub.add_parser("demo")
     demo.set_defaults(func=_demo)
     args = parser.parse_args(argv)

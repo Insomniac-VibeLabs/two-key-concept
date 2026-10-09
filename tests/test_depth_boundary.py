@@ -167,7 +167,7 @@ class AppendBounded(unittest.TestCase):
         body = {"reason": "why", "jti": "j1", "allowed": False, "secret": deep(MAX_DEPTH)}
         with self.assertRaisesRegex(EncodingError, "nested too deeply"):
             self.ledger.append("x", body)
-        self.assertEqual(self.ledger.size(), 0)
+        self.assertEqual(self.ledger.size(), 1)     # only the new ledger's witness_pinned entry
         entry = self.ledger.append_bounded("x", body)
         self.assertEqual(entry.body["reason"], "why")
         self.assertEqual(entry.body["jti"], "j1")

@@ -54,6 +54,11 @@ _MAX_DENIED_JTIS = 4096
 _DENY_INFLIGHT_WAIT_SECONDS = 30.0
 
 
+def _ledger_failed(e: Exception) -> str:
+    """The deny reason for a ledger write that failed: the capped LedgerError text, or the type of anything else."""
+    return f"ledger_failed:{cap_ledger_text(str(e)) if isinstance(e, LedgerError) else type_tag(e)}"
+
+
 def _short(value) -> str | None:
     """A jti for the ledger: a short string, else nothing (the token is signed, but keep entries small)."""
     return value if isinstance(value, str) and len(value) <= _MAX_JTI_CHARS else None
@@ -170,11 +175,7 @@ class ToolGateway:
             except Exception as e:  # still a deny; do not mark jti, so a later deny can retry ledgering
                 print(f"two-key: could not record gateway deny {result.reason[:_MAX_REASON_CHARS]!r}: "
                       f"{type_tag(e)}"[:500], file=sys.stderr)
-                if isinstance(e, LedgerError):
-                    reason = f"ledger_failed:{cap_ledger_text(str(e))}"
-                else:
-                    reason = f"ledger_failed:{type_tag(e)}"
-                return GatewayResult(False, reason, result.output)
+                return GatewayResult(False, _ledger_failed(e), result.output)
             if jti is not None:
                 with self._denied_jtis_guard:
                     if jti in self._denied_jtis:
@@ -262,22 +263,22 @@ class ToolGateway:
                 self.ledger.append_bounded("redemption_started", {"jti": payload["jti"], "tool": tool,
                                                                   "dropped_keys": dropped_keys(spec, arguments)})
                 self.ledger.checkpoint()
-            except LedgerError as e:
-                return GatewayResult(False, f"ledger_failed:{cap_ledger_text(str(e))}")
+            except Exception as e:      # not only LedgerError: an OSError (disk full) must not escape invoke (#60)
+                return GatewayResult(False, _ledger_failed(e))
             try:
                 output = fn(project_arguments(spec, arguments))
             except Exception as e:
                 try:
                     self.ledger.append_bounded("redemption_aborted", {"jti": payload["jti"], "tool": tool})
                     self.ledger.checkpoint()
-                except LedgerError as le:
-                    return GatewayResult(False, f"ledger_failed:{cap_ledger_text(str(le))}")
+                except Exception as le:
+                    return GatewayResult(False, _ledger_failed(le))
                 return GatewayResult(False, f"tool_error:{type_tag(e)}", None)
             try:
                 self.ledger.append_bounded("redemption", {"jti": payload["jti"], "tool": tool})
                 self.ledger.checkpoint()
-            except LedgerError as e:
-                return GatewayResult(False, f"ledger_failed:{cap_ledger_text(str(e))}", output)
+            except Exception as e:
+                return GatewayResult(False, _ledger_failed(e), output)
         return GatewayResult(True, "redeemed", output)
 
     def _pinned_at(self, size: int) -> str | None:

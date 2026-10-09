@@ -1,7 +1,7 @@
 # Is this for you
 
 Prototype. Not a FIPS 140-3 validated module. Not on PyPI. There is no MCP
-server in this release. Package `two-key-concept` version 0.2.2 (tag `v0.2.2` on `main`; `v0.2.0` stays on `2f756ac`).
+server in this release. Package `two-key-concept` version 0.2.3 (tag `v0.2.3` on `main`; `v0.2.0` stays on `2f756ac`).
 `v0.1.6` stays on the previous tree.
 Apache-2.0.
 Crypto is Ed25519 and SHA-256.
@@ -28,7 +28,9 @@ anchoring, and no seed phrase.
   `shape`, when set, checks the kind of value and does not read it.
 - You want an encrypted ledger. Records and the head are AES-256-GCM. The
   ledger key and the witness key live outside the ledger directory. The
-  principal key cannot unwrap the log and cannot sign a head alone.
+  principal key cannot unwrap the log and cannot sign a head alone. The
+  witness public key is pinned in the ledger, and you can also pin it
+  outside the ledger so that a forged head needs the witness key too.
 
 ## Do not use this if
 

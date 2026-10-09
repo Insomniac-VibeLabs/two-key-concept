@@ -1,7 +1,7 @@
 # Two-Key concept
 
 [![tests](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/tests.yml) [![build](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/build.yml) [![Code Coverage](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/coverage.yml) [![Latest Release](https://img.shields.io/github/v/release/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/releases)
-[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.2/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
+[![License](https://img.shields.io/github/license/Insomniac-VibeLabs/two-key-concept)](https://github.com/Insomniac-VibeLabs/two-key-concept/blob/v0.2.3/LICENSE) [![Security Scan](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml/badge.svg)](https://github.com/Insomniac-VibeLabs/two-key-concept/actions/workflows/security.yml)
 
 Two independent keys must turn before an AI agent can act.
 
@@ -147,14 +147,15 @@ and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 `declared_upstream`), scoped tenant ids (a `tenant:` mapping of
 `organization`, `project`, `account`, or `deployment`, plus what the URL
 shows), and a credential fingerprint under a per-install key, whitespace
-stripped (HMAC-SHA256 for an API token; scrypt, N=2^17, r=8, p=1, for a
-username and password, fingerprinted as one pair).
+stripped (HMAC-SHA256 for an API token; PBKDF2-HMAC-SHA256, 600,000
+iterations, for a username and password, fingerprinted as one pair, and for
+any secret that contains `:`). Every credential a side holds is fingerprinted, sent or not.
 
 A judge may run any model from any vendor. A judge is not the monitored agent, and
 `TwoKey` refuses to start (`judge_matches_agent:`), when it holds the monitored
 agent's credential (the same API token, or the same username and password),
 at any address: a credential identifies its holder wherever it is sent. Two
-sides with no credential are the same agent only on the same address (the
+sides that send no credential are the same agent only on the same address (the
 endpoint `host:port`, every alias of this machine folded to `localhost`),
 where nothing tells them apart. Everything else starts. Likely accidents
 are allowed with a `two-key: WARNING:` line on stderr and recorded in
@@ -191,7 +192,9 @@ judge and agent identities written once in `constitution_loaded`: model,
 upstream, endpoint, tenant ids, and credential fingerprint, never a key.
 
 Every JSON and YAML input is parsed strictly: a repeated key at any depth
-is refused, never last-one-wins. Unknown top-level keys in judges.yaml or
+is refused, never last-one-wins, and so is a YAML merge key (`<<`), whose
+winning value the text does not show. An integer of more than 4,300 digits
+is refused or denied as `invalid_call`. Unknown top-level keys in judges.yaml or
 agents.yaml are refused. Tool arguments or a proposal over 256 KiB, or
 tool arguments, the action claim, or a structured proposal nested more than
 62 levels, are denied before they are ledgered.
@@ -256,7 +259,8 @@ scan the bytes for sensitive text. The principal key still signs the
 constitution and the ledger head. A token signed with that principal key
 does not redeem, and a capability key equal to the principal key is
 refused. The capability key is created once, mode 0600 in a 0700
-directory. Once a token has been issued it is never regenerated: a missing
+directory, and, like the witness key, is read only as a regular file that
+the group and others cannot read, never through a symlink. Once a token has been issued it is never regenerated: a missing
 or changed key refuses to start. Its fingerprint is recorded in
 `constitution_loaded` and the gateway checks it.
 
@@ -293,20 +297,27 @@ entries and the signed head are AES-256-GCM at rest. The data key is wrapped
 by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key alone cannot decrypt the log or sign a new
-head. With the ledger key as well it can: the head carries its own witness
-public key, which is not pinned yet (#58; a pin outside the ledger is
-planned for 0.2.3).
+head. The witness public key is pinned in the ledger (the first entry,
+`witness_pinned`), so a replaced `witness.pem` is refused
+(`witness_key_changed`). With the ledger key as well, the principal key can
+still rewrite the chain from its first entry, pin included, unless the
+operator also gives the witness public key as configuration
+(`Ledger(..., witness_public_key=...)` or `--witness-public-key`), kept
+where whoever writes the ledger directory cannot change it. With that pin,
+forging a head needs the principal, witness, and ledger keys together. The
+witness key changes only by a ledgered rotation (`two-key rotate-witness`).
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 ## Known limits
 
 - No independent review and no production deployment.
 - No external anchor for the ledger. Someone holding the principal and
-  ledger keys can rewrite a ledger that never leaves the machine. The
-  witness key adds nothing until it is pinned outside the ledger (#58,
-  planned for 0.2.3). Anyone who can write the ledger directory can roll it
-  back to an earlier signed head or wipe it, with no key, and both still
-  open and verify (#62).
+  ledger keys can rewrite a ledger that never leaves the machine, unless
+  the witness public key is configured outside the ledger
+  (`--witness-public-key`); then the witness key is needed too (#58).
+  Anyone who can write the ledger directory can roll it back to an earlier
+  signed head or wipe it, with no key, and both still open and verify,
+  with or without either witness pin (#62).
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures
@@ -319,9 +330,9 @@ The full register is [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Roadmap
 
-The plan from the 0.2.2 prototype to a 1.0 release. It states intent, not a
+The plan from the 0.2.3 prototype to a 1.0 release. It states intent, not a
 promise. The order may change, and version numbers are targets, not dates.
-Nothing below exists in 0.2.2. The detail is in [ROADMAP.md](ROADMAP.md).
+Nothing after 0.2.3 exists yet. The detail is in [ROADMAP.md](ROADMAP.md).
 
 ```mermaid
 flowchart LR
@@ -338,7 +349,7 @@ flowchart LR
 
 | Target | What |
 | --- | --- |
-| 0.2.3 | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
+| 0.2.3 (this release) | Pin the ledger's witness public key (#58); remove the `vendor` / `min_vendors` aliases |
 | 0.3 | Encrypted backup and restore of the principal, capability, ledger, and witness keys |
 | 0.4 | Ledger export for a SIEM: verified, decrypted locally, no argument values |
 | 0.5 | DLP and antivirus hook interface, with reference adapters for ClamAV and a secret scanner |
@@ -350,18 +361,21 @@ flowchart LR
 | 1.0 | Public community review, then release. Described as community-reviewed, not audited |
 | After 1.0, not scheduled | Generic spec field types: a typed field per argument path |
 
-Install from git. It is not published to PyPI. Package version 0.2.2.
-Tag `v0.2.2` is on `main` and on `working`. Tag `v0.2.0` stays on commit
-`2f756ac`. 0.2.2 changes configuration and refuses some setups 0.2.1
-accepted: read "Upgrading from 0.2.1" in [CHANGES.md](CHANGES.md) before
-upgrading (and "Upgrading from 0.1.12" from older versions).
+Install from git. It is not published to PyPI. Package version 0.2.3.
+Tag `v0.2.3` is on `main` and on `working`. Tag `v0.2.0` stays on commit
+`2f756ac`. 0.2.3 refuses the `vendor:` and `min_vendors:` keys, refuses
+some judges 0.2.2 accepted (one holding the agent's credential without
+sending it, or in the other form), and pins each ledger's witness key on
+its first open: read "Upgrading from 0.2.2" in
+[CHANGES.md](CHANGES.md) before upgrading (and "Upgrading from 0.2.1" and
+"Upgrading from 0.1.12" from older versions).
 
 The middle column on the GitHub file list is the last commit that touched
 that file, not a description of the file. The layout table below is the
 description.
 
 ```bash
-pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"
+pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.3"
 ```
 
 ## Run the offline demo
@@ -388,7 +402,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/derive.py` | Tool-spec derivation for Path A's form |
 | `two_key/quorum.py`, `two_key/judges/` | Path B and judge transport |
 | `two_key/identity.py`, `netloc.py` | Judge ≠ monitored agent check; local vs. cloud host |
-| `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys refused) |
+| `two_key/strict.py` | Strict JSON and YAML loading (duplicate keys, merge keys, and huge integers refused) |
 | `two_key/agents.py` | Monitored-agent hooks |
 | `two_key/ledger.py` | Encrypted ledger; ledger key and witness live outside the directory |
 | `two_key/capability.py`, `gateway.py` | Tokens and redemption. The gateway verifies only. |
@@ -399,7 +413,7 @@ The demo uses fixed test-double judges. Real judges are configured in
 | `two_key/constitution.py` | Signed constitution: prose for Path B, hard rules for Path A, and tool specs |
 | `two_key/testing.py` | Offline test doubles only; not real judges |
 | `examples/` | Constitution, hard rules, judges, agents |
-| `ROADMAP.md` | Planned work from 0.2.2 to 1.0 |
+| `ROADMAP.md` | Planned work from 0.2.3 to 1.0 |
 | `docs/HOWTO.md` | Operator how-to |
 | `docs/FIT.md` | Whether this package is the right control |
 | `docs/COMPARISON.md` | What this package is not a substitute for |

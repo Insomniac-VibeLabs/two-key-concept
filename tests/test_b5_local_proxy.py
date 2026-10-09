@@ -1,6 +1,6 @@
 """B5: a local proxy or daemon serving the agent's exact model.
 
-Owner rule (2026-10-08): a judge is the monitored agent when it holds the agent's credential, at any address,
+Owner rule (2026-10-08): a judge is refused as the monitored agent when it holds the agent's credential, at any address,
 or when neither side has a credential on the same address. A loopback or private endpoint serving the agent's model, a shared declared
 upstream, or a shared tenant is therefore allowed, and each is a likely accident that is warned and recorded
 (``identity.separation_warnings``). Tenants are still scoped by the family a proxy reaches (not its address),

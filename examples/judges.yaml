@@ -21,10 +21,12 @@
 # and a key repeated in one mapping is refused.
 
 # The monitored agent, declared by you, never by the agent. Required. A
-# judge may run any model from any vendor. At startup Two-Key refuses
-# (judge_matches_agent:) only when a judge is the same agent: the agent's
-# credential at any address (a key identifies its holder), or no credential
-# on either side of one address (host:port as written here, no DNS). Likely
+# judge may run any model from any vendor. A judge is not the monitored
+# agent: at startup Two-Key refuses (judge_matches_agent:) when a judge holds
+# the agent's credential (the same API token, or the same username and
+# password) at any address, sent or not (a key identifies its holder), or
+# when neither side sends a credential on one address (host:port as written
+# here, no DNS). Likely
 # accidents start with a warning on stderr, recorded in constitution_loaded:
 # one side keyless on the agent's address, the agent's model on its address
 # or through a shared or undeclared proxy (declare upstream:), a shared
@@ -54,8 +56,8 @@ quorum:
   #                          # Recommended for destructive, irreversible, financial, or external-send tools.
   #                          # This file's judges (four makers, one local Ollama judge) meet it.
   # A judge's maker is who made its model, as you label it (maker:, default: provider). It is not
-  # verified, and it is not compared with the monitored agent. min_vendors and vendor: are the
-  # names through 0.2.1; 0.2.2 still loads them with a deprecation note, and 0.2.3 removes them.
+  # verified, and it is not compared with the monitored agent. The old names min_vendors and
+  # vendor: (through 0.2.2) are refused as unknown keys.
   # require_local_yes: true needs at least one local judge, or Two-Key does not start.
   # allow_same_provider_judge: deprecated and ignored; the same provider is allowed by default
   # QuorumPolicy.section4() is high_assurance plus require_path_a_first. TwoKey.authorize

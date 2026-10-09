@@ -38,7 +38,7 @@ from .transport import pooled_transport
 from ..action import Action
 from ..agent_meta import cap_ledger_text, type_tag
 from ..canonical import canonical_bytes
-from .base import Ballot, Judge, maker_from_vendor
+from .base import Ballot, Judge
 from .credentials import CredentialError, CredentialProvider, NoCredential, basic_authorization
 from ..netloc import host_is_local, host_is_loopback, model_is_cloud, url_host
 from ..strict import StrictParseError, loads_json
@@ -142,9 +142,7 @@ class LLMJudge(Judge):
                  allow_insecure_http: bool = False, maker: str | None = None,
                  local_weights: bool | None = None, weights_sha256: str | None = None,
                  echo_binding: bool = False, ballot_key: str | None = None, ballot_key_env: str | None = None,
-                 receives_proposal: bool = False, vendor: str | None = None):
-        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-        maker = maker_from_vendor(maker, vendor)
+                 receives_proposal: bool = False):
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")
         u = urlparse(base_url)
@@ -250,6 +248,12 @@ class LLMJudge(Judge):
             except (ValueError, UnicodeDecodeError):
                 pass
         tokens.extend(headers.get(k, "") for k in ("x-api-key", "x-goog-api-key"))
+        if sessions and self.auth_header == "none" and getattr(self.credential, "kind", None) != "none":
+            # A key this judge holds but never sends is still the agent's if it equals the session.
+            try:
+                tokens.append(self.credential.get_token() or "")
+            except (CredentialError, NotImplementedError, ValueError) as e:
+                return self.abstain(cap_ledger_text(f"credential: {e}"))
         if any(token and token.strip() in sessions for token in tokens):
             return self.abstain("cloud_judge_reused_agent_session")
         if self.is_cloud():

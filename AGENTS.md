@@ -21,7 +21,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 
 ## Branch and commit rules
 
-- Package 0.2.2 is tag `v0.2.2` on `main` and `working`. Do not move `v0.2.0`
+- Package 0.2.3 is tag `v0.2.3` on `main` and `working`. Do not move `v0.2.0`
   (`2f756ac`). `v0.1.12` and `v0.1.6` stay on their trees.
 - Do not push, force-push, or open PRs unless the operator asks.
 - Never commit keys, ledgers, or credentials.
@@ -31,7 +31,7 @@ operator says otherwise. See [docs/SCOPE.md](docs/SCOPE.md).
 ## Install and version matrix
 
 Requires Python ≥ 3.10. Package name `two-key-concept`, import name `two_key`,
-version `0.2.2`, tag `v0.2.2`. Not on PyPI.
+version `0.2.3`, tag `v0.2.3`. Not on PyPI.
 
 ```bash
 python3 -m venv .venv
@@ -47,7 +47,7 @@ python -m two_key demo
 | `yaml` | PyYAML | `.yaml` rules and judge configs |
 
 Git install:  
-`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.2"`
+`pip install "two-key-concept[yaml] @ git+https://github.com/Insomniac-VibeLabs/two-key-concept.git@v0.2.3"`
 
 ## Tests and docs
 
@@ -80,15 +80,20 @@ a prototype, report security findings as public issues, per
 - Both paths run once the call is well-formed and within limits.
 - `authorize_from_agent` does not execute a tool.
 - `require_path_a_first` is not a skip.
-- JSON/YAML inputs refuse duplicate keys. Oversized or malformed calls deny
+- JSON/YAML inputs refuse duplicate keys and YAML merge keys. Oversized or malformed calls deny
   before either path.
 - Default quorum needs one judge and has no diversity floors;
   `QuorumPolicy.high_assurance` / `profile: high_assurance` adds judges from
   two makers (`min_makers`), one local judge, and a local yes.
 - `tool_specs` is required. A disagreeing claim is a deny.
-- No judge may be the monitored agent: the agent's credential at any
-  address, or both keyless on one address, is refused. Other overlaps warn
+- No judge may be the monitored agent: a judge holding the agent's
+  credential (the same API token, or the same username and password) is
+  refused at any address, whether or not either side sends it; so are two
+  sides that send no credential on one address. Other overlaps warn
   and are recorded. Addresses are compared as configured, without DNS.
+- The ledger's witness public key is pinned: a head or `witness.pem` that
+  does not match the pin in the ledger, or the configured
+  `witness_public_key`, is refused. It changes only by `rotate_witness`.
 - The gateway verifies only; it never mints.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

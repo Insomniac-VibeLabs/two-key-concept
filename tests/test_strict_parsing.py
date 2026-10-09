@@ -48,9 +48,16 @@ class Loaders(unittest.TestCase):
             load_yaml("!!python/object/apply:os.system ['true']")
 
     @NEEDS_YAML
-    def test_yaml_merge_keys_and_lists_still_load(self):
-        self.assertEqual(load_yaml("b: &b {k: 1}\nm:\n  <<: *b\n  k: 2\nl: [{x: 1}, {x: 2}]\n"),
-                         {"b": {"k": 1}, "m": {"k": 2}, "l": [{"x": 1}, {"x": 2}]})
+    def test_yaml_merge_keys_are_refused_aliases_and_lists_still_load(self):
+        # #52: with merge keys the winning value depends on precedence the text does not show.
+        for text, line in (("b: &b {k: 1}\nm:\n  <<: *b\n  k: 2\n", 3),
+                           ("r: &r {x: 1}\ni: &i {x: 2}\nm:\n  <<: [*r, *i]\n", 4),
+                           ("r: &r {x: 1}\nm:\n  <<: *r\n  <<: {x: 2}\n", 3)):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(StrictParseError, f"merge key '<<' at line {line} is refused"):
+                    load_yaml(text)
+        self.assertEqual(load_yaml("b: &b {k: 1}\nm: *b\nl: [{x: 1}, {x: 2}]\n"),
+                         {"b": {"k": 1}, "m": {"k": 1}, "l": [{"x": 1}, {"x": 2}]})
 
 
 class Callers(unittest.TestCase):

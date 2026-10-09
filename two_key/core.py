@@ -7,12 +7,14 @@ Hosting (local or cloud) is recorded and never treated as trust.
 ``TwoKey`` refuses to start (``TwoKeyConfigError``) with no judge, with no
 Path B deadline, with duplicate judge ids, without an operator declaration
 of the monitored agent (``monitored_agent_required:``), or when a judge
-is that agent: the agent's credential at any address, or no credential on
-either side of one address (``judge_matches_agent:``; see identity.py).
+holds the monitored agent's credential (the same API token, or the same
+username and password) at any address, sent or not, or when neither side
+sends a credential on one address (``judge_matches_agent:``; see identity.py).
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass, asdict, replace
 from typing import Any, Mapping
@@ -34,7 +36,7 @@ from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, a
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
 from .ledger import LedgerError
 from .policy_vm import PolicyVM
-from .quorum import QuorumPolicy, check_judge_set, convene
+from .quorum import QuorumPolicy, check_judge_set, convene, unmeetable_floor
 
 
 class TwoKeyConfigError(ValueError):
@@ -114,6 +116,12 @@ class TwoKey:
             # Ballots are matched to judges by id; a shared id lets one judge's ballot stand in for another's.
             raise TwoKeyConfigError("duplicate_judge_id: judge ids must be unique, non-empty strings")
         self.quorum = (quorum or QuorumPolicy()).resolved(len(self.judges))
+        unmeetable = unmeetable_floor(self.judges, self.quorum)
+        if unmeetable:
+            # Never met: every authorize would deny, after sending the call to every judge (#54).
+            raise TwoKeyConfigError(f"{unmeetable}: the quorum policy (required_yes={self.quorum.required_yes}, "
+                                    f"min_responding={self.quorum.effective_min_responding}, min_distinct_providers="
+                                    f"{self.quorum.min_distinct_providers}) cannot be met by these judges")
         if self.quorum.timeout_seconds is None:
             # Fail closed on a hung judge: every round ends by the deadline, and a late judge abstains.
             raise TwoKeyConfigError("Path B needs a hard deadline: quorum timeout_seconds must be a positive "
@@ -130,8 +138,10 @@ class TwoKey:
         sep = {**sep, "identities_digest": self._identities_digest,
                "credential_fingerprint": {"alg": "hmac-sha256", "password_alg": PASSWORD_FINGERPRINT_ALG,
                                           "key_id": fingerprint_key_id(self._fp_key),
-                                          "input": "secret with surrounding whitespace stripped; a username and "
-                                                   "password as one username:password pair"}}
+                                          "input": "every credential a side holds, sent or not, with surrounding "
+                                                   "whitespace stripped; PBKDF2-HMAC-SHA256 for a secret that "
+                                                   "contains ':' (a username and password as one username:password "
+                                                   "pair, or a token holding one), HMAC-SHA256 otherwise"}}
         # The full policy is in constitution_loaded (quorum_policy); each decision carries its digest.
         self._policy_digest = policy_digest(self.quorum.to_record())
         self._decision_context = {"policy_digest": self._policy_digest,
@@ -144,6 +154,12 @@ class TwoKey:
         # The minting key is not the principal key, and it is not given to the gateway.
         # max_ttl_seconds: verify() refuses any token that lives longer than this TwoKey's TTL.
         self.issuer = None
+        if not private_key and self._has_capability_key(ledger):
+            # Its constitution_loaded would pin no capability key. Once tokens exist (issued before it, or by a
+            # keyed TwoKey still running), every later keyed start would refuse with capability_key_unpinned (#48).
+            raise TwoKeyConfigError("keyless_start_refused: a TwoKey with private_key= has run on this ledger; a "
+                                    "start without it would record no capability key and block later keyed "
+                                    "starts. Pass private_key=")
         if private_key:
             try:
                 cap_key = open_capability_key(ledger, public_key)
@@ -168,6 +184,13 @@ class TwoKey:
             "same_model_tenant_optin_pairs": list(self.separation.tenant_optin_pairs),
         })
         self.ledger.checkpoint()
+
+    @staticmethod
+    def _has_capability_key(ledger) -> bool:
+        if any(e.kind == "capability_issued" for e in getattr(ledger, "entries", ())):
+            return True
+        path_of = getattr(ledger, "capability_key_path", None)
+        return callable(path_of) and os.path.lexists(path_of())
 
     def _check_separation(self, monitored_agent: Any, allow_test_doubles: bool) -> SeparationReport:
         """Refuse to start if any judge could be the monitored agent. See identity.py."""

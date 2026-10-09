@@ -19,6 +19,11 @@ accepted can always be encoded again inside its wrapper.
 Everything after that is measured, hashed, judged, ledgered and handed to
 the tool from the copy. A custom mapping's ``__str__``, ``__repr__`` or
 ``__iter__`` is read once, during the copy, and never again.
+
+An integer with more than ``MAX_INT_DIGITS`` (4300) decimal digits is an
+``EncodingError`` (``integer too large``), on every Python version, in the
+copy and in the encoder: Python 3.11+ cannot write one as text, and the
+answer must not depend on the interpreter (#51).
 """
 
 from __future__ import annotations
@@ -42,6 +47,16 @@ WRAP_DEPTH = 2
 MAX_INPUT_DEPTH = MAX_DEPTH - WRAP_DEPTH
 
 
+# Python 3.11+ refuses int<->str conversions past 4300 digits (sys.int_info.default_max_str_digits).
+MAX_INT_DIGITS = 4300
+_INT_LIMIT = 10 ** MAX_INT_DIGITS
+INTEGER_TOO_LARGE = "integer too large"
+
+
+def _int_too_large(value: int) -> bool:
+    return int.__abs__(value) >= _INT_LIMIT       # never a subclass's own __abs__
+
+
 def nested_too_deeply(what: str = "value is") -> str:
     return f"{what} nested too deeply"
 
@@ -56,7 +71,10 @@ def _scalar(value: Any) -> Any:
     if isinstance(value, str):     # a subclass is copied to its str value; its __str__ is not called
         return value if type(value) is str else str.__str__(value)
     if isinstance(value, int):
-        return value if type(value) is int else int.__int__(value)
+        value = value if type(value) is int else int.__int__(value)
+        if _int_too_large(value):
+            raise EncodingError(INTEGER_TOO_LARGE)
+        return value
     if isinstance(value, float):
         return value if type(value) is float else float.__float__(value)
     raise EncodingError("unsupported_type")
@@ -116,7 +134,11 @@ def _check(value: Any, max_depth: int, what: str) -> None:
     stack = [(value, 1)]
     while stack:
         item, level = stack.pop()
-        if isinstance(item, bool) or item is None or isinstance(item, (str, int)):
+        if isinstance(item, bool) or item is None or isinstance(item, str):
+            continue
+        if isinstance(item, int):
+            if _int_too_large(item):
+                raise EncodingError(INTEGER_TOO_LARGE)
             continue
         if isinstance(item, float):
             if math.isnan(item) or math.isinf(item):
@@ -145,6 +167,10 @@ def canonical_bytes(value: Any, *, max_depth: int = MAX_DEPTH, what: str = "valu
         return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
     except RecursionError:  # not expected under MAX_DEPTH; kept so a crash is never the answer
         raise EncodingError(nested_too_deeply(what)) from None
+    except EncodingError:
+        raise
+    except ValueError as e:  # an interpreter whose int limit is under MAX_INT_DIGITS (PYTHONINTMAXSTRDIGITS)
+        raise EncodingError(INTEGER_TOO_LARGE if "digits" in str(e) else "value cannot be encoded") from None
 
 
 def digest_hex(data: bytes) -> str:

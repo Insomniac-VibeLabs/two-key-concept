@@ -45,9 +45,6 @@ Quorum protocol specifics:
   ``require_path_a_first``, which ``TwoKey.authorize`` still does not read.
   With ``heterogeneity_scope="responding"`` the same floor also applies to the
   judges that actually returned valid ballots.
-- ``min_vendors`` (the judge key ``vendor``) is the name through 0.2.1. 0.2.2
-  still accepts it as a deprecated alias of ``min_makers`` and prints a note on
-  stderr; 0.2.3 removes it. ``to_record`` writes ``min_makers``.
 - Availability floor K (``min_responding``) distinct from the approval
   threshold T (``required_yes``): fewer than K valid ballots is a deny
   *without counting*. The result then has ``counted=False`` and no yes/no
@@ -71,7 +68,6 @@ Quorum protocol specifics:
 
 from __future__ import annotations
 
-import functools
 import inspect
 import threading
 import time
@@ -81,7 +77,7 @@ from typing import Mapping, Sequence
 
 from .action import Action
 from .agent_meta import exception_ledger_error
-from .judges.base import Ballot, Judge, warn_renamed
+from .judges.base import Ballot, Judge
 
 
 class QuorumConfigError(ValueError):
@@ -151,12 +147,6 @@ class QuorumPolicy:
         if not isinstance(self.allow_same_provider_judge, bool):
             raise QuorumConfigError("allow_same_provider_judge must be a boolean")
 
-    # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-    @property
-    def min_vendors(self) -> int:
-        """Deprecated name of ``min_makers`` (accepted in 0.2.2, removed in 0.2.3)."""
-        return self.min_makers
-
     @classmethod
     def high_assurance(cls, required_yes: int = 2, min_responding: int | None = None, **kw) -> "QuorumPolicy":
         """Opt-in diversity floors: >= 2 makers, >= 1 local judge, and a yes from a local judge.
@@ -165,7 +155,7 @@ class QuorumPolicy:
         This was the default in 0.1.12. The default is now one judge.
         """
         base = {"min_makers": 2, "min_local_judges": 1, "require_local_yes": True}
-        base.update(rename_min_vendors(kw))
+        base.update(kw)
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
@@ -173,7 +163,7 @@ class QuorumPolicy:
                                  **kw) -> "QuorumPolicy":
         """Compatibility name for the default floors: one maker, no local judge required."""
         base = {"min_makers": 1, "min_local_judges": 0, "require_local_yes": False}
-        base.update(rename_min_vendors(kw))
+        base.update(kw)
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     @classmethod
@@ -185,7 +175,7 @@ class QuorumPolicy:
         """
         base = {"min_makers": 2, "min_local_judges": 1, "judge_inputs": "record_only",
                 "require_path_a_first": True, "require_local_yes": True}
-        base.update(rename_min_vendors(kw))
+        base.update(kw)
         return cls(required_yes=required_yes, min_responding=min_responding, **base)
 
     def to_record(self) -> dict:
@@ -208,32 +198,6 @@ class QuorumPolicy:
         if self.required_yes is not None:
             return self
         return replace(self, required_yes=max(1, min(2, n_judges)))
-
-
-# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-def rename_min_vendors(kw: Mapping) -> dict:
-    """Map the deprecated ``min_vendors`` key to ``min_makers``. Both at once is refused."""
-    kw = dict(kw)
-    if "min_vendors" in kw:
-        if "min_makers" in kw:
-            raise QuorumConfigError("give min_makers or the deprecated min_vendors, not both "
-                                    "(dataclasses.replace passes min_makers; use min_makers= there)")
-        warn_renamed("min_vendors", "min_makers")
-        kw["min_makers"] = kw.pop("min_vendors")
-    return kw
-
-
-# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-def _accept_min_vendors(init):
-    # An __init__ wrapper rather than an InitVar: dataclasses.replace copies an InitVar's current value
-    # (here, the alias property) back in, which would undo a min_makers change.
-    @functools.wraps(init)
-    def __init__(self, *args, **kw):
-        init(self, *args, **rename_min_vendors(kw))
-    return __init__
-
-
-QuorumPolicy.__init__ = _accept_min_vendors(QuorumPolicy.__init__)
 
 
 @dataclass(frozen=True)
@@ -286,9 +250,21 @@ def _local(j) -> bool:
 def _maker(j) -> str:
     """The maker key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
     "openai " are one maker, not two."""
-    # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-    raw = str(getattr(j, "maker", None) or getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
+    raw = str(getattr(j, "maker", None) or getattr(j, "provider", None) or "?")
     return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
+
+
+def unmeetable_floor(judges: Sequence, policy: QuorumPolicy) -> str | None:
+    """The deny reason when the policy needs more judges or providers than are configured, which no round can
+    meet; None otherwise. ``TwoKey`` refuses to start on it, and ``convene`` denies without calling a judge (#54)."""
+    need = max(policy.required_yes, policy.effective_min_responding or 0)
+    if len(judges) < need:
+        return f"too_few_judges_configured:{len(judges)}<{need}"
+    # A ballot's provider is its judge's (_collect), so the configured providers bound the responding ones.
+    providers = {unicodedata.normalize("NFKC", str(getattr(j, "provider", "?"))).strip().casefold() for j in judges}
+    if len(providers) < policy.min_distinct_providers:
+        return f"insufficient_distinct_providers:{len(providers)}<{policy.min_distinct_providers}"
+    return None
 
 
 def heterogeneity_shortfall(judges: Sequence, policy: QuorumPolicy) -> str | None:
@@ -442,7 +418,9 @@ def convene(
     ids = [getattr(j, "judge_id", None) for j in judges]
     duplicate = len(set(ids)) != len(ids) or any(not isinstance(i, str) or not i for i in ids)
     selection = heterogeneity_shortfall(judges, policy) if judges and not duplicate else None
-    if judges and not duplicate and selection is None:
+    # A floor no round can meet: deny before any judge (or its vendor) sees the call.
+    unmeetable = unmeetable_floor(judges, policy) if judges and not duplicate else None
+    if judges and not duplicate and selection is None and unmeetable is None:
         ballots = [_bind(b, binding, policy)
                    for b in _collect(judges, constitution_text, judge_action, proposal, policy, binding, agent_session)]
     responding = [b for b in ballots if b.responded]
@@ -461,8 +439,8 @@ def convene(
         return result(False, "duplicate_judge_id", counted=False)
     if selection is not None:
         return result(False, f"judge_set_not_heterogeneous:{selection}", counted=False)
-    if len(judges) < policy.required_yes:
-        return result(False, f"too_few_judges_configured:{len(judges)}<{policy.required_yes}", counted=False)
+    if unmeetable is not None:
+        return result(False, unmeetable, counted=False)
     if any(getattr(j, "is_cloud", lambda: False)() for j in judges) and not agent_session:
         return result(False, "cloud_judge_session_required")
     if any((b.error or "").startswith("cloud_judge_") for b in ballots):

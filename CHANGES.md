@@ -729,3 +729,318 @@ commit messages of PRs #43 and #61.
   `TODO(remove-vendor-alias)` site.
 - Remove the unused `extra_secrets` argument of `AgentDeclaration.resolve`
   (breaking).
+
+## 0.2.3 — 2026-10-09
+
+The two breaking changes planned in ROADMAP 0.2.x: the ledger pins its
+witness public key (#58), and the `vendor` / `min_vendors` aliases are
+removed. Two more, from the owner during this release: a judge that holds
+the monitored agent's credential is refused even when neither side sends
+it, and whether it is held as a token or as a username and password; and
+passwords are fingerprinted with PBKDF2, an approved function, instead of
+scrypt. It also fixes the small open issues the owner picked for this
+release: #47, #48, #51, #52, #54, #56, #57, and #60 items 1 and 5. Read
+"Upgrading from 0.2.2" below before upgrading.
+
+### Changed (breaking)
+
+- **A judge that holds the monitored agent's credential is refused, sent
+  or not, in either form** (the owner's rule, restated in the README:
+  "A judge is not the monitored agent, and `TwoKey` refuses to start
+  (`judge_matches_agent:`), when it holds the monitored agent's credential
+  (the same API token, or the same username and password), at any
+  address"). 0.2.2 compared only what each side sends, and never compared a
+  token with a username and password, so three setups started that the rule
+  refuses:
+  - a judge configured with the agent's key and `auth_header: none` (an
+    Ollama judge's default), which holds the key but never sends it;
+  - a judge holding the key configured for an `agents.yaml` `ollama` agent,
+    which never sends it;
+  - a judge or agent holding the other side's username and password as a
+    token (`user:pass` in `credential_env` or a token provider) next to a
+    Basic pair.
+  Every credential each side holds is now compared for the same-credential
+  refusal, sent or not, and a fingerprint is chosen by content: any secret
+  that contains `:` is fingerprinted as a `username:password` pair with
+  PBKDF2 (below), never with HMAC. The rule for two
+  keyless sides on one address still looks only at what is sent. A key
+  that is never sent is now read at start-up, so one that cannot be read
+  refuses (`credential could not be read at start-up`); at call time it is
+  read only to compare with `agent_session`. Each resolved identity in
+  `constitution_loaded` lists every credential it holds under
+  `credential_fingerprint` and gains `credential_sent`; the rule id
+  (`same_agent`) is `same_held_credential_or_keyless_same_address`, and the
+  fingerprint `input` text says what is fingerprinted. The refusal reads
+  `judge_matches_agent: a judge must not be the monitored agent: ...` (was
+  `a judge is the monitored agent`), and says to give the judge its own
+  credential: a new address never clears it.
+- **Password fingerprints use PBKDF2-HMAC-SHA256 instead of scrypt.**
+  scrypt is not an approved function and is not in OpenSSL's FIPS
+  provider, so a FIPS-only host refused every username and password, and
+  it would have blocked the approved mode planned for 0.9. A
+  `username:password` pair, and any secret that contains `:`, is now
+  `pbkdf2-sha256-600000:` + PBKDF2-HMAC-SHA256 (NIST SP 800-132) with the
+  per-install key (256 bits) as the salt, 600,000 iterations (OWASP's
+  setting where FIPS 140 is required), 32 bytes, about 0.15 s each
+  (scrypt took about 0.4 s and 128 MiB). `constitution_loaded` records
+  `password_alg: pbkdf2-sha256-600000`. PBKDF2 is not memory-hard, so
+  against someone who holds the key directory a guessable password is
+  cheaper to guess on dedicated hardware than under scrypt. Whether a
+  stored PBKDF2 fingerprint counts as an approved use is for the module's
+  security policy or a test lab to confirm when 0.9 is built. The
+  failure is still `password_fingerprint_failed:`.
+- **The ledger pins its witness public key (#58).** 0.2.2 read the witness
+  key from the head it was checking, so a replaced `witness.pem` was
+  accepted and the principal key plus the ledger key could sign a head.
+  Now:
+  - A new ledger's first entry is `witness_pinned` (`source: new_ledger`),
+    written and checkpointed when the `Ledger` is created.
+  - A ledger made by 0.2.2 or earlier pins the witness key that signed its
+    current head on its first open under 0.2.3 (`source: first_use`,
+    `head_size`), trust on first use, and only if `witness.pem` is that
+    key. A key swapped before the upgrade cannot be detected.
+  - A head signed by a key other than the pinned one, and a `witness.pem`
+    that does not match it, are refused with `witness_key_changed:`, on
+    open, on `append` (before anything is written), and on `checkpoint`.
+  - `Ledger(..., witness_public_key=...)` is a second pin, kept outside the
+    ledger where whoever writes the ledger directory cannot change it. With
+    it, forging a head needs the principal, witness, and ledger keys
+    together; without it, the principal key and the ledger key are still
+    enough, because they can rewrite the chain from its first entry, pin
+    included. With it, a new ledger needs that witness key in place
+    (`witness_key_missing:`).
+  - `Ledger.rotate_witness(new_witness=None, *, reason="")` is the only way
+    to change the key: a `witness_rotated` entry signed by the principal and
+    by the old and the new witness key, checked on every open, then a head
+    signed by the new key. The new key is staged as `witness.pem.new` and
+    moved into place last. If the head cannot be written, the staged key
+    stays and the ledger refuses to open (`signed head does not match the
+    chain`) until the entry is removed, as after a crash. An out-of-ledger
+    pin is updated by the operator.
+  - The first open of a new or older ledger writes, so it refuses
+    (`principal key mismatch:`) before writing when the principal private
+    key does not match the principal public key. `witness.pem` is read
+    again under the ledger lock, and `witness.pub.pem` is rewritten on open
+    when it does not match `witness.pem`.
+  - The head is checked against the chain (size, tip, Merkle root) before
+    the witness pin, so an entry no head covers reports as that.
+  - `Ledger.append` refuses the kinds `witness_pinned` and
+    `witness_rotated`. `Ledger.verify()` returns `witness_report()`: the
+    key that signed the head, the pin in the ledger and how it was set, the
+    configured pin, and the pin history (`two_key.audit.witness_pins`),
+    as `sha256:` fingerprints.
+  - Neither pin detects a rollback to an earlier signed head or a wipe of
+    the ledger directory (#62).
+- **CLI for the witness pin.** `two-key authorize --witness-public-key PEM`
+  opens the ledger with the out-of-ledger pin. `two-key rotate-witness
+  --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]` rotates
+  the witness key and prints the old and new fingerprints and where the new
+  public key was written. `two-key audit --key KEY --ledger DIR
+  [--witness-public-key PEM]` verifies the ledger, runs
+  `check_decision_digests`, and prints both pins as JSON; it exits 1 on a
+  refusal or a digest problem. `audit` and `rotate-witness` refuse a path
+  with no ledger instead of creating one. An empty `--witness-public-key`
+  is refused, so an unset variable in a script does not turn the pin off.
+  `authorize` prints `ledger refused: ...` and exits 1 when the ledger will
+  not open, instead of a traceback. Each command opens the ledger
+  read-write, so the first one run on a ledger from 0.2.2 or earlier writes
+  its `witness_pinned` entry.
+- **The `vendor` / `min_vendors` aliases are removed** (owner's decision;
+  deprecated in 0.2.2, #44). The judge key `vendor:` and the quorum key
+  `min_vendors:` are refused as unknown keys. The `vendor=` argument of
+  `LLMJudge` and `FixedJudge`, and `min_vendors=` on `QuorumPolicy` and its
+  `high_assurance`, `section4`, and `without_diversity_floors` builders,
+  raise `TypeError`. `Judge.vendor` and `QuorumPolicy.min_vendors` are gone.
+  A judge's maker is its `maker` label or, when it has none, its `provider`;
+  a `vendor` or `_vendor` attribute is no longer read. `maker_from_vendor`,
+  `rename_min_vendors`, `warn_renamed`, and the `QuorumPolicy.__init__`
+  wrapper are removed.
+- `AgentDeclaration.resolve` no longer takes `extra_secrets`. Nothing passed
+  it, and it fingerprinted whatever it was given as one of the agent's
+  credentials.
+
+### Fixed
+
+- **#47**: the `TWOKEY_DOCCHECK_FAKE_LLM=1` switch is removed. It sent judge
+  and agent calls through `urllib.request.urlopen`, which followed 301, 302,
+  and 303 redirects and resent the `Authorization` header to the new host.
+  The pooled transport, which refuses every redirect, is now the only path.
+- **#48**: once a `TwoKey` with `private_key=` has run on a ledger (its
+  capability key exists, or tokens were issued), a start without it is
+  refused (`keyless_start_refused:`). Its `constitution_loaded` would pin no
+  capability key and block every later keyed start with
+  `capability_key_unpinned`, whose message now names that cause too.
+- **#51**: an integer of more than 4,300 digits (or more than a lower
+  `PYTHONINTMAXSTRDIGITS`) is refused the same way on every path and every
+  Python version: `integer too large` from the strict
+  JSON and YAML parsers (and so from `--args` and agent replies), an
+  `invalid_call` deny from `authorize` and from the gateway (which now
+  records `gateway_denied`), `malformed_action` for the action claim, and
+  `malformed_proposal` for a proposal. 0.2.2 gave `internal_error`, a
+  `ValueError` out of `ToolGateway.invoke`, or a misleading `*_too_large`.
+- **#52**: a YAML merge key (`<<`) is refused (`YAML merge key '<<' at
+  line N is refused`): which value wins depended on precedence the text
+  does not show. Anchors and aliases without `<<` still load. An unknown
+  key inside an `auth:` mapping (`vars:`, `servce:`) is refused instead of
+  dropped.
+- **#54**: a quorum floor the configured judges can never meet is refused
+  when `TwoKey` starts, and `convene` denies such a round before calling any
+  judge, so the call is no longer sent to every judge only to be denied:
+  `required_yes` or `min_responding` above the number of judges
+  (`too_few_judges_configured:`), and `min_distinct_providers` above the
+  number of distinct judge providers (`insufficient_distinct_providers:`).
+  The judges.yaml loader still checks only `required_yes` itself; `TwoKey`
+  checks the rest.
+- **#56**: CodeQL runs on pushes to `working`.
+- **#57**: the witness and capability private keys are read with the same
+  safe loader as `--key`: no symlink, a regular file, and no group or other
+  access (`witness key: key_file_insecure:`, `capability key:
+  key_file_insecure:`). `<ledger>.witness` is created at 0700 and set back
+  to 0700 on open.
+- **#60 item 1**: a ledger write that fails with something other than
+  `LedgerError` (an `OSError` from a full disk) after the gateway's
+  `redemption_started` returns `ledger_failed:<type>` instead of raising
+  out of `ToolGateway.invoke`.
+- **#60 item 5**: `Ledger` refuses a principal private key that does not
+  match the principal public key given to it, before it writes anything
+  (`principal key mismatch`). 0.2.2 wrote heads that failed `principal head
+  signature failed` on the next open.
+
+### Docs
+
+- README, THREAT_MODEL, SECURITY.md, SCOPE, FIT, llms.txt, and AGENTS.md
+  describe both witness pins: what each detects, that the principal key and
+  the ledger key are still enough without the out-of-ledger pin, trust on
+  first use for older ledgers, and that neither pin detects a rollback or a
+  wipe (#62).
+- HOWTO "Pin the witness key" and "Rotate the witness key": configuring the
+  out-of-ledger pin, a table of what each pin detects, `two-key audit`, the
+  rotation command, and what to do after an interrupted rotation. "Known
+  trade-offs by configuration" lists running without the configured pin.
+- HOWTO, examples/judges.yaml, and llms.txt say the `vendor:` and
+  `min_vendors:` keys are refused.
+
+### Upgrading from 0.2.2
+
+1. Rename `vendor:` to `maker:` and `min_vendors:` to `min_makers:` in
+   judges.yaml; the old keys are refused as unknown keys. In Python, use
+   `maker=`, `min_makers=`, `.maker`, and `.min_makers`. A custom judge
+   class that sets `vendor` or `_vendor` must set `maker` instead: the old
+   attribute is no longer read, and the judge's maker becomes its
+   `provider`.
+2. Drop `extra_secrets=` from any `AgentDeclaration.resolve(...)` call.
+3. The first open of each existing ledger under 0.2.3 writes a
+   `witness_pinned` entry (`source: first_use`) and a new head. Open it with
+   the principal key that signed it; `witness.pem` must be the key that
+   signed the current head, or the open refuses (`witness_key_changed:`).
+   Stop every process that has the ledger open before the upgrade; a
+   process still holding an older in-memory ledger is refused
+   (`ledger file changed by another writer`) and must reopen it.
+4. Optional, recommended: after that first open, copy
+   `<ledger>.witness/witness.pub.pem` somewhere whoever writes the ledger
+   directory cannot change, and pass it on every open
+   (`--witness-public-key`, `Ledger(..., witness_public_key=...)`). If you
+   kept a copy of the witness public key from before the upgrade, use that
+   one: it also catches a key swapped before the upgrade.
+5. Replacing `witness.pem` by hand no longer works. Use `two-key
+   rotate-witness` or `Ledger.rotate_witness`, then update your copy of the
+   witness public key. `Ledger.append` refuses the kinds `witness_pinned`
+   and `witness_rotated`.
+6. A new ledger's first entry is `witness_pinned`, so `seq` numbers and
+   entry counts are one higher than in 0.2.2 for the same calls. Look
+   entries up by kind, not by position. `Ledger.verify()` returns a report
+   instead of None.
+7. `two-key authorize` exits 1 with `ledger refused: ...` on stderr when the
+   ledger does not open; it raised a traceback before.
+
+8. Setups that started under 0.2.2 and now refuse with
+   `judge_matches_agent:`: a judge configured with the agent's key and
+   `auth_header: none`; a judge holding the key of an `agents.yaml` `ollama`
+   agent; a judge or agent holding the other side's username and password
+   as a `user:pass` token. Give the judge its own credential, or remove the
+   key from its configuration.
+9. A judge with `auth_header: none`, or an `agents.yaml` `ollama` agent,
+   whose configured key cannot be read now refuses to start (`credential
+   could not be read at start-up`); 0.2.2 did not read it. Set the variable,
+   or remove `auth:`.
+10. `identities_digest` changes for every setup: each resolved identity has
+    the new key `credential_sent`, a username and password are
+    fingerprinted with PBKDF2 instead of scrypt (`pbkdf2-sha256-600000:`),
+    and a secret that contains `:` with PBKDF2 instead of HMAC. Alerts that
+    match `scrypt-n17-r8-p1` or the text `a judge is the monitored agent`
+    should match `pbkdf2-sha256-600000` and `judge_matches_agent:`.
+11. A secret that contains `:` now costs about 0.15 s of PBKDF2 at
+    start-up. A FIPS-only OpenSSL, which refused every username and
+    password under 0.2.2, now accepts them.
+12. Configuration that 0.2.2 loaded and 0.2.3 refuses: a YAML merge key
+    (`<<`) anywhere (write the keys out), an unknown key inside `auth:`,
+    a `required_yes` or `min_responding` above the number of judges, and a
+    `min_distinct_providers` above the number of distinct judge providers
+    (`QuorumPolicy.without_diversity_floors()` with one judge is one: it
+    defaults `required_yes` to 2).
+13. A `witness.pem` or `capability.pem` that the group or others can read,
+    that is a symlink, or that is not a regular file now refuses; `chmod 600`
+    it, or replace the link with the file.
+14. A `TwoKey` without `private_key=` on a ledger where a keyed one has run
+    now refuses (`keyless_start_refused:`). A `Ledger` given a principal
+    public key that does not match its private key now refuses on open.
+15. `TWOKEY_DOCCHECK_FAKE_LLM` no longer does anything; a test double that
+    relied on it should replace the judge's `transport=`.
+
+### Reviews
+
+- The code-review skill on `main...working` at high effort: 15 findings.
+  Fixed: an interrupted rotation that sent the HOWTO recovery down the
+  wrong path and deleted the staged key, a first open that wrote with a
+  mismatched principal key pair, an empty `--witness-public-key` that
+  turned the pin off, `audit` and `rotate-witness` creating a ledger at a
+  mistyped path, a stale `witness.pub.pem` after an interrupted rotation,
+  a stale `witness.pem` read before the lock, the `authorize` traceback,
+  the `rotate_witness` signature in these notes, the missing "Upgrading
+  from 0.2.2" section, and two cleanups. Kept by decision: a custom judge
+  with an old `vendor` label is not refused (the owner's call: nothing is
+  deployed, so the label is simply gone); `append` reads `witness.pem` on
+  every call (about 0.1 ms, measured, so a swapped key is refused before an
+  entry is written); and `witness_key_fingerprint` repeats the one-line
+  `capability_key_fingerprint` format rather than touch the token code.
+  Run by an AI assistant in this session.
+- The code-review skill on the judge-rule change at high effort: 15
+  findings. Fixed: the double HMAC and scrypt fingerprint of a `user:pass`
+  token (one fingerprint by content now), the call-time read of an unsent
+  key with no session to compare, a refusal message that pointed to a new
+  address, a missing error prefix, the ledger rule id and fingerprint text,
+  HOWTO trade-offs, stale wording, two duplicated code paths, and a
+  misplaced test class. Kept: reading a held but unsent key at start-up
+  runs its callback or keyring lookup, which the owner's rule needs (HOWTO
+  "Known trade-offs" says so), and the slow-hash cost of a secret
+  containing `:`. Its last finding, that "A judge is not the monitored agent, and
+  `TwoKey` refuses to start, when it holds..." can be misread, is answered
+  in the other docs with "A judge must not be the monitored agent: `TwoKey`
+  refuses to start when a judge holds..."; the README keeps the owner's
+  sentence. Run by an AI assistant in this session.
+- The code-review skill on the open-issue fixes at high effort: 10
+  findings. Fixed: a non-string `auth.type` that crashed with `TypeError`,
+  a lower `PYTHONINTMAXSTRDIGITS` that still let a bare `ValueError` out,
+  an int subclass whose `__abs__` hid its size, a witness-directory `chmod`
+  that could fail the open, `min_distinct_providers` missing from #54 (and
+  an overstated line about the loader), and four cleanups (one
+  `ledger_failed` helper, one integer bound, `basic` in the auth-key table,
+  an O(1) digit count). Kept: #48 refuses a keyless start once a keyed one
+  has run, rather than carrying the previous pin forward; a keyless
+  `TwoKey` is undocumented and cannot mint, so requiring `private_key=` is
+  the fail-closed choice.
+- The switch from scrypt to PBKDF2 is the owner's decision, after asking
+  whether scrypt fits the FIPS goal (it does not).
+- Maintainer security review (AGENTS.md, ROADMAP 0.2.3): pending. All
+  these changes touch the ledger or the judge-is-not-the-agent check.
+
+### Still open
+
+- Fixed in this release: #47, #48, #51, #52, #54, #56, #57, #58, and #60
+  items 1 and 5. Still open, Low or Info: #45 (a gateway in its own
+  process), #46 (a persistent halt), #49 (a recovery command), #50 (ledger
+  cost as it grows), #53 (CLI claim defaults), #55 (the connection-reuse
+  claim), #59 (remaining doc errors), #60 items 2 and 3 (a ledger silently
+  created at a wrong path, a weak `agent_session` check), and #62 (a
+  rollback or wipe of the ledger directory, which neither witness pin
+  detects).

@@ -1,11 +1,9 @@
 """The maker-diversity floor compares maker names case-insensitively (and NFKC, trimmed).
 
-``maker`` / ``min_makers`` were ``vendor`` / ``min_vendors`` through 0.2.1; the old names still work.
+``maker`` / ``min_makers`` were ``vendor`` / ``min_vendors`` through 0.2.1; 0.2.3 refuses the old names.
 """
 
-import contextlib
 import dataclasses
-import io
 import unittest
 
 from two_key.judges.config import JudgeConfigError, load_config
@@ -55,121 +53,62 @@ def judge_spec(jid, **extra):
             "auth": {"type": "none"}, **extra}
 
 
-def quiet(fn, *a, **kw):
-    err = io.StringIO()
-    with contextlib.redirect_stderr(err):
-        out = fn(*a, **kw)
-    return out, err.getvalue()
-
-
 class OldNames(unittest.TestCase):
-    """vendor and min_vendors (through 0.2.1) are deprecated aliases with a stderr note."""
+    """vendor and min_vendors (through 0.2.1, deprecated in 0.2.2) are removed in 0.2.3: refused, not read."""
 
     def test_policy_record_uses_the_new_key(self):
         rec = QuorumPolicy.high_assurance().to_record()
         self.assertEqual(rec["min_makers"], 2)
         self.assertNotIn("min_vendors", rec)
+        self.assertFalse(hasattr(QuorumPolicy(), "min_vendors"))
 
-    def test_min_vendors_keyword(self):
-        p, err = quiet(QuorumPolicy, min_vendors=3)
-        self.assertEqual((p.min_makers, p.min_vendors), (3, 3))
-        self.assertEqual(p, QuorumPolicy(min_makers=3))
-        self.assertIn("min_vendors is deprecated; use min_makers", err)
-        for build in (QuorumPolicy.high_assurance, QuorumPolicy.section4, QuorumPolicy.without_diversity_floors):
-            p, err = quiet(build, min_vendors=3)
-            self.assertEqual(p.min_makers, 3, build)
-            self.assertIn("deprecated", err)
-
-    def test_min_vendors_and_min_makers_together_are_refused(self):
-        for build in (QuorumPolicy, QuorumPolicy.high_assurance):
-            with self.assertRaisesRegex(QuorumConfigError, "not both"):
-                quiet(build, min_vendors=2, min_makers=2)
+    def test_min_vendors_keyword_is_refused(self):
+        for build in (QuorumPolicy, QuorumPolicy.high_assurance, QuorumPolicy.section4,
+                      QuorumPolicy.without_diversity_floors):
+            with self.assertRaisesRegex(TypeError, "min_vendors", msg=build):
+                build(min_vendors=3)
 
     def test_replace_keeps_a_new_min_makers(self):
         p = QuorumPolicy(min_makers=3)
         self.assertEqual(dataclasses.replace(p, min_makers=1).min_makers, 1)
         self.assertEqual(p.resolved(4).min_makers, 3)
 
-    def test_vendor_keyword_and_attribute(self):
-        j, err = quiet(FixedJudge, "a", "yes", vendor="OpenAI")
-        self.assertEqual((j.maker, j.vendor), ("OpenAI", "OpenAI"))
-        self.assertIn("vendor is deprecated; use maker", err)
-        j.vendor = "Anthropic"
-        self.assertEqual(j.maker, "Anthropic")
-        o, _ = quiet(OpenAICompatibleJudge, "o", "p", "m", "https://api.example.com/v1", vendor="xai")
-        self.assertEqual(o.maker, "xai")
-        with self.assertRaisesRegex(ValueError, "not both"):
-            FixedJudge("a", "yes", maker="x", vendor="y")
+    def test_vendor_keyword_is_refused(self):
+        with self.assertRaisesRegex(TypeError, "vendor"):
+            FixedJudge("a", "yes", vendor="OpenAI")
+        with self.assertRaisesRegex(TypeError, "vendor"):
+            OpenAICompatibleJudge("o", "p", "m", "https://api.example.com/v1", vendor="xai")
+        self.assertFalse(hasattr(FixedJudge("a", "yes", maker="OpenAI"), "vendor"))
 
-    def test_a_judge_that_set_the_private_vendor_attribute_keeps_its_label(self):
+    def test_an_old_vendor_label_is_not_read(self):
         from two_key.judges.base import Ballot, Judge
 
-        class OldPrivate(Judge):      # 0.2.1-era code that set _vendor directly
-            def __init__(self, jid, provider):
-                self.judge_id, self.provider, self._vendor = jid, provider, "acme"
-
-            def score(self, constitution_text, action, proposal):
-                return Ballot(self.judge_id, self.provider, "yes", 0.9, "")
-        judges = [OldPrivate("a", "openai"), OldPrivate("b", "xai")]
-        self.assertEqual([j.maker for j in judges], ["acme", "acme"])
-        self.assertEqual(judges[0].vendor, "acme")
-        self.assertEqual(heterogeneity_shortfall(judges, POLICY), "insufficient_makers:1<2")
-
-    def test_judge_written_before_the_rename_keeps_its_label(self):
-        from two_key.judges.base import Ballot, Judge
-
-        class Legacy(Judge):
+        class Old(Judge):
             vendor = "same-maker"
 
             def __init__(self, jid, provider):
-                self.judge_id, self.provider = jid, provider
+                self.judge_id, self.provider, self._vendor = jid, provider, "same-maker"
 
             def score(self, constitution_text, action, proposal):
                 return Ballot(self.judge_id, self.provider, "yes", 0.9, "")
+        judges = [Old("a", "p1"), Old("b", "p2")]
+        self.assertEqual([j.maker for j in judges], ["p1", "p2"])
+        self.assertIsNone(heterogeneity_shortfall(judges, POLICY))
 
-        class DuckTyped:
-            def __init__(self, jid, provider):
-                self.judge_id, self.provider, self.vendor = jid, provider, "same-maker"
-
-        for cls in (Legacy, DuckTyped):
-            judges = [cls("a", "p1"), cls("b", "p2")]
-            # Two providers but one old vendor label: still one maker, so the floor is not met.
-            self.assertEqual(heterogeneity_shortfall(judges, POLICY), "insufficient_makers:1<2", cls)
-        self.assertEqual(Legacy("a", "p1").maker, "same-maker")
-        j = Legacy("a", "p1")
-        j.maker = "override"
-        self.assertEqual(j.maker, "override")
-
-    def test_an_old_vendor_override_that_calls_super_does_not_recurse(self):
-        from two_key.testing import FixedJudge
-
-        class Old(FixedJudge):
-            @property
-            def vendor(self):
-                return super().vendor.upper()
-        self.assertEqual(Old("a", "yes").maker, "TEST-DOUBLE")
-        self.assertEqual(Old("a", "yes", "acme").maker, "ACME")
-
-    def test_config_accepts_old_keys_with_a_note(self):
-        cfg = {"judges": [judge_spec("a", vendor="openai"), judge_spec("b", maker="anthropic")],
-               "quorum": {"min_vendors": 2, "required_yes": 2}}
-        (judges, policy), err = quiet(load_config, cfg)
-        self.assertEqual([j.maker for j in judges], ["openai", "anthropic"])
-        self.assertEqual(policy.min_makers, 2)
-        self.assertIn("vendor is deprecated", err)
-        self.assertIn("min_vendors is deprecated", err)
+    def test_config_refuses_old_keys(self):
+        with self.assertRaisesRegex(JudgeConfigError, r"unknown key\(s\) \['vendor'\]"):
+            load_config({"judges": [judge_spec("a", vendor="openai")]})
+        with self.assertRaisesRegex(JudgeConfigError, r"unknown quorum keys \['min_vendors'\]"):
+            load_config({"judges": [judge_spec("a")], "quorum": {"min_vendors": 1}})
 
     def test_config_new_keys(self):
         cfg = {"judges": [judge_spec("a", maker="openai"), judge_spec("b", maker="openai")],
                "quorum": {"min_makers": 2, "required_yes": 2}}
         with self.assertRaisesRegex(JudgeConfigError, "insufficient_makers:1<2"):
             load_config(cfg)
-
-    def test_config_refuses_both_names(self):
-        with self.assertRaisesRegex(JudgeConfigError, "not both"):
-            quiet(load_config, {"judges": [judge_spec("a", maker="x", vendor="x")]})
-        with self.assertRaisesRegex(JudgeConfigError, "not both"):
-            quiet(load_config, {"judges": [judge_spec("a")], "quorum": {"min_makers": 1, "min_vendors": 1}})
+        cfg["judges"][1]["maker"] = "anthropic"
+        judges, policy = load_config(cfg)
+        self.assertEqual(([j.maker for j in judges], policy.min_makers), (["openai", "anthropic"], 2))
 
 
 if __name__ == "__main__":

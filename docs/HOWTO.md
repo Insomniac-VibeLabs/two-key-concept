@@ -91,11 +91,12 @@ HTTP error abstains.
 ## The monitored agent and the judge-is-not-the-agent rule
 
 The minimum is one judge, and no judge may be the monitored agent. A judge
-may run any model from any vendor. It is the same specific agent when it
-holds the agent's credential, at any address, or when neither side has a
-credential on the same address. You
-declare who the agent is; Two-Key refuses the same agent, and makes likely
-accidents visible rather than blocking them.
+may run any model from any vendor. A judge must not be the monitored agent:
+`TwoKey` refuses to start (`judge_matches_agent:`) when a judge holds the
+monitored agent's credential (the same API token, or the same username and
+password), at any address, or when neither side sends a credential on the
+same address. You declare who the agent is; Two-Key refuses a judge that is
+the agent, and makes likely accidents visible rather than blocking them.
 
 Declare the agent yourself, never from what the agent reports: the
 `monitored_agent:` block in judges.yaml (the CLI reads it), or
@@ -142,16 +143,21 @@ At startup each judge and agent is resolved to:
 - a credential fingerprint of the key with surrounding whitespace stripped,
   under a per-install key, `<ledger>.ledger-key/fingerprint.key` (32 random
   bytes, created once with O_EXCL, mode 0600): HMAC-SHA256 for an API token
-  (`hmac-sha256:`), and scrypt (N=2^17, r=8, p=1: 128 MiB, about 0.4 s;
-  `scrypt-n17-r8-p1:`) for a username and password, fingerprinted as one
-  `username:password` pair with whitespace stripped from its two ends only.
+  (`hmac-sha256:`), and PBKDF2-HMAC-SHA256 with the per-install key as the
+  salt (600,000 iterations, about 0.15 s; `pbkdf2-sha256-600000:`) for a
+  username and password, fingerprinted as one `username:password` pair with
+  whitespace stripped from its two ends only. PBKDF2 is an approved
+  function and is in OpenSSL's FIPS provider; scrypt, used before 0.2.3, is
+  neither.
   The key sits beside the ledger key, so it does not stop someone who holds
   that directory; there a random token is safe by its length, a guessable
   token (a placeholder such as `EMPTY`) is not, and a password is protected
-  only by scrypt's cost. A pair and a token are never compared: an agent
-  declared with `credential_env` whose value is `user:pass` does not match
-  a judge's Basic pair, so declare a Basic agent with `username_env` and
-  `password_env`. Raw keys and passwords are never logged.
+  only by PBKDF2's cost. A fingerprint is chosen by content: any secret that
+  contains `:` is fingerprinted as a `username:password` pair with PBKDF2,
+  never with HMAC, so a judge or agent holding a username and password as a
+  token (`user:pass` in `credential_env`) matches the other side's Basic
+  pair, and a password never gets the cheap hash. Raw keys and passwords are
+  never logged.
 
 `TwoKey` refuses with `judge_matches_agent:` only when a judge is the
 monitored agent. That is either of these:
@@ -161,7 +167,13 @@ monitored agent. That is either of these:
   of the token or of the `username:password` pair). A credential
   identifies its holder wherever it is sent, so a judge with the agent's key
   behind a pass-through proxy, under another name for the agent's server, or
-  at a provider's alternate host is still the agent. A placeholder that a
+  at a provider's alternate host is still the agent. Every credential either
+  side holds counts, whether or not its connector sends it: a judge with
+  `auth_header: none` (an Ollama judge's default) that is configured with
+  the agent's key, and an `agents.yaml` `ollama` agent whose configured key
+  a judge also holds, are refused. The ledger records every credential a
+  side holds under `credential_fingerprint`, and whether it is sent under
+  `credential_sent`. A placeholder that a
   local server ignores (`EMPTY`) counts too: give each side its own value,
   or leave it off one side (`auth: {type: none}` on a judge,
   `credential: none` on the agent). On one shared server that ignores keys,
@@ -172,9 +184,9 @@ monitored agent. That is either of these:
   `localhost`. Two keyless sides on one address, such as two models on one
   local Ollama daemon, have nothing to tell them apart, so they are refused
   whatever their models. Give the judge its own daemon or port, or its own
-  credential. For a connector Two-Key drives, a side counts as keyless when
-  it sends no credential, whatever is configured: a judge with
-  `auth_header: none` (an Ollama judge's default) and an `agents.yaml`
+  credential. For this address rule only, a connector Two-Key drives counts
+  as keyless when it sends no credential, whatever is configured: a judge
+  with `auth_header: none` (an Ollama judge's default) and an `agents.yaml`
   `ollama` agent without Basic auth send none. Two-Key sees only what its
   own connectors send: a `monitored_agent:` declaration with
   `credential_env` or `username_env` counts as keyed even when its server
@@ -208,9 +220,9 @@ key is still refused as `unknown quorum keys`.
 
 Judge and agent credentials are read at startup for this check, so a
 configured key that cannot be read refuses to start, for a local agent as
-well as a cloud one, unless it is never sent (an `agents.yaml` `ollama`
-agent without Basic auth, or a judge with `auth_header: none`), in which
-case it is not read. The result is the `judge_agent_separation`
+well as a cloud one, and also when its connector never sends it (an
+`agents.yaml` `ollama` agent without Basic auth, or a judge with
+`auth_header: none`): Two-Key cannot show it differs from the agent's. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
 `identities_digest`. The entry also holds the full quorum policy
@@ -226,7 +238,8 @@ from `two_key.canonical` (SHA-256 of sorted-key, compact, ASCII JSON).
 At call time, a judge that is not on a loopback host makes the round deny
 when `authorize` gets no `agent_session` (`cloud_judge_session_required`).
 A judge whose credential equals that session (whitespace stripped, a
-username and password compared as their pair) abstains with
+username and password compared as their pair, a key it holds but never
+sends included) abstains with
 `cloud_judge_reused_agent_session`, wherever it connects, and the round
 denies. This is the start-up rule again, at call time, with the session the
 agent really uses: it catches a judge holding the agent's key even when
@@ -245,6 +258,11 @@ it is `min(2, number of judges)`.
 `QuorumPolicy.without_diversity_floors()` is **not** that default: it sets the
 same floor values but defaults `required_yes` to 2. Prefer `QuorumPolicy()`
 (or omit / set `required_yes` to `null`) for the one-judge default threshold.
+A floor the judges can never meet refuses to start, and `convene` denies it
+without calling any judge: `required_yes` or `min_responding` above the
+number of judges (`too_few_judges_configured:`), and
+`min_distinct_providers` above the number of distinct judge providers
+(`insufficient_distinct_providers:`).
 
 `profile: high_assurance` in the quorum block, or
 `QuorumPolicy.high_assurance()`, needs judges from at least two makers
@@ -262,10 +280,9 @@ judge-is-not-the-agent check above never compares it with the monitored
 agent. Maker names are compared after NFKC and case folding, so
 `OpenAI` and `openai` are one maker. `min_distinct_providers` is a separate
 count: the `provider` labels of the judges that returned a valid ballot.
-Through 0.2.1 these keys were `vendor:` and `min_vendors:`. 0.2.2 still loads
-both and prints `two-key: vendor is deprecated; use maker (same meaning).
-vendor is removed in 0.2.3.` (or the `min_vendors` line) on stderr; giving the
-old and the new name together is refused. 0.2.3 removes the old names.
+Through 0.2.1 these keys were `vendor:` and `min_vendors:`, and 0.2.2 loaded
+them as deprecated aliases. 0.2.3 refuses them as unknown keys, and the Python
+names `vendor=`, `min_vendors=`, `.vendor`, and `.min_vendors` are gone.
 
 `TwoKey` does not start with no judge, with `timeout_seconds: null` (Path B
 needs a hard deadline), or with two judges that share an id
@@ -309,8 +326,13 @@ the rules file, judges.yaml and agents.yaml (JSON or YAML), the
 `monitored_agent:` block, judge ballots, provider responses, agent
 proposals, `--args`, and token payloads. A key repeated in one mapping, at
 any depth, is refused with `duplicate key '<k>'`; it never resolves
-last-one-wins. JSON `NaN` and `Infinity` are refused too (a ballot with
-them is malformed and abstains). YAML still loads with a safe loader.
+last-one-wins. A YAML merge key (`<<`) is refused too, because which value
+wins is not visible in the text; write the keys out (plain anchors and
+aliases still load). JSON `NaN` and `Infinity` are refused too (a ballot
+with them is malformed and abstains), and so is an integer of more than
+4,300 digits (`integer too large`; in tool arguments it denies as
+`invalid_call`, at authorize and at the gateway). Unknown keys inside an
+`auth:` mapping are refused. YAML still loads with a safe loader.
 
 judges.yaml accepts only the top-level keys `judges`, `quorum`, and
 `monitored_agent`; agents.yaml only `agents`. Anything else (a typo such as
@@ -413,9 +435,17 @@ are ciphertext. The append lock is `<ledger>.lock` next to the ledger
 directory. Redemption locks are `<ledger>.redeem-locks/` there too, not
 inside the ledger directory. First open writes `<ledger>.ledger-key/ledger.key` and
 `<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
-Both are created with O_EXCL at mode 0600; a ledger key that is group- or
-world-readable, a symlink, or not 32 bytes is refused (`ledger_key_insecure:`
-or `ledger_key_unreadable:`).
+Both are created with O_EXCL at mode 0600, `<ledger>.witness` at 0700 (and
+set back to 0700 on open); a ledger key that is group- or world-readable, a
+symlink, or not 32 bytes is refused (`ledger_key_insecure:` or
+`ledger_key_unreadable:`), and so is a witness or capability key that is
+group- or world-readable, a symlink, or not a regular file
+(`witness key: key_file_insecure:`, `capability key: key_file_insecure:`;
+`chmod 600` it). A principal private key that does not match the principal
+public key given to `Ledger` is refused before anything is written
+(`principal key mismatch`). First open also writes the ledger's first entry,
+`witness_pinned`; see "Pin the witness key" below.
+`--witness-public-key PEM` gives the witness pin kept outside the ledger.
 The authorize command does not accept test-double judges.
 
 ## Authorize from Python
@@ -488,7 +518,10 @@ next to the ledger directory, not inside it. The public half is
 0700 directory. After a token has been issued it is never regenerated: a
 missing or different key refuses to start (`capability_key_missing`,
 `capability_key_changed`), and so does a ledger with issued tokens but no
-pinned key fingerprint (`capability_key_unpinned`). A capability key equal to the principal key is
+pinned key fingerprint (`capability_key_unpinned`). Once a `TwoKey` with
+`private_key=` has run on a ledger, a start without it is refused
+(`keyless_start_refused:`): it would record no capability key and block
+later keyed starts. A capability key equal to the principal key is
 refused. The principal key on the ledger signs the head. A token signed
 with that principal key does not redeem.
 
@@ -579,10 +612,109 @@ and the token can be redeemed again within its lifetime. A removed
 `redemption` or `redemption_aborted` leaves the signed `redemption_started`
 in place, so a retry is still refused (`already_attempted`).
 
+## Pin the witness key
+
+The ledger head is signed by the principal key and by the witness key,
+`<ledger>.witness/witness.pem`. The witness public key is pinned in two
+places.
+
+**In the ledger.** A new ledger's first entry is `witness_pinned`
+(`source: new_ledger`). A ledger made by 0.2.2 or earlier pins the key that
+signed its current head the first time 0.2.3 opens it (`source: first_use`,
+trust on first use), and only if `witness.pem` is that key. Any
+`Ledger(...)` or CLI command that opens the ledger does this. From then on,
+a head signed by another witness key, or a `witness.pem` that does not
+match, is refused with `witness_key_changed:` when the ledger opens, before
+an append is written, and at checkpoint.
+
+**Outside the ledger, if you configure it.** Copy
+`<ledger>.witness/witness.pub.pem` to a place that whoever writes the ledger
+directory and its sibling directories cannot change (another host, a
+read-only mount, configuration management), and pass it on every open:
+
+```bash
+two-key authorize ... --witness-public-key /etc/two-key/witness.pub.pem
+```
+
+```python
+from two_key.keys import load_public_key
+ledger = Ledger("ledger", key, witness_public_key=load_public_key("/etc/two-key/witness.pub.pem"))
+```
+
+With it, a new ledger needs that witness key already in place
+(`witness_key_missing:`). What each pin detects:
+
+| Change to the ledger | In-ledger pin only | With the configured pin |
+| --- | --- | --- |
+| `witness.pem` replaced; chain not rewritten | Refused | Refused |
+| Head signed by another witness key; chain not rewritten | Refused | Refused |
+| Chain rewritten from its first entry with the principal key and the ledger key | Not detected | Refused |
+| Witness key swapped before the first open under 0.2.3 | Not detected | Refused, if your copy is the original key |
+| Rollback to an earlier head signed by the same keys, or a wipe (#62) | Not detected | Not detected |
+
+Check both pins with:
+
+```bash
+two-key audit --key keys/principal.pem --ledger ledger --witness-public-key /etc/two-key/witness.pub.pem
+```
+
+It prints `witness.head` (the key that signed the head), `witness.in_ledger`
+(the pinned key, the entry that pinned it, and how), `witness.configured`,
+and `witness.history`, as `sha256:` fingerprints, plus the
+`check_decision_digests` result. It exits 1 on a refusal or a digest
+problem. `Ledger.verify()` returns the same `witness` report.
+
+### Rotate the witness key
+
+```bash
+two-key rotate-witness --key keys/principal.pem --ledger ledger \
+  --witness-public-key /etc/two-key/witness.pub.pem --reason "yearly rotation"
+```
+
+or `ledger.rotate_witness(reason="yearly rotation")` in Python. It writes a
+`witness_rotated` entry signed by the principal key, the current witness
+key, and the new one, signs a new head with the new key, and then moves the
+new key into `witness.pem` and its public half into `witness.pub.pem`. Then
+copy the new `witness.pub.pem` over your configured copy: the old copy no
+longer opens the ledger. Outstanding tokens are not affected.
+
+A rotation needs the old witness key's signature, so a lost witness key
+cannot be rotated away from: start a new ledger. Key backup is planned for
+0.3.
+
+An interrupted rotation leaves `witness.pem.new` beside `witness.pem`, and
+the next rotation refuses until it is dealt with:
+
+- The ledger opens: the rotation never reached the ledger. Delete
+  `witness.pem.new`.
+- It refuses with `witness_key_changed`: the new head was written, but the
+  key was not moved. Move `witness.pem.new` to `witness.pem` (it is already
+  mode 0600). The next open rewrites `witness.pub.pem` from it; copy the
+  file only after that open.
+- It refuses with `signed head does not match the chain`: the
+  `witness_rotated` entry was written but not checkpointed. Follow "If the
+  ledger will not open after a crash" above, then delete `witness.pem.new`.
+
 ## Known trade-offs by configuration
 
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
+
+- A credential configured on a judge or an `agents.yaml` agent is read at
+  start-up even when its connector never sends it (`auth_header: none`, an
+  Ollama agent), so a callback or keyring credential runs then, and one that
+  cannot be read refuses to start. At call time it is read only to compare
+  with `agent_session`. Remove `auth:` from a connector that does not send
+  it.
+- A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
+  start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
+  memory-hard: against someone who holds the key directory it slows a
+  guessable password less than scrypt did, in exchange for running on a
+  FIPS-only OpenSSL.
+- Without `--witness-public-key` (`witness_public_key=`), the principal key
+  and the ledger key together can rewrite the ledger under a new witness
+  key. With it, the witness key is needed too, and the configured copy must
+  be updated after every rotation or the ledger refuses to open.
 
 - Declared `upstream:` labels are folded before match (NFKC, zero-width stripped,
   Unicode dashes to ASCII, casefold). Bare maker names such as `openai` map to the

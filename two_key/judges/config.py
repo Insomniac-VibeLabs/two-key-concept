@@ -8,7 +8,7 @@ Format (see examples/judges.yaml):
       min_distinct_providers: 1
       # profile: high_assurance  # opt-in: judges from 2 makers, 1 local judge, require_local_yes
       # Defaults shown (one judge is enough; see quorum.QuorumPolicy):
-      min_makers: 1            # >= 2 with profile: high_assurance (min_vendors: deprecated alias)
+      min_makers: 1            # >= 2 with profile: high_assurance
       min_local_judges: 0      # >= 1 with profile: high_assurance
       require_local_yes: false # true with profile: high_assurance
       heterogeneity_scope: selection   # selection | responding
@@ -33,7 +33,7 @@ Format (see examples/judges.yaml):
         base_url: https://api.x.ai/v1
         model: REPLACE_WITH_MODEL
         auth: {type: env, var: XAI_API_KEY}
-        maker: xai                # optional; who made the model; defaults to provider (vendor: deprecated alias)
+        maker: xai                # optional; who made the model; defaults to provider
         local_weights: false      # optional; ollama defaults to true
         echo_binding: false       # optional; required true when ballot_binding: echo
 
@@ -72,19 +72,21 @@ ADAPTERS = {
 DEFAULT_PROVIDER = {"openai_compatible": "openai-compatible", "anthropic": "anthropic",
                     "gemini": "google", "ollama": "ollama-local"}
 JUDGE_KEYS = {"id", "type", "provider", "base_url", "model", "auth", "timeout", "json_mode",
-              "max_tokens", "auth_header", "allow_insecure_http", "maker", "vendor", "local_weights", "weights_sha256",
+              "max_tokens", "auth_header", "allow_insecure_http", "maker", "local_weights", "weights_sha256",
               "echo_binding", "ballot_key_env", "receives_proposal", "response_format", "reasoning_effort",
               "tenant", "upstream"}
 QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "timeout_seconds", "parallel",
-               "min_makers", "min_vendors", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
+               "min_makers", "min_local_judges", "heterogeneity_scope", "judge_inputs", "ballot_binding",
                "require_path_a_first", "require_local_yes", "tool_args_on_derive_deny", "profile",
                "allow_same_provider_judge", "allow_same_model_distinct_tenant"}
 TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 makers, 1 local, local yes).
-# vendor and min_vendors are the names through 0.2.1: accepted in 0.2.2 with a note on stderr, removed in 0.2.3.
-# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
-# Remove "vendor" from JUDGE_KEYS and the build_judge copy list, and "min_vendors" from QUORUM_KEYS.
 QUORUM_PROFILES = {"default", "high_assurance"}
+
+
+# The keys each auth type takes; any other key is refused (#52).
+AUTH_KEYS = {"none": {"type"}, "env": {"type", "var"}, "keyring": {"type", "service", "username"},
+             "callback": {"type", "callback"}, "basic": {"type", "username_env", "password_env"}}
 
 
 class JudgeConfigError(ValueError):
@@ -109,6 +111,13 @@ def build_credential(auth: Any) -> CredentialProvider:
     t = auth["type"]
     if any(k in auth for k in ("key", "api_key", "password", "token", "secret")):
         raise JudgeConfigError("secrets must not be written in judges config; reference an env var or keyring")
+    if not isinstance(t, str):
+        raise JudgeConfigError(f"unknown auth type {t!r}")
+    allowed = AUTH_KEYS.get(t)
+    if allowed is not None and set(auth) - allowed:
+        # A misspelled key (vars:, servce:) must not be dropped silently (#52).
+        raise JudgeConfigError(f"auth type {t} takes only {sorted(allowed - {'type'}) or 'type'}, not "
+                               f"{sorted(map(str, set(auth) - allowed))}")
     if t == "none":
         return NoCredential()
     if t == "env":
@@ -116,9 +125,6 @@ def build_credential(auth: Any) -> CredentialProvider:
     if t == "keyring":
         return KeyringApiKey(auth["service"], auth["username"])
     if t == "basic":
-        extra = set(auth) - {"type", "username_env", "password_env"}
-        if extra:
-            raise JudgeConfigError(f"auth type basic takes username_env and password_env only, not {sorted(extra)}")
         names = auth.get("username_env"), auth.get("password_env")
         if any(not isinstance(n, str) or not n or n.startswith("REPLACE_") for n in names):
             raise JudgeConfigError("auth type basic needs username_env and password_env: the names of the "
@@ -155,7 +161,7 @@ def build_judge(spec: dict, transport=None) -> Judge:
         "credential": build_credential(spec.get("auth")), "transport": transport,
     }
     for k in ("base_url", "timeout", "auth_header", "allow_insecure_http", "json_mode", "max_tokens",
-              "maker", "vendor", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal",
+              "maker", "local_weights", "weights_sha256", "echo_binding", "ballot_key_env", "receives_proposal",
               "response_format", "reasoning_effort"):
         if k in spec:
             kw[k] = spec[k]

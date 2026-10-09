@@ -1,6 +1,6 @@
 # Threat model
 
-This is the design model for `two-key-concept` 0.2.2 (tag `v0.2.2` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.2 changes when a judge counts as the monitored agent, adds HTTP Basic auth with scrypt-fingerprinted passwords, and describes the witness key as it is (not pinned, #58).
+This is the design model for `two-key-concept` 0.2.3 (tag `v0.2.3` on `main`). `v0.2.0` stays on `2f756ac`. 0.2.3 pins the ledger's witness public key in the ledger and, optionally, outside it (#58), refuses a judge that holds the monitored agent's credential whether or not it is sent and in either form (token or username and password), and removes the `vendor` / `min_vendors` aliases. Password fingerprints use PBKDF2-HMAC-SHA256, an approved function, instead of scrypt. 0.2.2 changed when a judge counts as the monitored agent and added HTTP Basic auth.
 It is not a penetration test and it is not an independent review. The package is a
 prototype. It is not a FIPS 140-3 validated module. Crypto is Ed25519,
 SHA-256, and AES-256-GCM from the `cryptography` package.
@@ -19,13 +19,19 @@ the code wins, then this file should be corrected.
   gateway receives only the public half.
 - The ledger key and the witness key, both outside the ledger directory
   (`<ledger>.ledger-key` and `<ledger>.witness`).
+- The witness public key the operator keeps outside the ledger
+  (`witness_public_key=`, `--witness-public-key`), when one is configured. It
+  is not secret, but whoever can change it can make a forged head pass.
 - The per-install fingerprint key (`<ledger>.ledger-key/fingerprint.key`),
   which keys credential fingerprints. It sits beside the ledger key, so it
   protects fingerprints only from someone without that directory. Against
   someone with it, a random API token is safe by its length, a guessable
   token (a placeholder such as `EMPTY`, or a short key chosen for a local
-  server) is not, and a password is protected only by scrypt's cost, which
-  slows guessing but does not stop it for a guessable password.
+  server) is not, and a password is protected only by PBKDF2's cost
+  (600,000 iterations), which slows guessing but does not stop it for a
+  guessable password. PBKDF2 is not memory-hard, so dedicated hardware
+  guesses faster against it than against scrypt; it is used because it is
+  an approved function and scrypt is not (ROADMAP 0.9).
 - The wrapped data key stored inside the ledger directory.
 - Judge credentials and monitored-agent credentials. They are not the same secret.
 - The capability token and the argument bytes it is bound to.
@@ -82,17 +88,20 @@ the code wins, then this file should be corrected.
   local judge, and a yes from a local judge;
   `QuorumPolicy.section4()` is that plus `require_path_a_first`. The flag is
   still not a skip. `min_distinct_providers` still defaults to 1.
-- A judge that is the monitored agent refuses to start. The same agent
-  means the agent's credential (API token, or username and password over
-  HTTPS) at any address, or both sides keyless on one address, compared as
-  configured (`host:port`, local aliases folded, no DNS). Any model and any
+- A judge is not the monitored agent: `TwoKey` refuses to start when a
+  judge holds the agent's credential (the same API token, or the same
+  username and password) at any address, whether or not either side sends
+  it and whether it is held as a token or as a Basic pair, or when both
+  sides send no credential on one address, compared as configured
+  (`host:port`, local aliases folded, no DNS). Any model and any
   vendor is allowed otherwise. The likely accidents (one side keyless on
   the agent's address, the agent's model on its address or through a
   shared or undeclared proxy, a shared tenant id, an unresolved upstream)
   start with a warning on stderr and in `constitution_loaded`. The agent
   is declared by the operator, never by the agent. A judge that presents
   the runtime agent's session abstains, wherever it connects.
-- A value read twice: every JSON and YAML input refuses a repeated key.
+- A value read twice: every JSON and YAML input refuses a repeated key and
+  a YAML merge key (`<<`).
   Oversized or too-deeply nested arguments are a deny before the ledger.
   Inputs stop at 62 levels, two under the encoder's 64, so the ledger and
   judge wrappers always encode.
@@ -105,18 +114,29 @@ the code wins, then this file should be corrected.
 - A second run of a token after `redemption_started` has been checkpointed.
   A tool exception writes `redemption_aborted` and leaves the token usable.
 - A silent edit of a ledger record that still verifies, and opening the log
-  with only the principal key. The head needs a witness signature as well,
-  but the witness public key is read from the head itself and is not pinned
-  (#58), so the principal key and the ledger key together can sign a head
-  with a new witness key. A pin outside the ledger is planned for 0.2.3.
+  with only the principal key. The head needs a witness signature as well.
+- A replaced `witness.pem`, or a head signed by another witness key, on a
+  chain that was not rewritten (#58). The witness public key is pinned in
+  the ledger: the first entry of a new ledger is `witness_pinned`, and a
+  ledger from 0.2.2 or earlier pins the key that signed its head on its
+  first open under 0.2.3. A head or a `witness.pem` that does not match is
+  refused (`witness_key_changed`) on open, append, and checkpoint. The key
+  changes only by a `witness_rotated` entry signed by the principal and the
+  old and new witness keys.
+- With the witness public key also configured outside the ledger
+  (`witness_public_key=`, `--witness-public-key`), a head forged with the
+  principal key and the ledger key but without the witness private key,
+  even on a chain rewritten from its first entry.
 
 ## Assumptions
 
 - The gateway is the only holder of tool credentials. This package cannot
   stop an agent that can call the tool by another path.
 - The principal key and the ledger key are not both in the attacker's
-  hands. The witness key adds to this only once it is pinned outside the
-  ledger (#58, planned for 0.2.3).
+  hands, unless the witness public key is configured outside the ledger.
+  With that pin, the assumption is that the principal, witness, and ledger
+  keys are not all in the attacker's hands, and that the attacker cannot
+  change the configured copy of the witness public key.
 - The action record describes the real call only for fields the tool spec
   names. Every loaded constitution has `tool_specs`. A tool with no spec
   does not redeem. A counterparty path requires `allow`. A party off that
@@ -194,17 +214,32 @@ claims to close.
 - Stealing the ledger key decrypts the log. Stealing the principal key does
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
-  key is enough to forge a head, because the witness public key is not
-  pinned (#58): a new witness key can sign it. A pin outside the ledger is
-  planned for 0.2.3. There is no external anchor, so those two keys are
-  enough to rewrite a ledger that never leaves the machine.
+  key is still enough to forge a head when no witness public key is
+  configured outside the ledger: the in-ledger pin is part of the chain, and
+  those two keys can rewrite the chain from its first entry, pin included,
+  under a new witness key. With the out-of-ledger pin, forging a head needs
+  the principal, witness, and ledger keys together (#58). There is no
+  external anchor, so those keys are enough to rewrite a ledger that never
+  leaves the machine.
+- Trust on first use: a ledger from 0.2.2 or earlier pins the witness key
+  that signed its current head on its first open under 0.2.3. A witness key
+  swapped before the upgrade, and the heads it signed, cannot be detected.
+  A configured out-of-ledger pin, if the operator kept a copy of the
+  original witness public key, does detect it.
 - Anyone who can write the ledger directory can roll the ledger back to an
   earlier signed head (a saved `head.json` and a truncated `entries.jsonl`)
   or delete `entries.jsonl` and `head.json`, with no key. Both open and
   verify, and a rolled-back ledger forgets later redemptions. With the
   principal key and write access to `<ledger>.ledger-key` and
   `<ledger>.witness`, a whole replacement ledger under a new ledger key
-  verifies. Without an external anchor, neither is detected (#62).
+  verifies, unless the witness public key is configured outside the
+  ledger. Neither witness pin detects a rollback to an earlier head signed
+  by the same keys, or a wipe followed by a new ledger under the same
+  witness key. Without an external anchor, neither is detected (#62).
+- A rotation interrupted after its head is written and before the new key
+  is moved into place leaves `witness.pem.new` beside `witness.pem`, and the
+  ledger refuses to open (`witness_key_changed`) until it is moved. A lost
+  witness key means a new ledger until key backup (0.3) can restore it.
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
   counterparty, and counterparties read from the argument bytes), reasons,
@@ -248,17 +283,16 @@ claims to close.
 
 ## Planned changes to this model
 
-These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.2, and nothing in
+These come from [ROADMAP.md](../ROADMAP.md). None is in 0.2.3, and nothing in
 this section describes current behavior. Each item is added to the sections
 above in the release that ships it.
 
 - Key backup (target 0.3). New asset: the backup bundle. It holds the same
   secrets as the keys above, so it is treated as equal to them. The ledger
   key and the witness key are meant to be backed up separately from each
-  other, so that one bundle never holds every key a head needs once the
-  witness key is pinned outside the ledger (#58). Until then, the residual
-  risks above say the principal key and the ledger key alone can rewrite a
-  ledger. A weak passphrase becomes a new residual risk.
+  other, so that one bundle never holds every key a head needs when the
+  witness key is pinned outside the ledger (#58). A weak passphrase becomes
+  a new residual risk.
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.
@@ -330,6 +364,6 @@ above in the release that ships it.
 - `two_key/quorum.py`: an abstention is not a yes, ballots pair with judges by position, the default has no diversity floors (high_assurance has them), maker names compare case-insensitively, and `require_path_a_first` is not a skip. `tool_args_on_derive_deny` defaults false. Path B still runs.
 - `two_key/gateway.py`: argument hash of the caller's bytes, spec hash, recomputed form, then `redemption_started`, then the tool with declared paths only. The verifier has no private key. No scanner.
 - `two_key/capability.py`: the token fields are tool, args hash, ledger root, ledger size, the two constitution hashes, `spec_hash`, and, when issued, `form` and `claimed_data_class`. The signing key is the capability key, not the principal key. TTL default is 120 seconds, at most 300.
-- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, scrypt (N=2^17, r=8, p=1) for a username and password as one pair; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
-- `two_key/strict.py`: every JSON and YAML input refuses duplicate keys.
-- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append.
+- `two_key/identity.py`, `netloc.py`: judge versus monitored agent from operator configuration only; refuse on the same credential at any address, or both keyless on one address; everything else warns and is recorded; credential fingerprints under the per-install key: HMAC-SHA256 for API tokens, PBKDF2-HMAC-SHA256 (600,000 iterations) for a username and password as one pair and for any secret containing `:`; addresses as configured, no DNS; local means the loopback, RFC 1918, or fc00::/7 allowlist.
+- `two_key/strict.py`: every JSON and YAML input refuses duplicate keys, YAML merge keys, and integers over 4,300 digits.
+- `two_key/ledger.py`: the ledger key, the witness key, the capability key, the append lock, and the redemption locks stay outside the directory. The ledger does not load the capability private key. The principal key is not a decryption key and not the minting key. A stale in-memory ledger refuses to append. The witness public key is pinned (`witness_pinned`, first entry or first open) and checked against the head and `witness.pem` on open, append, and checkpoint, and against the configured pin when one is given; it changes only by `witness_rotated` with three signatures; `append` refuses both kinds.
