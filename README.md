@@ -147,9 +147,9 @@ and how that was found (`resolved_by`: `endpoint`, `model_prefix`, or
 `declared_upstream`), scoped tenant ids (a `tenant:` mapping of
 `organization`, `project`, `account`, or `deployment`, plus what the URL
 shows), and a credential fingerprint under a per-install key, whitespace
-stripped (HMAC-SHA256 for an API token; scrypt, N=2^17, r=8, p=1, for a
-username and password, fingerprinted as one pair, and for any secret that
-contains `:`). Every credential a side holds is fingerprinted, sent or not.
+stripped (HMAC-SHA256 for an API token; PBKDF2-HMAC-SHA256, 600,000
+iterations, for a username and password, fingerprinted as one pair, and for
+any secret that contains `:`). Every credential a side holds is fingerprinted, sent or not.
 
 A judge may run any model from any vendor. A judge is not the monitored agent, and
 `TwoKey` refuses to start (`judge_matches_agent:`), when it holds the monitored

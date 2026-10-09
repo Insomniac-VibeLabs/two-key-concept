@@ -4,7 +4,7 @@ A judge must not be the monitored agent: TwoKey refuses to start when a judge ho
 token, a username/password pair, or a session), at any address, sent or not, or when neither side sends a
 credential on the same address.
 Any model from any vendor is allowed; likely accidents are warned and recorded. Usernames and passwords are
-HTTP Basic over HTTPS only and are compared as one scrypt-fingerprinted pair.
+HTTP Basic over HTTPS only and are compared as one PBKDF2-fingerprinted pair.
 """
 
 import base64
@@ -232,9 +232,9 @@ class HeldCredential(EnvVars):
         other = judge_identity(side("m2", "https://other.example/v1",
                                     credential=BasicAuthCredential("HELD_USER", "HELD_PASS")), FP)
         self.assertIsNone(compare(token_agent, other))
-        # One fingerprint per credential, by content: scrypt for a secret with ':', never also the cheap HMAC.
+        # One fingerprint per credential, by content: PBKDF2 for a secret with ':', never also the cheap HMAC.
         [held] = token_judge.credentials
-        self.assertTrue(held.startswith("scrypt-n17-r8-p1:"))
+        self.assertTrue(held.startswith("pbkdf2-sha256-600000:"))
         [plain] = judge_identity(side("m2", "https://other.example/v1", "sk-no-colon"), FP).credentials
         self.assertTrue(plain.startswith("hmac-sha256:"))
 
@@ -283,12 +283,12 @@ class Basic(EnvVars):
         with self.assertRaisesRegex(CredentialError, "BA_MISSING is not set"):
             BasicAuthCredential("BA_USER", "BA_MISSING").get_token()
 
-    def test_a_password_pair_is_fingerprinted_with_scrypt_and_a_token_with_hmac(self):
+    def test_a_password_pair_is_fingerprinted_with_pbkdf2_and_a_token_with_hmac(self):
         from two_key.identity import credential_fingerprint, password_fingerprint
         self.setenv(BA_USER="alice", BA_PASS="s3cret", RULE_AGENT_KEY="agent-key")
         basic = side("m", "https://h.example/v1", credential=BasicAuthCredential("BA_USER", "BA_PASS"))
         [fp] = judge_identity(basic, FP).credentials
-        self.assertRegex(fp, "^scrypt-n17-r8-p1:[0-9a-f]{64}$")
+        self.assertRegex(fp, "^pbkdf2-sha256-600000:[0-9a-f]{64}$")
         self.assertEqual(fp, password_fingerprint(" alice:s3cret\n", FP))         # whitespace stripped, as for tokens
         self.assertNotEqual(fp, password_fingerprint("alice:s3cret", b"j" * 32))  # keyed by the install
         self.assertNotIn("s3cret", fp)
@@ -320,7 +320,7 @@ class Basic(EnvVars):
         self.assertEqual(judge._auth_headers(),
                          {"Authorization": "Basic " + base64.b64encode(b"alice:s3cret").decode()})
         [fp] = judge_identity(judge, FP).credentials
-        self.assertTrue(fp.startswith("scrypt-n17-r8-p1:"))
+        self.assertTrue(fp.startswith("pbkdf2-sha256-600000:"))
         self.assertRegex(compare(agent, judge_identity(judge, FP)), "the same credential")
         mon = MonitoredAgent("a", "x", "m", "https://h.example/v1", "cloud", VaultBasic(), kind="openai_compatible")
         self.assertEqual(configured_agent_identity(mon, FP).credentials, frozenset({fp}))
@@ -341,11 +341,11 @@ class Basic(EnvVars):
                 with self.assertRaisesRegex(IdentityError, "agent 'a': credential is empty at start-up"):
                     configured_agent_identity(mon, FP)
 
-    def test_a_scrypt_failure_and_a_missing_key_are_named(self):
+    def test_a_pbkdf2_failure_and_a_missing_key_are_named(self):
         from unittest import mock
         from two_key.identity import password_fingerprint
-        with mock.patch("two_key.identity.hashlib.scrypt", side_effect=ValueError("memory limit exceeded")):
-            with self.assertRaisesRegex(IdentityError, r"^password_fingerprint_failed: scrypt \(scrypt-n17-r8-p1"):
+        with mock.patch("two_key.identity.hashlib.pbkdf2_hmac", side_effect=ValueError("unsupported")):
+            with self.assertRaisesRegex(IdentityError, r"^password_fingerprint_failed: PBKDF2 \(pbkdf2-sha256-600000"):
                 password_fingerprint("alice:s3cret", FP)
         self.setenv(BA_USER="alice", BA_PASS="s3cret")
         mon = MonitoredAgent("a", "x", "m", "https://h.example/v1", "cloud", BasicAuthCredential("BA_USER", "BA_PASS"),

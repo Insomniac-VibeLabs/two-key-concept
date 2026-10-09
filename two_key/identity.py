@@ -67,9 +67,9 @@ Each judge and agent is resolved to:
 - ``credential``: a fingerprint of every credential the side holds, sent or
   not, with leading and trailing whitespace stripped. An API token is
   fingerprinted with HMAC-SHA256 (``hmac-sha256:...``); a username and
-  password, as one ``username:password`` pair, with scrypt
-  (``scrypt-n17-r8-p1:...``, N=2^17, r=8, p=1), because a password may be
-  guessable. Any secret that contains ``:`` is fingerprinted as a pair, so a
+  password, as one ``username:password`` pair, with PBKDF2-HMAC-SHA256
+  (``pbkdf2-sha256-600000:...``, 600,000 iterations), because a password may
+  be guessable. Any secret that contains ``:`` is fingerprinted as a pair, so a
   username and password match whether a side holds them as HTTP Basic or as
   a ``user:pass`` token. ``credential_sent`` records whether the connector
   sends it. Both are keyed
@@ -78,7 +78,7 @@ Each judge and agent is resolved to:
   stops someone who sees a fingerprint outside the key directory (a copied
   record, an export) from testing guesses. It does not stop someone who holds
   the key directory, who can also decrypt the ledger: there a random API
-  token is safe by its length, and a password only by scrypt's cost. Raw
+  token is safe by its length, and a password only by PBKDF2's cost. Raw
   keys and passwords are never stored or logged. ``none`` means the endpoint
   takes no key.
 
@@ -214,16 +214,18 @@ def credential_fingerprint(secret: str | None, key: bytes | None = None) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
-# A username and password may be guessable, so the pair is stretched: scrypt (RFC 7914) with the per-install key
-# as the salt, at OWASP's minimum cost (N=2^17, r=8, p=1: 128 MiB, about 0.4 s). API tokens are random and keep
-# the cheap HMAC above. The prefix names the parameters, so a later change of cost is visible in the ledger.
-PASSWORD_KDF = {"alg": "scrypt", "n": 2 ** 17, "r": 8, "p": 1, "dklen": 32}
-PASSWORD_FINGERPRINT_ALG = "scrypt-n17-r8-p1"
+# A username and password may be guessable, so the pair is stretched: PBKDF2-HMAC-SHA256 (NIST SP 800-132) with the
+# per-install key (256 bits) as the salt, at 600,000 iterations (OWASP's setting where FIPS 140 is required; about
+# 0.15 s). PBKDF2 is in OpenSSL's FIPS provider; scrypt is not, and is not an approved function, so it would stop a
+# later approved mode (ROADMAP 0.9). API tokens are random and keep the cheap HMAC above. The prefix names the
+# parameters, so a later change of cost is visible in the ledger.
+PASSWORD_KDF = {"alg": "pbkdf2-hmac-sha256", "iterations": 600_000, "dklen": 32}
+PASSWORD_FINGERPRINT_ALG = "pbkdf2-sha256-600000"
 
 
 def password_fingerprint(pair: str | None, key: bytes | None) -> str:
-    """Fingerprint of a ``username:password`` pair, whitespace stripped from its two ends only: scrypt under the
-    per-install key.
+    """Fingerprint of a ``username:password`` pair, whitespace stripped from its two ends only: PBKDF2-HMAC-SHA256
+    with the per-install key as the salt.
 
     A key is required; there is no unkeyed form for a password."""
     pair = (pair or "").strip()
@@ -234,10 +236,10 @@ def password_fingerprint(pair: str | None, key: bytes | None) -> str:
                             "per-install key")
     k = PASSWORD_KDF
     try:
-        derived = hashlib.scrypt(FINGERPRINT_DOMAIN + pair.encode("utf-8", "surrogatepass"), salt=key, n=k["n"],
-                                 r=k["r"], p=k["p"], maxmem=4 * 128 * k["r"] * k["n"], dklen=k["dklen"])
-    except (ValueError, MemoryError, AttributeError) as e:   # out of memory, or no scrypt in this OpenSSL (FIPS)
-        raise IdentityError(f"password_fingerprint_failed: scrypt ({PASSWORD_FINGERPRINT_ALG}, 128 MiB) failed "
+        derived = hashlib.pbkdf2_hmac("sha256", FINGERPRINT_DOMAIN + pair.encode("utf-8", "surrogatepass"), key,
+                                      k["iterations"], k["dklen"])
+    except (ValueError, MemoryError, AttributeError) as e:   # an OpenSSL that refuses these parameters
+        raise IdentityError(f"password_fingerprint_failed: PBKDF2 ({PASSWORD_FINGERPRINT_ALG}) failed "
                             f"({type_tag(e)})") from None
     return f"{PASSWORD_FINGERPRINT_ALG}:{derived.hex()}"
 
@@ -731,7 +733,7 @@ def _secret_from(credential: Any) -> str:
 
 def secret_fingerprint(secret: str | None, fp_key: bytes | None) -> str:
     """Fingerprint a secret by what it contains: one with ``:`` may be a ``username:password`` pair (HTTP Basic, or a
-    token that holds one), so scrypt (``password_fingerprint``); anything else HMAC (``credential_fingerprint``).
+    token that holds one), so PBKDF2 (``password_fingerprint``); anything else HMAC (``credential_fingerprint``).
     So a username and password match whether a side holds them as a Basic pair or as a ``user:pass`` token, and a
     password never gets the cheap hash."""
     secret = (secret or "").strip()

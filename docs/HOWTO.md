@@ -143,14 +143,17 @@ At startup each judge and agent is resolved to:
 - a credential fingerprint of the key with surrounding whitespace stripped,
   under a per-install key, `<ledger>.ledger-key/fingerprint.key` (32 random
   bytes, created once with O_EXCL, mode 0600): HMAC-SHA256 for an API token
-  (`hmac-sha256:`), and scrypt (N=2^17, r=8, p=1: 128 MiB, about 0.4 s;
-  `scrypt-n17-r8-p1:`) for a username and password, fingerprinted as one
-  `username:password` pair with whitespace stripped from its two ends only.
+  (`hmac-sha256:`), and PBKDF2-HMAC-SHA256 with the per-install key as the
+  salt (600,000 iterations, about 0.15 s; `pbkdf2-sha256-600000:`) for a
+  username and password, fingerprinted as one `username:password` pair with
+  whitespace stripped from its two ends only. PBKDF2 is an approved
+  function and is in OpenSSL's FIPS provider; scrypt, used before 0.2.3, is
+  neither.
   The key sits beside the ledger key, so it does not stop someone who holds
   that directory; there a random token is safe by its length, a guessable
   token (a placeholder such as `EMPTY`) is not, and a password is protected
-  only by scrypt's cost. A fingerprint is chosen by content: any secret that
-  contains `:` is fingerprinted as a `username:password` pair with scrypt,
+  only by PBKDF2's cost. A fingerprint is chosen by content: any secret that
+  contains `:` is fingerprinted as a `username:password` pair with PBKDF2,
   never with HMAC, so a judge or agent holding a username and password as a
   token (`user:pass` in `credential_env`) matches the other side's Basic
   pair, and a password never gets the cheap hash. Raw keys and passwords are
@@ -684,10 +687,11 @@ names the setting or declaration that controls it.
   cannot be read refuses to start. At call time it is read only to compare
   with `agent_session`. Remove `auth:` from a connector that does not send
   it.
-- A secret that contains `:` is fingerprinted with scrypt at start-up
-  (about 0.4 s and 128 MiB each). A host whose OpenSSL has no scrypt (some
-  FIPS builds) refuses to start with such a secret
-  (`password_fingerprint_failed:`).
+- A secret that contains `:` is fingerprinted with PBKDF2-HMAC-SHA256 at
+  start-up (600,000 iterations, about 0.15 s each). PBKDF2 is not
+  memory-hard: against someone who holds the key directory it slows a
+  guessable password less than scrypt did, in exchange for running on a
+  FIPS-only OpenSSL.
 - Without `--witness-public-key` (`witness_public_key=`), the principal key
   and the ledger key together can rewrite the ledger under a new witness
   key. With it, the witness key is needed too, and the configured copy must

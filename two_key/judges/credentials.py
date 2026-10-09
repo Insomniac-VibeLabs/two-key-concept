@@ -123,7 +123,7 @@ class CallbackTokenProvider(CredentialProvider):
 class BasicAuthCredential(CredentialProvider):
     """A username and password from two environment variables, sent as HTTP Basic auth over HTTPS only.
 
-    ``get_token`` returns the ``username:password`` pair. Two-Key fingerprints that pair (scrypt under the
+    ``get_token`` returns the ``username:password`` pair. Two-Key fingerprints that pair (PBKDF2 under the
     per-install key, ``identity.password_fingerprint``) to tell a judge from the monitored agent; the pair itself
     is never stored or logged."""
 

@@ -18,7 +18,7 @@ Does not: scanning, antivirus, DLP, PKI, chain anchoring, seed phrases.
 
 Read docs/FIT.md, docs/COMPARISON.md, docs/THREAT_MODEL.md, and docs/SCOPE.md
 before README.md and docs/HOWTO.md. Coding agents: AGENTS.md. Tests: python -m unittest discover -s tests
-(442 tests, no network).
+(443 tests, no network).
 
 authorize_from_agent does not execute a tool. A missing ballot is not a yes.
 Both paths run once the call is well-formed and within limits (an oversized or
@@ -31,8 +31,8 @@ TwoKey needs monitored_agent, declared by the operator. A judge may run any
 model from any vendor. A judge is not the monitored agent: TwoKey refuses to
 start (judge_matches_agent:) when a judge holds the agent's credential (the
 same API token, or the same username and password; compared by fingerprint
-under a per-install key, HMAC-SHA256 for a token, scrypt N=2^17 r=8 p=1 for a
-username and password as one pair, and for any secret containing ':';
+under a per-install key, HMAC-SHA256 for a token, PBKDF2-HMAC-SHA256 600,000
+iterations for a username and password as one pair, and for any secret containing ':';
 Basic over HTTPS only) at any address, sent or not, or both sides
 keyless on one address (host:port as configured, local aliases folded, no
 DNS). A judge holding agent_session, sent or not, abstains at any address. Other

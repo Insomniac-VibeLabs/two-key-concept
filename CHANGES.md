@@ -734,10 +734,11 @@ commit messages of PRs #43 and #61.
 
 The two breaking changes planned in ROADMAP 0.2.x: the ledger pins its
 witness public key (#58), and the `vendor` / `min_vendors` aliases are
-removed. A third, from the owner during this release: a judge that holds
+removed. Two more, from the owner during this release: a judge that holds
 the monitored agent's credential is refused even when neither side sends
-it, and whether it is held as a token or as a username and password. Read
-"Upgrading from 0.2.2" below before upgrading.
+it, and whether it is held as a token or as a username and password; and
+passwords are fingerprinted with PBKDF2, an approved function, instead of
+scrypt. Read "Upgrading from 0.2.2" below before upgrading.
 
 ### Changed (breaking)
 
@@ -759,7 +760,7 @@ it, and whether it is held as a token or as a username and password. Read
   Every credential each side holds is now compared for the same-credential
   refusal, sent or not, and a fingerprint is chosen by content: any secret
   that contains `:` is fingerprinted as a `username:password` pair with
-  scrypt (about 0.4 s at start-up), never with HMAC. The rule for two
+  PBKDF2 (below), never with HMAC. The rule for two
   keyless sides on one address still looks only at what is sent. A key
   that is never sent is now read at start-up, so one that cannot be read
   refuses (`credential could not be read at start-up`); at call time it is
@@ -771,6 +772,21 @@ it, and whether it is held as a token or as a username and password. Read
   `judge_matches_agent: a judge must not be the monitored agent: ...` (was
   `a judge is the monitored agent`), and says to give the judge its own
   credential: a new address never clears it.
+- **Password fingerprints use PBKDF2-HMAC-SHA256 instead of scrypt.**
+  scrypt is not an approved function and is not in OpenSSL's FIPS
+  provider, so a FIPS-only host refused every username and password, and
+  it would have blocked the approved mode planned for 0.9. A
+  `username:password` pair, and any secret that contains `:`, is now
+  `pbkdf2-sha256-600000:` + PBKDF2-HMAC-SHA256 (NIST SP 800-132) with the
+  per-install key (256 bits) as the salt, 600,000 iterations (OWASP's
+  setting where FIPS 140 is required), 32 bytes, about 0.15 s each
+  (scrypt took about 0.4 s and 128 MiB). `constitution_loaded` records
+  `password_alg: pbkdf2-sha256-600000`. PBKDF2 is not memory-hard, so
+  against someone who holds the key directory a guessable password is
+  cheaper to guess on dedicated hardware than under scrypt. Whether a
+  stored PBKDF2 fingerprint counts as an approved use is for the module's
+  security policy or a test lab to confirm when 0.9 is built. The
+  failure is still `password_fingerprint_failed:`.
 - **The ledger pins its witness public key (#58).** 0.2.2 read the witness
   key from the head it was checking, so a replaced `witness.pem` was
   accepted and the principal key plus the ledger key could sign a head.
@@ -899,11 +915,14 @@ it, and whether it is held as a token or as a username and password. Read
    could not be read at start-up`); 0.2.2 did not read it. Set the variable,
    or remove `auth:`.
 10. `identities_digest` changes for every setup: each resolved identity has
-    the new key `credential_sent`, and a secret that contains `:` is
-    fingerprinted with scrypt instead of HMAC. Alerts that match the text
-    `a judge is the monitored agent` should match `judge_matches_agent:`.
-11. A secret that contains `:` now costs about 0.4 s of scrypt at start-up,
-    and refuses on a host whose OpenSSL has no scrypt.
+    the new key `credential_sent`, a username and password are
+    fingerprinted with PBKDF2 instead of scrypt (`pbkdf2-sha256-600000:`),
+    and a secret that contains `:` with PBKDF2 instead of HMAC. Alerts that
+    match `scrypt-n17-r8-p1` or the text `a judge is the monitored agent`
+    should match `pbkdf2-sha256-600000` and `judge_matches_agent:`.
+11. A secret that contains `:` now costs about 0.15 s of PBKDF2 at
+    start-up. A FIPS-only OpenSSL, which refused every username and
+    password under 0.2.2, now accepts them.
 
 ### Reviews
 
@@ -930,14 +949,16 @@ it, and whether it is held as a token or as a username and password. Read
   HOWTO trade-offs, stale wording, two duplicated code paths, and a
   misplaced test class. Kept: reading a held but unsent key at start-up
   runs its callback or keyring lookup, which the owner's rule needs (HOWTO
-  "Known trade-offs" says so), and the scrypt cost of a secret containing
-  `:`. Its last finding, that "A judge is not the monitored agent, and
+  "Known trade-offs" says so), and the slow-hash cost of a secret
+  containing `:`. Its last finding, that "A judge is not the monitored agent, and
   `TwoKey` refuses to start, when it holds..." can be misread, is answered
   in the other docs with "A judge must not be the monitored agent: `TwoKey`
   refuses to start when a judge holds..."; the README keeps the owner's
   sentence. Run by an AI assistant in this session.
-- Maintainer security review (AGENTS.md, ROADMAP 0.2.3): pending. All three
-  changes touch the ledger or the judge-is-not-the-agent check.
+- The switch from scrypt to PBKDF2 is the owner's decision, after asking
+  whether scrypt fits the FIPS goal (it does not).
+- Maintainer security review (AGENTS.md, ROADMAP 0.2.3): pending. All
+  these changes touch the ledger or the judge-is-not-the-agent check.
 
 ### Still open
 
