@@ -21,9 +21,11 @@ the code wins, then this file should be corrected.
   (`<ledger>.ledger-key` and `<ledger>.witness`).
 - The per-install fingerprint key (`<ledger>.ledger-key/fingerprint.key`),
   which keys credential fingerprints. It sits beside the ledger key, so it
-  protects fingerprints only from someone without that directory; against
-  someone with it, API tokens are safe by their length and passwords by
-  scrypt's cost.
+  protects fingerprints only from someone without that directory. Against
+  someone with it, a random API token is safe by its length, a guessable
+  token (a placeholder such as `EMPTY`, or a short key chosen for a local
+  server) is not, and a password is protected only by scrypt's cost, which
+  slows guessing but does not stop it for a guessable password.
 - The wrapped data key stored inside the ledger directory.
 - Judge credentials and monitored-agent credentials. They are not the same secret.
 - The capability token and the argument bytes it is bound to.
@@ -106,15 +108,15 @@ the code wins, then this file should be corrected.
   with only the principal key. The head needs a witness signature as well,
   but the witness public key is read from the head itself and is not pinned
   (#58), so the principal key and the ledger key together can sign a head
-  with a new witness key. Pinning is planned for 0.2.3.
+  with a new witness key. A pin outside the ledger is planned for 0.2.3.
 
 ## Assumptions
 
 - The gateway is the only holder of tool credentials. This package cannot
   stop an agent that can call the tool by another path.
 - The principal key and the ledger key are not both in the attacker's
-  hands. The witness key adds to this only once it is pinned (#58, planned
-  for 0.2.3).
+  hands. The witness key adds to this only once it is pinned outside the
+  ledger (#58, planned for 0.2.3).
 - The action record describes the real call only for fields the tool spec
   names. Every loaded constitution has `tool_specs`. A tool with no spec
   does not redeem. A counterparty path requires `allow`. A party off that
@@ -193,9 +195,16 @@ claims to close.
   not, and it does not mint a token the gateway will accept. Stealing the
   capability private key does. Stealing the principal key and the ledger
   key is enough to forge a head, because the witness public key is not
-  pinned (#58): a new witness key can sign it. Pinning is planned for
-  0.2.3. There is no external anchor, so those two keys are enough to
-  rewrite a ledger that never leaves the machine.
+  pinned (#58): a new witness key can sign it. A pin outside the ledger is
+  planned for 0.2.3. There is no external anchor, so those two keys are
+  enough to rewrite a ledger that never leaves the machine.
+- Anyone who can write the ledger directory can roll the ledger back to an
+  earlier signed head (a saved `head.json` and a truncated `entries.jsonl`)
+  or delete `entries.jsonl` and `head.json`, with no key. Both open and
+  verify, and a rolled-back ledger forgets later redemptions. With the
+  principal key and write access to `<ledger>.ledger-key` and
+  `<ledger>.witness`, a whole replacement ledger under a new ledger key
+  verifies. Without an external anchor, neither is detected.
 - What the ledger holds today: the agent's proposal text in full (the
   `proposal` entry), the derived form (`action_normalized.form`: the amount,
   counterparty, and counterparties read from the argument bytes), reasons,
@@ -246,9 +255,10 @@ above in the release that ships it.
 - Key backup (target 0.3). New asset: the backup bundle. It holds the same
   secrets as the keys above, so it is treated as equal to them. The ledger
   key and the witness key are meant to be backed up separately from each
-  other, because the residual risks above say that those keys plus the
-  principal key can rewrite a ledger. A weak passphrase becomes a new
-  residual risk.
+  other, so that one bundle never holds every key a head needs once the
+  witness key is pinned outside the ledger (#58). Until then, the residual
+  risks above say the principal key and the ledger key alone can rewrite a
+  ledger. A weak passphrase becomes a new residual risk.
 - Ledger export for SIEM (target 0.4). New boundary: ledger to exporter to
   SIEM. Export decrypts, so the exported stream leaves encryption at rest. It
   is meant to carry digests, sizes, and reason codes, not argument values.

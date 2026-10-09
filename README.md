@@ -294,7 +294,8 @@ by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key alone cannot decrypt the log or sign a new
 head. With the ledger key as well it can: the head carries its own witness
-public key, which is not pinned yet (#58; pinning is planned for 0.2.3).
+public key, which is not pinned yet (#58; a pin outside the ledger is
+planned for 0.2.3).
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 ## Known limits
@@ -302,7 +303,10 @@ It is a prototype. It is not a FIPS 140-3 validated module.
 - No independent review and no production deployment.
 - No external anchor for the ledger. Someone holding the principal and
   ledger keys can rewrite a ledger that never leaves the machine. The
-  witness key adds nothing until it is pinned (#58, planned for 0.2.3).
+  witness key adds nothing until it is pinned outside the ledger (#58,
+  planned for 0.2.3). Anyone who can write the ledger directory can roll it
+  back to an earlier signed head or wipe it, with no key, and both still
+  open and verify.
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures

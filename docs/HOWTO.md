@@ -146,8 +146,12 @@ At startup each judge and agent is resolved to:
   `scrypt-n17-r8-p1:`) for a username and password, fingerprinted as one
   `username:password` pair with whitespace stripped from its two ends only.
   The key sits beside the ledger key, so it does not stop someone who holds
-  that directory; there a password is protected only by scrypt's cost. Raw
-  keys and passwords are never logged.
+  that directory; there a random token is safe by its length, a guessable
+  token (a placeholder such as `EMPTY`) is not, and a password is protected
+  only by scrypt's cost. A pair and a token are never compared: an agent
+  declared with `credential_env` whose value is `user:pass` does not match
+  a judge's Basic pair, so declare a Basic agent with `username_env` and
+  `password_env`. Raw keys and passwords are never logged.
 
 `TwoKey` refuses with `judge_matches_agent:` only when a judge is the
 monitored agent. That is either of these:
@@ -168,10 +172,16 @@ monitored agent. That is either of these:
   `localhost`. Two keyless sides on one address, such as two models on one
   local Ollama daemon, have nothing to tell them apart, so they are refused
   whatever their models. Give the judge its own daemon or port, or its own
-  credential. A side counts as keyless when it sends no credential, whatever
-  is configured: a judge with `auth_header: none` (an Ollama judge's
-  default) and an `ollama` agent without Basic auth send none. Addresses are
-  compared as you configure them; DNS names are not resolved.
+  credential. For a connector Two-Key drives, a side counts as keyless when
+  it sends no credential, whatever is configured: a judge with
+  `auth_header: none` (an Ollama judge's default) and an `agents.yaml`
+  `ollama` agent without Basic auth send none. Two-Key sees only what its
+  own connectors send: a `monitored_agent:` declaration with
+  `credential_env` or `username_env` counts as keyed even when its server
+  ignores the key (an Ollama daemon), so a keyless judge on that address
+  only warns (`same_address_one_side_keyless`). Declare such an agent with
+  `credential: none`. Addresses are compared as you configure them; DNS
+  names are not resolved.
 
 Everything else starts: any model, any vendor, any route, the same provider,
 the same model through another endpoint, and the same address with a
@@ -198,7 +208,9 @@ key is still refused as `unknown quorum keys`.
 
 Judge and agent credentials are read at startup for this check, so a
 configured key that cannot be read refuses to start, for a local agent as
-well as a cloud one. The result is the `judge_agent_separation`
+well as a cloud one, unless it is never sent (an `agents.yaml` `ollama`
+agent without Basic auth, or a judge with `auth_header: none`), in which
+case it is not read. The result is the `judge_agent_separation`
 field of the `constitution_loaded` ledger entry: every resolved identity
 (fingerprints only), the fingerprint scheme and key id, and
 `identities_digest`. The entry also holds the full quorum policy

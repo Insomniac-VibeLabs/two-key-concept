@@ -726,6 +726,8 @@ def _fingerprint(credential: Any, fp_key: bytes | None) -> str:
         except Exception as e:      # as _secret_from: any failure to read refuses
             raise IdentityError(f"credential could not be read at start-up ({type_tag(e)}); "
                                 "Two-Key cannot show it differs from the monitored agent's") from None
+        if not isinstance(pair, str) or not pair.strip():   # as _secret_from: an empty credential refuses
+            raise IdentityError("credential is empty at start-up")
         return password_fingerprint(pair, fp_key)
     return credential_fingerprint(_secret_from(credential), fp_key)
 

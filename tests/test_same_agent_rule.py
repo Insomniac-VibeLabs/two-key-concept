@@ -211,6 +211,22 @@ class Basic(EnvVars):
         mon = MonitoredAgent("a", "x", "m", "https://h.example/v1", "cloud", VaultBasic(), kind="openai_compatible")
         self.assertEqual(configured_agent_identity(mon, FP).credentials, frozenset({fp}))
 
+    def test_an_empty_basic_credential_refuses(self):
+        from two_key.judges.credentials import CredentialProvider
+        for value in ("", "  ", None):
+            class Empty(CredentialProvider):
+                kind = "basic"
+
+                def get_token(self, value=value):
+                    return value
+            with self.subTest(value=value):
+                judge = OpenAICompatibleJudge("cj", "x", "m", "https://h.example/v1", Empty())
+                with self.assertRaisesRegex(IdentityError, "credential is empty at start-up"):
+                    judge_identity(judge, FP)
+                mon = MonitoredAgent("a", "x", "m", "https://h.example/v1", "cloud", Empty(), kind="openai_compatible")
+                with self.assertRaisesRegex(IdentityError, "agent 'a': credential is empty at start-up"):
+                    configured_agent_identity(mon, FP)
+
     def test_a_scrypt_failure_and_a_missing_key_are_named(self):
         from unittest import mock
         from two_key.identity import password_fingerprint

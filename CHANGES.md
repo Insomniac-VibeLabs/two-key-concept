@@ -497,11 +497,17 @@ commit messages of PRs #43 and #61.
     (`host:port` as configured, every local alias folded to `localhost`,
     no DNS), so nothing tells them apart (`same_address_no_credential`).
 
-  A side counts as keyless when it sends no credential, whatever is
-  configured: a judge with `auth_header: none` (an Ollama judge's default)
-  and an `ollama` agent without Basic auth. A configured agent credential
-  that cannot be read at start-up refuses, for a local agent as well as a
-  cloud one.
+  For a connector Two-Key drives, a side counts as keyless when it sends no
+  credential, whatever is configured: a judge with `auth_header: none` (an
+  Ollama judge's default) and an `agents.yaml` `ollama` agent without Basic
+  auth. A `monitored_agent:` declaration cannot say what the agent sends,
+  so one with `credential_env` or `username_env` counts as keyed even when
+  its server ignores the key (an Ollama daemon); a keyless judge next to it
+  only warns (`same_address_one_side_keyless`). Declare such an agent with
+  `credential: none`. A configured credential that cannot be read at
+  start-up refuses, for a local agent as well as a cloud one, unless it is
+  never sent (an `agents.yaml` `ollama` agent without Basic auth, or a judge
+  with `auth_header: none`, whose key is not read).
 
   What used to refuse and now only warns: the same model on the same
   endpoint or upstream, a shared tenant id, a local or unrecognized proxy
@@ -514,45 +520,38 @@ commit messages of PRs #43 and #61.
   `shared_tenant`, and `unresolved_identity` (once per identity).
   `upstream:` and `tenant:` change which warnings print, never what is
   refused. `allow_same_model_distinct_tenant` is now a deprecated no-op,
-  like `allow_same_provider_judge`.
+  like `allow_same_provider_judge`, and `same_model_tenant_optin_pairs` is
+  always empty.
 
-  At call time a judge whose credential equals `agent_session` abstains
-  (`cloud_judge_reused_agent_session`) wherever it connects, as in 0.2.1.
-  An `agent_session` that is not a string now abstains (`agent_session must
-  be a string`) instead of skipping the check.
+  At call time an LLM judge whose credential equals `agent_session`
+  abstains (`cloud_judge_reused_agent_session`) wherever it connects, as in
+  0.2.1. An `agent_session` that is neither a string nor a list, tuple, or
+  set of strings (bytes, for example) now makes an LLM judge abstain
+  (`agent_session must be a string`); 0.2.1 skipped the check for a local
+  judge.
 - **"vendor" is renamed "maker" (#44).** A judge's maker is who made its
   model, as the operator labels it (default: its `provider`), not
   verified, and never compared with the monitored agent. Judge key
   `vendor:` → `maker:`; quorum key and field `min_vendors` → `min_makers`;
   `Judge.vendor` → `Judge.maker`; the `vendor=` argument of `LLMJudge` and
-  `FixedJudge` → `maker=`; `Judge.describe()` key `vendor` → `maker`; the
-  deny and start-up refusal `insufficient_vendors:` →
-  `insufficient_makers:`. The old names still work in 0.2.2, with one
-  stderr line each, and are removed in 0.2.3. A judge class written before
-  the rename that overrides `vendor`, sets the private `_vendor`, or is a
-  duck-typed object with a `vendor` attribute keeps that label as its maker.
-  `QuorumPolicy.to_record()` writes `min_makers`, so `policy_digest`
-  changes for the same settings; `audit.check_decision_digests` recomputes
-  from each stored record, so older ledgers still check clean.
-- **Password fingerprints use scrypt.** A username and password pair is
-  fingerprinted with scrypt (N=2^17, r=8, p=1, the OWASP minimum: 128 MiB,
-  about 0.4 s per pair at start-up) under the per-install key as the salt
-  (`scrypt-n17-r8-p1:...`), and only with that key. API tokens keep
-  HMAC-SHA256: they are random, so a cheap hash is safe. The per-install key
-  sits beside the ledger key, so anyone who can decrypt the ledger holds it
-  too; for a guessable password only the scrypt cost slows an offline
-  guess. This clears the two high CodeQL alerts
-  (py/weak-sensitive-data-hashing) the new password support raised. Any
-  credential sent as HTTP Basic (a provider whose `kind` is `basic`) is
-  fingerprinted as a pair, so a judge and the agent with the same pair still
-  match. The pair is stripped of whitespace at its two ends only. A scrypt
-  failure (memory, or no scrypt in a FIPS-only OpenSSL) refuses with
-  `password_fingerprint_failed:`. `constitution_loaded` records
-  `password_alg` beside `alg`.
+  `FixedJudge` → `maker=`. The config keys `vendor:` / `min_vendors:` and
+  the arguments `vendor=` / `min_vendors=` still work in 0.2.2 and print one
+  stderr line each; `.vendor` and `.min_vendors` still read, without a
+  note. All are removed in 0.2.3. Two names changed now, with no alias:
+  the `Judge.describe()` key `vendor` → `maker`, and the deny and start-up
+  refusal `insufficient_vendors:` → `insufficient_makers:`. A judge class
+  written before the rename that overrides `vendor`, sets the private
+  `_vendor`, or is a duck-typed object with a `vendor` attribute keeps that
+  label as its maker. `QuorumPolicy.to_record()` writes `min_makers`, so
+  `policy_digest` changes for the same settings;
+  `audit.check_decision_digests` recomputes from each stored record, so
+  older ledgers still check clean.
 - `quorum` passes a judge's `score_bound` the keyword arguments its
-  signature accepts, instead of retrying on `TypeError`, so a `TypeError`
-  inside a judge is an abstention, not a second call without the agent
-  session. A signature that cannot be read gets every keyword.
+  signature accepts, instead of retrying on `TypeError` (#60, item 4), so a
+  `TypeError` inside a judge is an abstention, not a second call without the
+  agent session. A signature that cannot be read gets every keyword; if it
+  does not take `agent_session`, the judge abstains (0.2.1 retried without
+  it).
 - The build requires `setuptools>=77.0`, the first release that accepts
   `license = "Apache-2.0"` as an SPDX string (PEP 639).
 
@@ -565,6 +564,26 @@ commit messages of PRs #43 and #61.
   so is a username containing `:`. The old `username_password` type is
   still refused, with a message naming `basic`. OAuth device-code is still
   refused.
+- **Password fingerprints use scrypt.** A username and password pair is
+  fingerprinted with scrypt (N=2^17, r=8, p=1, the OWASP minimum: 128 MiB,
+  about 0.4 s per pair at start-up) under the per-install key as the salt
+  (`scrypt-n17-r8-p1:...`), and only with that key. API tokens keep
+  HMAC-SHA256: a random token is safe under a cheap hash, a guessable one
+  (a placeholder such as `EMPTY`) is not. The per-install key sits beside
+  the ledger key, so anyone who can decrypt the ledger holds it too; for a
+  guessable password only the scrypt cost slows an offline guess. This
+  clears the two high CodeQL alerts (py/weak-sensitive-data-hashing) the
+  password support first raised. Any credential sent as HTTP Basic (a
+  provider whose `kind` is `basic`) is fingerprinted as a pair, so a judge
+  and the agent with the same pair match; an empty one refuses. The pair is
+  stripped of whitespace at its two ends only. A pair and a token are never
+  compared: an agent declared with `credential_env` whose value is
+  `user:pass`, or a judge that sends the agent's `user:pass` as a token,
+  does not match a declared pair at start-up (declare a Basic agent with
+  `username_env` / `password_env`); the call-time `agent_session` check
+  still compares the raw strings. A scrypt failure (memory, or no scrypt in
+  a FIPS-only OpenSSL) refuses with `password_fingerprint_failed:`.
+  `constitution_loaded` records `password_alg` beside `alg`.
 
 ### Fixed
 
@@ -577,8 +596,6 @@ commit messages of PRs #43 and #61.
   exception or a lock-file error. No LRU cap, so a held lock is never
   evicted. The lock files under `<ledger>.redeem-locks/` are unchanged (one
   per jti, never deleted).
-- A judge class whose `vendor` property calls `super().vendor` no longer
-  recurses.
 - A shared-credential refusal says what to do for a placeholder a local
   server ignores (`EMPTY`): give each side its own value, or leave it off
   one side (`auth: {type: none}` on a judge, `credential: none` on the
@@ -602,6 +619,10 @@ commit messages of PRs #43 and #61.
 - The witness key is described as it is: the head carries its own witness
   public key, which is not pinned (#58), so the principal key and the
   ledger key together can sign a head. Pinning is planned for 0.2.3.
+- THREAT_MODEL and README name a gap the ledger has had since before
+  0.2.1: anyone who can write the ledger directory can roll it back to an
+  earlier signed head or wipe it, with no key, and both open and verify.
+  Without an external anchor neither is detected.
 - The identity docstring no longer claims the per-install fingerprint key
   stops a ledger reader from testing guesses. README, HOWTO, llms.txt, and
   THREAT_MODEL describe HMAC-SHA256 for tokens and scrypt for passwords.
@@ -629,49 +650,66 @@ commit messages of PRs #43 and #61.
    `credential could not be read at start-up`):
    - a keyless judge and a keyless agent on one `host:port`, whatever
      their models (for example two models on one Ollama daemon): serve the
-     judge on another port or daemon, or give one side a credential;
+     judge on another port or daemon. A key counts only when it is sent (an
+     Ollama judge needs `auth_header: bearer`), and a key the daemon
+     ignores only hides that both sides are keyless;
+   - a judge configured with a key it never sends (`auth_header: none`, an
+     Ollama judge's default) next to a keyless agent on its `host:port`:
+     the judge counts as keyless (same fix);
    - an `agents.yaml` `ollama` agent with a configured key next to a
      keyless judge on its `host:port`: the agent never sends that key, so
      both count as keyless (same fix);
-   - an `agents.yaml` local agent whose configured key cannot be read:
-     set the variable, or remove `auth:`.
+   - an `agents.yaml` agent, other than an `ollama` one, whose configured
+     key cannot be read: set the variable, or remove `auth:`.
 2. **Setups that refused and now start with warnings**: the same model on
    the same endpoint or upstream, a shared tenant id, a local proxy with no
    `upstream:`, an unresolved identity. Read the `two-key: WARNING:` lines
    at start-up, or `judge_agent_separation.warnings`. Alerts that matched
    `same_model_same_upstream` or `same_model_unknown_upstream` should
    match `same_model_shared_route` and `same_model_unknown_proxy`.
-3. Rename `vendor:` to `maker:` and `min_vendors:` to `min_makers:` in
+3. **Setups that refused and now start without a warning**, because a key
+   that is never sent is not read: a judge with `auth_header: none` holding
+   the agent's key at another address, a judge with `auth_header: none`
+   whose configured key cannot be read, and an `agents.yaml` `ollama` agent
+   (even `hosting: cloud`) whose configured key cannot be read.
+4. Rename `vendor:` to `maker:` and `min_vendors:` to `min_makers:` in
    judges.yaml, and `vendor=`, `.vendor`, `min_vendors=` to `maker=`,
    `.maker`, `min_makers=` in Python. The old names work in 0.2.2 and are
    removed in 0.2.3. Giving both names is refused (`not both`), and so is
    `dataclasses.replace(policy, min_vendors=...)`, because `replace` also
    passes the current `min_makers`.
-4. Alerts or scripts that match `insufficient_vendors` should match
+5. Alerts or scripts that match `insufficient_vendors` should match
    `insufficient_makers`; code that reads `Judge.describe()["vendor"]`
-   should read `"maker"`.
-5. `policy_digest` changes for the same settings, and `identities_digest`
+   should read `"maker"`. Neither has an alias.
+6. `policy_digest` changes for the same settings, and `identities_digest`
    changes where a side now counts as keyless or uses Basic auth. Compare
    digests within one `constitution_loaded`. The `judge_agent_separation`
    record has `checks` `[same_credential, same_address_no_credential]` and
    new keys `same_agent`, `warning_checks`, and `warnings`. The
    `judge_matches_agent:` message text changed.
-6. Remove `allow_same_model_distinct_tenant` when convenient; it does
+7. Remove `allow_same_model_distinct_tenant` when convenient; it does
    nothing.
-7. Pass `agent_session` as a string. Anything else now makes each judge
-   abstain.
-8. `two_key.identity` no longer has `distinct_tenants`,
-   `same_model_overlap`, `TENANT_OPTIN_WARNING`, or `TENANT_OPTIN_FLAG`.
-9. Building from source needs `setuptools>=77.0`.
+8. Pass `agent_session` as a string (a list, tuple, or set of strings also
+   works). Bytes or any other type now makes each LLM judge abstain, so the
+   round denies.
+9. A custom judge whose `score_bound` signature `inspect.signature` cannot
+   read now always gets `agent_session=`; if it does not take it, the judge
+   abstains (0.2.1 retried without it). Give it a readable signature or
+   `**kwargs`.
+10. `two_key.identity` no longer has `distinct_tenants`,
+    `same_model_overlap`, `TENANT_OPTIN_WARNING`, or `TENANT_OPTIN_FLAG`.
+11. Building from source needs `setuptools>=77.0`.
 
 ### Reviews
 
 - The code-review skill on `main...working` (15 findings, 10 fixed, the
   rest documented or left by design), two adversarial review workflows on
-  the judge rule (25 findings, 14 confirmed, none a way past the rule), and
-  a release-readiness check (packaging, release docs, regressions against
-  0.2.1, CodeQL, process). CodeQL on PR #61 found the password-hashing
-  issue fixed above. All were run by an AI assistant in this session.
+  the judge rule (25 findings, 14 confirmed, none a way past the rule), a
+  release-readiness check (packaging, release docs, regressions against
+  0.2.1, CodeQL, process), and a review of the release itself (the scrypt
+  change and these notes; its findings are fixed here). CodeQL on PR #61
+  found the password-hashing issue fixed above and reports no new alerts
+  since. All were run by an AI assistant in this session.
 - Maintainer security review (AGENTS.md): the owner signed off on
   2026-10-09, accepting those reviews and the scrypt fix instead of a
   line-by-line review.
@@ -679,12 +717,14 @@ commit messages of PRs #43 and #61.
 ### Still open
 
 - Issues #45 to #60 are Low or Info. #58 (the witness public key is not
-  pinned) is rated Low by the owner and is planned for 0.2.3. #49's
-  recovery command, #46's persistent halt, and #45's gateway-only ledger
-  role are not built.
+  pinned) is rated Low by the owner and is planned for 0.2.3. #60 item 4 is
+  fixed above; its other items are open. #49's recovery command, #46's
+  persistent halt, and #45's gateway-only ledger role are not built.
 
 ### Planned for 0.2.3
 
 - Pin the ledger's witness public key (#58); see ROADMAP 0.2.x.
 - Remove the `vendor` / `min_vendors` aliases (breaking): every
   `TODO(remove-vendor-alias)` site.
+- Remove the unused `extra_secrets` argument of `AgentDeclaration.resolve`
+  (breaking).

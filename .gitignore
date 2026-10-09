@@ -6,3 +6,6 @@ ledger/
 .DS_Store
 *.ledger-key/
 *.witness/
+*.egg-info/
+build/
+dist/
