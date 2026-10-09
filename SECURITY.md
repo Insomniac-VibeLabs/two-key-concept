@@ -17,7 +17,8 @@ is how to report a vulnerability. It is not the model.
 - Fail-open on either path (a deny or a missing ballot must not become allow)
 - Token replay, argument substitution, or redemption of a token issued before
   a revocation (`revoke` ends earlier tokens; it does not stop new approvals)
-- Ledger tampering that still verifies
+- Ledger tampering that still verifies, including a head signed by a witness
+  key other than the one pinned in the ledger or configured outside it
 - Judge credential sent to a redirected host
 - Agent proposal that causes tool execution inside `authorize_from_agent`
 - A redeeming gateway that can mint a token it will accept
@@ -37,11 +38,15 @@ outside the ledger directory. Stealing only the principal key does not decrypt
 the log, does not sign a new head, and does not mint a capability token.
 The minting key is `<ledger>.capability/capability.pem`, also outside the
 ledger directory. The gateway is given only the public half. Stealing the
-ledger key decrypts. Stealing the principal key and the ledger key allows a
-forged head, because the witness public key is not pinned yet (#58; a pin
-outside the ledger is planned for 0.2.3). Write access to the ledger
-directory alone can roll the ledger back to an earlier signed head or wipe
-it (#62). Stealing the capability private key mints tokens.
+ledger key decrypts. The witness public key is pinned in the ledger, so a
+replaced `witness.pem` is refused (`witness_key_changed`). Stealing the
+principal key and the ledger key still allows a forged head, by rewriting
+the chain from its first entry, unless the witness public key is also
+configured outside the ledger (`witness_public_key=`,
+`--witness-public-key`); with it, a forged head needs the witness private
+key as well (#58). Write access to the ledger directory alone can roll the
+ledger back to an earlier signed head or wipe it, with or without either
+pin (#62). Stealing the capability private key mints tokens.
 
 A redemption intent is checkpointed before the tool runs. A later retry does
 not run the tool. Concurrent calls are locked. A crash before the tool runs

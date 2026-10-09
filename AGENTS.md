@@ -89,6 +89,9 @@ a prototype, report security findings as public issues, per
 - No judge may be the monitored agent: the agent's credential at any
   address, or both keyless on one address, is refused. Other overlaps warn
   and are recorded. Addresses are compared as configured, without DNS.
+- The ledger's witness public key is pinned: a head or `witness.pem` that
+  does not match the pin in the ledger, or the configured
+  `witness_public_key`, is refused. It changes only by `rotate_witness`.
 - The gateway verifies only; it never mints.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the human contributor checklist.

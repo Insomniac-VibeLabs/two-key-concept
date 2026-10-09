@@ -293,20 +293,27 @@ entries and the signed head are AES-256-GCM at rest. The data key is wrapped
 by a ledger key outside the ledger directory, not by the principal key. The
 head is signed by the principal and by a witness key, also outside the ledger
 directory. A stolen principal key alone cannot decrypt the log or sign a new
-head. With the ledger key as well it can: the head carries its own witness
-public key, which is not pinned yet (#58; a pin outside the ledger is
-planned for 0.2.3).
+head. The witness public key is pinned in the ledger (the first entry,
+`witness_pinned`), so a replaced `witness.pem` is refused
+(`witness_key_changed`). With the ledger key as well, the principal key can
+still rewrite the chain from its first entry, pin included, unless the
+operator also gives the witness public key as configuration
+(`Ledger(..., witness_public_key=...)` or `--witness-public-key`), kept
+where whoever writes the ledger directory cannot change it. With that pin,
+forging a head needs the principal, witness, and ledger keys together. The
+witness key changes only by a ledgered rotation (`two-key rotate-witness`).
 It is a prototype. It is not a FIPS 140-3 validated module.
 
 ## Known limits
 
 - No independent review and no production deployment.
 - No external anchor for the ledger. Someone holding the principal and
-  ledger keys can rewrite a ledger that never leaves the machine. The
-  witness key adds nothing until it is pinned outside the ledger (#58,
-  planned for 0.2.3). Anyone who can write the ledger directory can roll it
-  back to an earlier signed head or wipe it, with no key, and both still
-  open and verify (#62).
+  ledger keys can rewrite a ledger that never leaves the machine, unless
+  the witness public key is configured outside the ledger
+  (`--witness-public-key`); then the witness key is needed too (#58).
+  Anyone who can write the ledger directory can roll it back to an earlier
+  signed head or wipe it, with no key, and both still open and verify,
+  with or without either witness pin (#62).
 - Not FIPS 140-3 validated. A FIPS approved mode that runs on a validated
   module is on the roadmap. It would not validate this package.
 - Signatures are Ed25519, which is not quantum resistant. Hybrid signatures

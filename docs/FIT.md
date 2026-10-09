@@ -28,7 +28,9 @@ anchoring, and no seed phrase.
   `shape`, when set, checks the kind of value and does not read it.
 - You want an encrypted ledger. Records and the head are AES-256-GCM. The
   ledger key and the witness key live outside the ledger directory. The
-  principal key cannot unwrap the log and cannot sign a head alone.
+  principal key cannot unwrap the log and cannot sign a head alone. The
+  witness public key is pinned in the ledger, and you can also pin it
+  outside the ledger so that a forged head needs the witness key too.
 
 ## Do not use this if
 

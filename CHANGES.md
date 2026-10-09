@@ -789,3 +789,17 @@ commit messages of PRs #43 and #61.
 - `AgentDeclaration.resolve` no longer takes `extra_secrets`. Nothing passed
   it, and it fingerprinted whatever it was given as one of the agent's
   credentials.
+
+### Docs
+
+- README, THREAT_MODEL, SECURITY.md, SCOPE, FIT, llms.txt, and AGENTS.md
+  describe both witness pins: what each detects, that the principal key and
+  the ledger key are still enough without the out-of-ledger pin, trust on
+  first use for older ledgers, and that neither pin detects a rollback or a
+  wipe (#62).
+- HOWTO "Pin the witness key" and "Rotate the witness key": configuring the
+  out-of-ledger pin, a table of what each pin detects, `two-key audit`, the
+  rotation command, and what to do after an interrupted rotation. "Known
+  trade-offs by configuration" lists running without the configured pin.
+- HOWTO, examples/judges.yaml, and llms.txt say the `vendor:` and
+  `min_vendors:` keys are refused.

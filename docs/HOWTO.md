@@ -414,7 +414,9 @@ inside the ledger directory. First open writes `<ledger>.ledger-key/ledger.key` 
 `<ledger>.witness/witness.pem` next to the ledger directory, not inside it.
 Both are created with O_EXCL at mode 0600; a ledger key that is group- or
 world-readable, a symlink, or not 32 bytes is refused (`ledger_key_insecure:`
-or `ledger_key_unreadable:`).
+or `ledger_key_unreadable:`). First open also writes the ledger's first entry,
+`witness_pinned`; see "Pin the witness key" below.
+`--witness-public-key PEM` gives the witness pin kept outside the ledger.
 The authorize command does not accept test-double judges.
 
 ## Authorize from Python
@@ -578,10 +580,97 @@ and the token can be redeemed again within its lifetime. A removed
 `redemption` or `redemption_aborted` leaves the signed `redemption_started`
 in place, so a retry is still refused (`already_attempted`).
 
+## Pin the witness key
+
+The ledger head is signed by the principal key and by the witness key,
+`<ledger>.witness/witness.pem`. The witness public key is pinned in two
+places.
+
+**In the ledger.** A new ledger's first entry is `witness_pinned`
+(`source: new_ledger`). A ledger made by 0.2.2 or earlier pins the key that
+signed its current head the first time 0.2.3 opens it (`source: first_use`,
+trust on first use), and only if `witness.pem` is that key. Any
+`Ledger(...)` or CLI command that opens the ledger does this. From then on,
+a head signed by another witness key, or a `witness.pem` that does not
+match, is refused with `witness_key_changed:` when the ledger opens, before
+an append is written, and at checkpoint.
+
+**Outside the ledger, if you configure it.** Copy
+`<ledger>.witness/witness.pub.pem` to a place that whoever writes the ledger
+directory and its sibling directories cannot change (another host, a
+read-only mount, configuration management), and pass it on every open:
+
+```bash
+two-key authorize ... --witness-public-key /etc/two-key/witness.pub.pem
+```
+
+```python
+from two_key.keys import load_public_key
+ledger = Ledger("ledger", key, witness_public_key=load_public_key("/etc/two-key/witness.pub.pem"))
+```
+
+With it, a new ledger needs that witness key already in place
+(`witness_key_missing:`). What each pin detects:
+
+| Change to the ledger | In-ledger pin only | With the configured pin |
+| --- | --- | --- |
+| `witness.pem` replaced; chain not rewritten | Refused | Refused |
+| Head signed by another witness key; chain not rewritten | Refused | Refused |
+| Chain rewritten from its first entry with the principal key and the ledger key | Not detected | Refused |
+| Witness key swapped before the first open under 0.2.3 | Not detected | Refused, if your copy is the original key |
+| Rollback to an earlier head signed by the same keys, or a wipe (#62) | Not detected | Not detected |
+
+Check both pins with:
+
+```bash
+two-key audit --key keys/principal.pem --ledger ledger --witness-public-key /etc/two-key/witness.pub.pem
+```
+
+It prints `witness.head` (the key that signed the head), `witness.in_ledger`
+(the pinned key, the entry that pinned it, and how), `witness.configured`,
+and `witness.history`, as `sha256:` fingerprints, plus the
+`check_decision_digests` result. It exits 1 on a refusal or a digest
+problem. `Ledger.verify()` returns the same `witness` report.
+
+### Rotate the witness key
+
+```bash
+two-key rotate-witness --key keys/principal.pem --ledger ledger \
+  --witness-public-key /etc/two-key/witness.pub.pem --reason "yearly rotation"
+```
+
+or `ledger.rotate_witness(reason="yearly rotation")` in Python. It writes a
+`witness_rotated` entry signed by the principal key, the current witness
+key, and the new one, signs a new head with the new key, and then moves the
+new key into `witness.pem` and its public half into `witness.pub.pem`. Then
+copy the new `witness.pub.pem` over your configured copy: the old copy no
+longer opens the ledger. Outstanding tokens are not affected.
+
+A rotation needs the old witness key's signature, so a lost witness key
+cannot be rotated away from: start a new ledger. Key backup is planned for
+0.3.
+
+An interrupted rotation leaves `witness.pem.new` beside `witness.pem`, and
+the next rotation refuses until it is dealt with:
+
+- The ledger opens: the rotation never reached the ledger. Delete
+  `witness.pem.new`.
+- It refuses with `witness_key_changed`: the new head was written, but the
+  key was not moved. Move `witness.pem.new` to `witness.pem` (it is already
+  mode 0600).
+- It refuses with `signed head does not match the chain`: the
+  `witness_rotated` entry was written but not checkpointed. Follow "If the
+  ledger will not open after a crash" above, then delete `witness.pem.new`.
+
 ## Known trade-offs by configuration
 
 Each line is a trade-off that depends on how you configure Two-Key, and
 names the setting or declaration that controls it.
+
+- Without `--witness-public-key` (`witness_public_key=`), the principal key
+  and the ledger key together can rewrite the ledger under a new witness
+  key. With it, the witness key is needed too, and the configured copy must
+  be updated after every rotation or the ledger refuses to open.
 
 - Declared `upstream:` labels are folded before match (NFKC, zero-width stripped,
   Unicode dashes to ASCII, casefold). Bare maker names such as `openai` map to the
