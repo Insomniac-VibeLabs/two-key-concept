@@ -772,3 +772,23 @@ On branch `working`. Not tagged. Version unchanged.
   keyed (an agents.yaml `type: ollama` agent counts as keyless).
   `extra_secrets` on `AgentDeclaration.resolve` can make a keyless agent
   count as keyed, but nothing in Two-Key passes it.
+- **Password fingerprints use scrypt (CodeQL py/weak-sensitive-data-hashing,
+  2 high alerts on PR #61).** A username and password pair is now
+  fingerprinted with scrypt (N=2^17, r=8, p=1, the OWASP minimum; 128 MiB,
+  about 0.4 s) under the per-install key as the salt
+  (`scrypt-n17-r8-p1:...`), and only with that key: there is no unkeyed form
+  for a password. API tokens keep HMAC-SHA256: they are random, so a cheap
+  hash is safe. The per-install key sits beside the ledger key, so anyone
+  who can decrypt the ledger also holds it; for a guessable password only
+  the scrypt cost slows an offline guess (about 2 guesses a second per core,
+  against about a million with HMAC). The identity docstring no longer
+  claims the key stops a ledger reader. `constitution_loaded` records
+  `password_alg` beside `alg`. A bearer token that literally equals the
+  agent's `username:password` no longer matches the pair at start-up; the
+  call-time check still compares the raw strings.
+- A 0.2.1-era judge class that set the private `_vendor` attribute keeps
+  that label as its maker again, so the `min_makers` floor does not change
+  under it (it was ignored since #44).
+- The `vendor` / `min_vendors` aliases are removed in 0.2.3 (owner's
+  decision). The `TODO(remove-vendor-alias)` comments and the stderr note
+  say so.

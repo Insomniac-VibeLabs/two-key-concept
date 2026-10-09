@@ -101,6 +101,20 @@ class OldNames(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not both"):
             FixedJudge("a", "yes", maker="x", vendor="y")
 
+    def test_a_judge_that_set_the_private_vendor_attribute_keeps_its_label(self):
+        from two_key.judges.base import Ballot, Judge
+
+        class OldPrivate(Judge):      # 0.2.1-era code that set _vendor directly
+            def __init__(self, jid, provider):
+                self.judge_id, self.provider, self._vendor = jid, provider, "acme"
+
+            def score(self, constitution_text, action, proposal):
+                return Ballot(self.judge_id, self.provider, "yes", 0.9, "")
+        judges = [OldPrivate("a", "openai"), OldPrivate("b", "xai")]
+        self.assertEqual([j.maker for j in judges], ["acme", "acme"])
+        self.assertEqual(judges[0].vendor, "acme")
+        self.assertEqual(heterogeneity_shortfall(judges, POLICY), "insufficient_makers:1<2")
+
     def test_judge_written_before_the_rename_keeps_its_label(self):
         from two_key.judges.base import Ballot, Judge
 

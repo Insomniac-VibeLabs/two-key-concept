@@ -60,14 +60,19 @@ Each judge and agent is resolved to:
   by provider family: the endpoint's, or for a proxy (local or unrecognized
   host) the family of its declared upstream, its Ollama cloud model, or its
   model maker, never the proxy's address.
-- ``credential``: a fingerprint, HMAC-SHA256 of the key with leading and
-  trailing whitespace stripped (``hmac-sha256:...``). The HMAC key is a
-  random per-install secret, ``fingerprint.key`` beside the ledger key
-  (``<ledger>.ledger-key/``, created once with O_EXCL, mode 0600), so a
-  ledger reader cannot test guessed keys against a fingerprint. A username and
-  password are fingerprinted as one ``username:password`` pair. Raw keys and
-  passwords are never stored or logged. ``none`` means the endpoint takes no
-  key.
+- ``credential``: a fingerprint of the key with leading and trailing
+  whitespace stripped. An API token is fingerprinted with HMAC-SHA256
+  (``hmac-sha256:...``); a username and password, as one
+  ``username:password`` pair, with scrypt (``scrypt-n17-r8-p1:...``,
+  N=2^17, r=8, p=1), because a password may be guessable. Both are keyed
+  by a random per-install secret, ``fingerprint.key`` beside the ledger key
+  (``<ledger>.ledger-key/``, created once with O_EXCL, mode 0600). That key
+  stops someone who sees a fingerprint outside the key directory (a copied
+  record, an export) from testing guesses. It does not stop someone who holds
+  the key directory, who can also decrypt the ledger: there a random API
+  token is safe by its length, and a password only by scrypt's cost. Raw
+  keys and passwords are never stored or logged. ``none`` means the endpoint
+  takes no key.
 
 Refusals, judge against agent, message prefix ``judge_matches_agent:``:
 
@@ -198,6 +203,29 @@ def credential_fingerprint(secret: str | None, key: bytes | None = None) -> str:
     if key is not None:
         return "hmac-sha256:" + hmac.new(key, data, hashlib.sha256).hexdigest()
     return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+# A username and password may be guessable, so the pair is stretched: scrypt (RFC 7914) with the per-install key
+# as the salt, at OWASP's minimum cost (N=2^17, r=8, p=1: 128 MiB, about 0.4 s). API tokens are random and keep
+# the cheap HMAC above. The prefix names the parameters, so a later change of cost is visible in the ledger.
+PASSWORD_KDF = {"alg": "scrypt", "n": 2 ** 17, "r": 8, "p": 1, "dklen": 32}
+PASSWORD_FINGERPRINT_ALG = "scrypt-n17-r8-p1"
+
+
+def password_fingerprint(pair: str | None, key: bytes | None) -> str:
+    """Fingerprint of a ``username:password`` pair, whitespace stripped: scrypt under the per-install key.
+
+    A key is required; there is no unkeyed form for a password."""
+    pair = (pair or "").strip()
+    if not pair:
+        return NO_CREDENTIAL
+    if key is None:
+        raise IdentityError("fingerprint_key_required: a username and password are fingerprinted only under the "
+                            "per-install key")
+    k = PASSWORD_KDF
+    derived = hashlib.scrypt(FINGERPRINT_DOMAIN + pair.encode("utf-8", "surrogatepass"), salt=key, n=k["n"],
+                             r=k["r"], p=k["p"], maxmem=4 * 128 * k["r"] * k["n"], dklen=k["dklen"])
+    return f"{PASSWORD_FINGERPRINT_ALG}:{derived.hex()}"
 
 
 # ---------------------------------------------------------------- model ids
@@ -682,10 +710,24 @@ def _secret_from(credential: Any) -> str:
     return token
 
 
+def _fingerprint(credential: Any, fp_key: bytes | None) -> str:
+    """Read a judge's or agent's credential once and fingerprint it: a username and password with scrypt
+    (``password_fingerprint``), anything else with HMAC (``credential_fingerprint``)."""
+    from .judges.credentials import BasicAuthCredential, CredentialError
+    if isinstance(credential, BasicAuthCredential):
+        try:
+            pair = credential.get_token()
+        except CredentialError as e:
+            raise IdentityError(f"credential could not be read at start-up ({type_tag(e)}); "
+                                "Two-Key cannot show it differs from the monitored agent's") from None
+        return password_fingerprint(pair, fp_key)
+    return credential_fingerprint(_secret_from(credential), fp_key)
+
+
 def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     jid = str(getattr(judge, "judge_id", "?"))
     if getattr(judge, "is_test_double", False) and not getattr(judge, "base_url", None):
-        # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
         maker = str(getattr(judge, "maker", None) or getattr(judge, "vendor", None)
                     or getattr(judge, "provider", "test-double"))
         return ResolvedIdentity("judge", jid, f"test-double/{jid}", f"test-double/{jid}",
@@ -699,7 +741,7 @@ def judge_identity(judge: Any, fp_key: bytes | None = None) -> ResolvedIdentity:
     # address keyless, so it is fingerprinted keyless, whatever credential is configured.
     credential = None if getattr(judge, "auth_header", None) == "none" else getattr(judge, "credential", None)
     try:
-        fp = credential_fingerprint(_secret_from(credential), fp_key)
+        fp = _fingerprint(credential, fp_key)
     except IdentityError as e:
         raise IdentityError(f"judge {jid!r}: {e}") from None
     tenant = validate_tenant(getattr(judge, "tenant", None), f"judge {jid!r}")
@@ -779,7 +821,7 @@ class AgentDeclaration:
                 pair = BasicAuthCredential(self.username_env, self.password_env).get_token()
             except CredentialError as e:
                 raise IdentityError(f"monitored_agent {self.id!r}: {e}") from None
-            fps.add(credential_fingerprint(pair, fp_key))
+            fps.add(password_fingerprint(pair, fp_key))
         elif self.credential_env is not None:
             value = os.environ.get(self.credential_env) if isinstance(self.credential_env, str) else None
             if not value:
@@ -806,10 +848,10 @@ def configured_agent_identity(agent: Any, fp_key: bytes | None = None) -> Resolv
     if getattr(agent, "kind", None) == "ollama" and getattr(credential, "kind", None) != "basic":
         credential = None
     try:
-        secret = _secret_from(credential)
+        fp = _fingerprint(credential, fp_key)
     except IdentityError:
         raise IdentityError(f"agent {agent.agent_id!r}: credential could not be read at start-up") from None
-    return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {credential_fingerprint(secret, fp_key)},
+    return _identity("agent", str(agent.agent_id), agent.model, agent.base_url, {fp},
                      getattr(agent, "provider", None),
                      validate_tenant(getattr(agent, "tenant", None), f"agent {agent.agent_id!r}"),
                      validate_upstream(getattr(agent, "upstream", None), f"agent {agent.agent_id!r}"))

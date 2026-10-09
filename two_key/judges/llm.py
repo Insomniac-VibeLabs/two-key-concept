@@ -143,7 +143,7 @@ class LLMJudge(Judge):
                  local_weights: bool | None = None, weights_sha256: str | None = None,
                  echo_binding: bool = False, ballot_key: str | None = None, ballot_key_env: str | None = None,
                  receives_proposal: bool = False, vendor: str | None = None):
-        # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+        # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
         maker = maker_from_vendor(maker, vendor)
         if not judge_id or not model or not base_url:
             raise ValueError("judge_id, model and base_url are required")

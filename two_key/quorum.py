@@ -45,9 +45,9 @@ Quorum protocol specifics:
   ``require_path_a_first``, which ``TwoKey.authorize`` still does not read.
   With ``heterogeneity_scope="responding"`` the same floor also applies to the
   judges that actually returned valid ballots.
-- ``min_vendors`` (the judge key ``vendor``) is the name through 0.2.1. It is
-  still accepted as a deprecated alias of ``min_makers`` and prints a note on
-  stderr. ``to_record`` writes ``min_makers``.
+- ``min_vendors`` (the judge key ``vendor``) is the name through 0.2.1. 0.2.2
+  still accepts it as a deprecated alias of ``min_makers`` and prints a note on
+  stderr; 0.2.3 removes it. ``to_record`` writes ``min_makers``.
 - Availability floor K (``min_responding``) distinct from the approval
   threshold T (``required_yes``): fewer than K valid ballots is a deny
   *without counting*. The result then has ``counted=False`` and no yes/no
@@ -151,10 +151,10 @@ class QuorumPolicy:
         if not isinstance(self.allow_same_provider_judge, bool):
             raise QuorumConfigError("allow_same_provider_judge must be a boolean")
 
-    # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+    # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
     @property
     def min_vendors(self) -> int:
-        """Deprecated name of ``min_makers`` (through 0.2.1)."""
+        """Deprecated name of ``min_makers`` (accepted in 0.2.2, removed in 0.2.3)."""
         return self.min_makers
 
     @classmethod
@@ -210,7 +210,7 @@ class QuorumPolicy:
         return replace(self, required_yes=max(1, min(2, n_judges)))
 
 
-# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
 def rename_min_vendors(kw: Mapping) -> dict:
     """Map the deprecated ``min_vendors`` key to ``min_makers``. Both at once is refused."""
     kw = dict(kw)
@@ -223,7 +223,7 @@ def rename_min_vendors(kw: Mapping) -> dict:
     return kw
 
 
-# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
 def _accept_min_vendors(init):
     # An __init__ wrapper rather than an InitVar: dataclasses.replace copies an InitVar's current value
     # (here, the alias property) back in, which would undo a min_makers change.
@@ -286,7 +286,7 @@ def _local(j) -> bool:
 def _maker(j) -> str:
     """The maker key for the diversity floor: NFKC, trimmed, and case-folded, so "OpenAI" and
     "openai " are one maker, not two."""
-    # TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+    # TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
     raw = str(getattr(j, "maker", None) or getattr(j, "vendor", None) or getattr(j, "provider", None) or "?")
     return unicodedata.normalize("NFKC", raw).strip().casefold() or "?"
 

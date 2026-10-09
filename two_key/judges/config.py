@@ -81,8 +81,8 @@ QUORUM_KEYS = {"required_yes", "min_responding", "min_distinct_providers", "time
                "allow_same_provider_judge", "allow_same_model_distinct_tenant"}
 TOP_LEVEL_KEYS = {"judges", "quorum", "monitored_agent"}
 # default: one judge is enough. high_assurance: QuorumPolicy.high_assurance() (2 makers, 1 local, local yes).
-# vendor and min_vendors are the names through 0.2.1: still accepted, with a note on stderr.
-# TODO(remove-vendor-alias): deprecated name (#44). Keep it through the next release, then remove it.
+# vendor and min_vendors are the names through 0.2.1: accepted in 0.2.2 with a note on stderr, removed in 0.2.3.
+# TODO(remove-vendor-alias): deprecated name (#44). Accepted in 0.2.2; remove it in 0.2.3.
 # Remove "vendor" from JUDGE_KEYS and the build_judge copy list, and "min_vendors" from QUORUM_KEYS.
 QUORUM_PROFILES = {"default", "high_assurance"}
 

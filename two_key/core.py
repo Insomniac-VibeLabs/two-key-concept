@@ -28,8 +28,8 @@ from .capability import (CapabilityIssuer, CapabilityKeyError, capability_key_fi
                          valid_ttl)
 from .compiler import CompiledConstitution, compile_both
 from .constitution import Constitution, ConstitutionError, verify_signed
-from .identity import (AgentDeclaration, IdentityError, SeparationReport, check_separation, fingerprint_key_id,
-                       configured_agent_identity, judge_identity)
+from .identity import (AgentDeclaration, IdentityError, PASSWORD_FINGERPRINT_ALG, SeparationReport, check_separation,
+                       configured_agent_identity, fingerprint_key_id, judge_identity)
 from .derive import (MAX_ACTION_BYTES, MAX_ARGS_BYTES, DeriveError, args_size, args_too_large, blocked_from_rules, canonical_too_large,
                      derive, disagreement, disallowed_party, dropped_keys, form_for, size_record)
 from .ledger import LedgerError
@@ -128,8 +128,10 @@ class TwoKey:
         sep = self.separation.to_record()
         self._identities_digest = identities_digest(sep)      # recomputable: two_key.audit
         sep = {**sep, "identities_digest": self._identities_digest,
-               "credential_fingerprint": {"alg": "hmac-sha256", "key_id": fingerprint_key_id(self._fp_key),
-                                          "input": "secret with surrounding whitespace stripped"}}
+               "credential_fingerprint": {"alg": "hmac-sha256", "password_alg": PASSWORD_FINGERPRINT_ALG,
+                                          "key_id": fingerprint_key_id(self._fp_key),
+                                          "input": "secret with surrounding whitespace stripped; a username and "
+                                                   "password as one username:password pair"}}
         # The full policy is in constitution_loaded (quorum_policy); each decision carries its digest.
         self._policy_digest = policy_digest(self.quorum.to_record())
         self._decision_context = {"policy_digest": self._policy_digest,

@@ -169,6 +169,27 @@ class Basic(EnvVars):
         with self.assertRaisesRegex(CredentialError, "BA_MISSING is not set"):
             BasicAuthCredential("BA_USER", "BA_MISSING").get_token()
 
+    def test_a_password_pair_is_fingerprinted_with_scrypt_and_a_token_with_hmac(self):
+        from two_key.identity import credential_fingerprint, password_fingerprint
+        self.setenv(BA_USER="alice", BA_PASS="s3cret", RULE_AGENT_KEY="agent-key")
+        basic = side("m", "https://h.example/v1", credential=BasicAuthCredential("BA_USER", "BA_PASS"))
+        [fp] = judge_identity(basic, FP).credentials
+        self.assertRegex(fp, "^scrypt-n17-r8-p1:[0-9a-f]{64}$")
+        self.assertEqual(fp, password_fingerprint(" alice:s3cret\n", FP))         # whitespace stripped, as for tokens
+        self.assertNotEqual(fp, password_fingerprint("alice:s3cret", b"j" * 32))  # keyed by the install
+        self.assertNotIn("s3cret", fp)
+        [token] = judge_identity(side("m", "https://h.example/v1", "agent-key"), FP).credentials
+        self.assertTrue(token.startswith("hmac-sha256:"))
+        self.assertEqual(token, credential_fingerprint("agent-key", FP))
+        # A password is never fingerprinted without the per-install key (no unkeyed sha256 form).
+        with self.assertRaisesRegex(IdentityError, "fingerprint_key_required"):
+            judge_identity(basic, None)
+        decl = {"id": "a", "model": "m", "provider": "x", "base_url": "https://h.example/v1",
+                "username_env": "BA_USER", "password_env": "BA_PASS"}
+        with self.assertRaisesRegex(IdentityError, "fingerprint_key_required"):
+            AgentDeclaration.from_mapping(decl).resolve()
+        self.assertEqual(AgentDeclaration.from_mapping(decl).resolve(fp_key=FP).credentials, {fp})
+
     def test_config(self):
         cred = build_credential({"type": "basic", "username_env": "U", "password_env": "P"})
         self.assertEqual(cred.kind, "basic")
