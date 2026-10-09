@@ -766,6 +766,16 @@ commit messages of PRs #43 and #61.
     as `sha256:` fingerprints.
   - Neither pin detects a rollback to an earlier signed head or a wipe of
     the ledger directory (#62).
+- **CLI for the witness pin.** `two-key authorize --witness-public-key PEM`
+  opens the ledger with the out-of-ledger pin. `two-key rotate-witness
+  --key KEY --ledger DIR [--witness-public-key PEM] [--reason TEXT]` rotates
+  the witness key and prints the old and new fingerprints and where the new
+  public key was written. `two-key audit --key KEY --ledger DIR
+  [--witness-public-key PEM]` verifies the ledger, runs
+  `check_decision_digests`, and prints both pins as JSON; it exits 1 on a
+  refusal or a digest problem. Each command opens the ledger read-write, so
+  the first one run on a ledger from 0.2.2 or earlier writes its
+  `witness_pinned` entry.
 - **The `vendor` / `min_vendors` aliases are removed** (owner's decision;
   deprecated in 0.2.2, #44). The judge key `vendor:` and the quorum key
   `min_vendors:` are refused as unknown keys. The `vendor=` argument of
