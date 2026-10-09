@@ -657,7 +657,8 @@ the next rotation refuses until it is dealt with:
   `witness.pem.new`.
 - It refuses with `witness_key_changed`: the new head was written, but the
   key was not moved. Move `witness.pem.new` to `witness.pem` (it is already
-  mode 0600).
+  mode 0600). The next open rewrites `witness.pub.pem` from it; copy the
+  file only after that open.
 - It refuses with `signed head does not match the chain`: the
   `witness_rotated` entry was written but not checkpointed. Follow "If the
   ledger will not open after a crash" above, then delete `witness.pem.new`.

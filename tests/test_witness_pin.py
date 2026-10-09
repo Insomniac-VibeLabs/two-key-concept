@@ -299,7 +299,7 @@ class Rotation(unittest.TestCase):
     def test_rotation_with_a_configured_pin(self):
         led = Ledger(self.path, self.key, witness_public_key=self.old.public_key())
         new = generate_private_key()
-        self.assertTrue(led.rotate_witness(new)["configured_pin_updated_in_memory"])
+        led.rotate_witness(new)
         led.append("note", {"n": 2})
         led.checkpoint()
         self.assertEqual(led.verify()["configured"], fp(new))
@@ -338,7 +338,12 @@ class Rotation(unittest.TestCase):
         with self.assertRaisesRegex(LedgerError, "witness_key_changed"):
             Ledger(self.path, self.key)
         os.replace(staged, self.led.witness_path)              # the documented repair
-        Ledger(self.path, self.key).verify()
+        led = Ledger(self.path, self.key)
+        led.verify()
+        # witness.pub.pem was never rewritten by the interrupted rotation; the open brings it in step.
+        from two_key.keys import load_public_key
+        pub = load_public_key(self.led.witness_path.with_suffix(".pub.pem"))
+        self.assertEqual(public_raw(pub), public_raw(led._witness.public_key()))
 
     def test_a_staged_key_left_before_the_entry_was_written_blocks_rotation(self):
         staged = Path(str(self.led.witness_path) + ".new")
@@ -349,13 +354,63 @@ class Rotation(unittest.TestCase):
         staged.unlink()
         self.led.rotate_witness()
 
-    def test_failed_checkpoint_removes_the_staged_key(self):
+    def test_failed_checkpoint_after_the_entry_recovers_as_after_a_crash(self):
         staged = Path(str(self.led.witness_path) + ".new")
-        with patch.object(Ledger, "_checkpoint_unlocked", side_effect=LedgerError("disk full")):
-            with self.assertRaisesRegex(LedgerError, "disk full"):
+        old_pem = self.led.witness_path.read_bytes()
+        with patch.object(Ledger, "_checkpoint_unlocked", side_effect=OSError(28, "No space left on device")):
+            with self.assertRaisesRegex(LedgerError, "witness_rotated was written but no head covers it"):
                 self.led.rotate_witness()
-        self.assertFalse(staged.exists())
-        self.assertEqual(self.led.witness_path.read_bytes().count(b"PRIVATE KEY"), 2)
+        self.assertTrue(staged.exists())
+        self.assertEqual(self.led.witness_path.read_bytes(), old_pem)
+        with self.assertRaisesRegex(LedgerError, "witness_key_changed"):
+            self.led.append("note", {"n": 2})               # the instance refuses to write on
+        # The open reports the uncovered entry, not a witness change, so HOWTO's crash recovery applies.
+        with self.assertRaisesRegex(LedgerError, "signed head does not match the chain"):
+            Ledger(self.path, self.key)
+        entries = self.path / "entries.jsonl"
+        entries.write_text("".join(entries.read_text().splitlines(keepends=True)[:-1]))
+        staged.unlink()
+        led = Ledger(self.path, self.key)
+        self.assertEqual(led.verify()["in_ledger"]["fingerprint"], fp(self.old))
+        led.rotate_witness()
+
+
+class OpenWrites(unittest.TestCase):
+    """Opening a new or pre-0.2.3 ledger writes; it must not write with a mismatched principal key pair."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name, "ledger")
+        self.key = generate_private_key()
+
+    def test_first_open_with_the_wrong_principal_private_key_writes_nothing(self):
+        _old_ledger(self.path, self.key)
+        before = (self.path / "entries.jsonl").read_bytes(), (self.path / "head.json").read_bytes()
+        with self.assertRaisesRegex(LedgerError, "principal key mismatch"):
+            Ledger(self.path, generate_private_key(), self.key.public_key())
+        self.assertEqual(((self.path / "entries.jsonl").read_bytes(), (self.path / "head.json").read_bytes()), before)
+        self.assertEqual(Ledger(self.path, self.key).entries[-1].kind, "witness_pinned")
+
+    def test_new_ledger_with_the_wrong_principal_private_key(self):
+        with self.assertRaisesRegex(LedgerError, "principal key mismatch"):
+            Ledger(self.path, generate_private_key(), self.key.public_key())
+        self.assertFalse((self.path / "entries.jsonl").exists())
+
+    def test_witness_read_before_another_process_rotated_it(self):
+        led = Ledger(self.path, self.key)
+        stale = led._witness
+        Ledger(self.path, self.key).rotate_witness()
+        with patch.object(Ledger, "_open_witness", lambda self: stale):
+            Ledger(self.path, self.key).verify()       # reloaded under the lock, not refused
+
+    def test_witness_pub_pem_is_kept_in_step(self):
+        led = Ledger(self.path, self.key)
+        pub = led.witness_path.with_suffix(".pub.pem")
+        pub.write_bytes(b"not a key")
+        Ledger(self.path, self.key)
+        from two_key.keys import load_public_key
+        self.assertEqual(public_raw(load_public_key(pub)), public_raw(led._witness.public_key()))
 
 
 class EngineAfterRotation(unittest.TestCase):

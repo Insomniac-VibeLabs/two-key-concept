@@ -754,11 +754,21 @@ commit messages of PRs #43 and #61.
     enough, because they can rewrite the chain from its first entry, pin
     included. With it, a new ledger needs that witness key in place
     (`witness_key_missing:`).
-  - `Ledger.rotate_witness(new_key=None, reason="")` is the only way to
-    change the key: a `witness_rotated` entry signed by the principal and by
-    the old and the new witness key, checked on every open, then a head
+  - `Ledger.rotate_witness(new_witness=None, *, reason="")` is the only way
+    to change the key: a `witness_rotated` entry signed by the principal and
+    by the old and the new witness key, checked on every open, then a head
     signed by the new key. The new key is staged as `witness.pem.new` and
-    moved into place last. An out-of-ledger pin is updated by the operator.
+    moved into place last. If the head cannot be written, the staged key
+    stays and the ledger refuses to open (`signed head does not match the
+    chain`) until the entry is removed, as after a crash. An out-of-ledger
+    pin is updated by the operator.
+  - The first open of a new or older ledger writes, so it refuses
+    (`principal key mismatch:`) before writing when the principal private
+    key does not match the principal public key. `witness.pem` is read
+    again under the ledger lock, and `witness.pub.pem` is rewritten on open
+    when it does not match `witness.pem`.
+  - The head is checked against the chain (size, tip, Merkle root) before
+    the witness pin, so an entry no head covers reports as that.
   - `Ledger.append` refuses the kinds `witness_pinned` and
     `witness_rotated`. `Ledger.verify()` returns `witness_report()`: the
     key that signed the head, the pin in the ledger and how it was set, the
@@ -773,9 +783,13 @@ commit messages of PRs #43 and #61.
   public key was written. `two-key audit --key KEY --ledger DIR
   [--witness-public-key PEM]` verifies the ledger, runs
   `check_decision_digests`, and prints both pins as JSON; it exits 1 on a
-  refusal or a digest problem. Each command opens the ledger read-write, so
-  the first one run on a ledger from 0.2.2 or earlier writes its
-  `witness_pinned` entry.
+  refusal or a digest problem. `audit` and `rotate-witness` refuse a path
+  with no ledger instead of creating one. An empty `--witness-public-key`
+  is refused, so an unset variable in a script does not turn the pin off.
+  `authorize` prints `ledger refused: ...` and exits 1 when the ledger will
+  not open, instead of a traceback. Each command opens the ledger
+  read-write, so the first one run on a ledger from 0.2.2 or earlier writes
+  its `witness_pinned` entry.
 - **The `vendor` / `min_vendors` aliases are removed** (owner's decision;
   deprecated in 0.2.2, #44). The judge key `vendor:` and the quorum key
   `min_vendors:` are refused as unknown keys. The `vendor=` argument of

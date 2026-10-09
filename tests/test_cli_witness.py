@@ -13,7 +13,7 @@ from two_key.cli import main
 from two_key.constitution import save_envelope, sign_constitution
 from two_key.core import TwoKey
 from two_key.keys import generate_private_key, public_raw, save_private_key, save_public_key
-from two_key.ledger import LedgerError, witness_key_fingerprint
+from two_key.ledger import witness_key_fingerprint
 from two_key.quorum import QuorumPolicy
 from two_key.testing import TEST_AGENT, FixedJudge
 
@@ -60,10 +60,13 @@ class CliWitness(unittest.TestCase):
         self.assertEqual(self.authorize("--witness-public-key", str(self.pin))[0], 0)
         other = self.dir / "other.pub.pem"
         save_public_key(other, generate_private_key().public_key())
-        with self.assertRaisesRegex(LedgerError, "witness_key_changed"):
-            self.authorize("--witness-public-key", str(other))
+        code, out, err = self.authorize("--witness-public-key", str(other))
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("ledger refused: witness_key_changed", err)
         with self.assertRaisesRegex(SystemExit, "--witness-public-key"):
             self.authorize("--witness-public-key", str(self.dir / "missing.pem"))
+        with self.assertRaisesRegex(SystemExit, "empty path"):
+            self.authorize("--witness-public-key", "")      # an unset $VAR must not turn the pin off
 
     def test_audit_reports_both_pins(self):
         self.assertEqual(self.authorize()[0], 0)
@@ -103,8 +106,9 @@ class CliWitness(unittest.TestCase):
         new = load_public_key(self.witness_pub)
         self.assertEqual(rec["new_witness_key_fingerprint"], witness_key_fingerprint(public_raw(new)))
         # The stored pin is the old key until the operator updates it.
-        with self.assertRaisesRegex(LedgerError, "witness_key_changed"):
-            self.authorize("--witness-public-key", str(self.pin))
+        code, _, err = self.authorize("--witness-public-key", str(self.pin))
+        self.assertEqual(code, 1)
+        self.assertIn("witness_key_changed", err)
         self.keep_pin()
         self.assertEqual(self.authorize("--witness-public-key", str(self.pin))[0], 0)
         code, out, _ = self.ledger_cmd("audit", "--witness-public-key", str(self.pin))
@@ -112,6 +116,13 @@ class CliWitness(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(w["in_ledger"]["source"], "rotated")
         self.assertEqual(w["history"][-1]["reason"], "yearly")
+
+    def test_audit_and_rotate_refuse_a_path_with_no_ledger(self):
+        for cmd in ("audit", "rotate-witness"):
+            code, out, _ = self.cli(cmd, "--key", str(self.dir / "principal.pem"), "--ledger", str(self.dir / "typo"))
+            self.assertEqual(code, 1)
+            self.assertIn("no ledger at", json.loads(out)["error"])
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["c.json", "principal.pem"])
 
     def test_rotate_witness_refusal_is_printed(self):
         self.assertEqual(self.authorize()[0], 0)

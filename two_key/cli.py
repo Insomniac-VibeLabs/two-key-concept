@@ -104,9 +104,12 @@ def _demo(_args) -> int:
 
 
 def _witness_pin(args):
-    """The out-of-ledger witness pin named by --witness-public-key, or None."""
-    if not args.witness_public_key:
+    """The out-of-ledger witness pin named by --witness-public-key, or None. An empty value is refused, so an
+    unset variable in a script does not turn the pin off."""
+    if args.witness_public_key is None:
         return None
+    if not args.witness_public_key.strip():
+        raise SystemExit("--witness-public-key: empty path; give the file, or leave the option out")
     try:
         return load_public_key(args.witness_public_key)
     except (OSError, ValueError) as e:
@@ -114,8 +117,12 @@ def _witness_pin(args):
 
 
 def _open_ledger(args, key):
-    """Open the ledger for rotate-witness and audit; a refusal is printed, not raised."""
+    """Open an existing ledger for rotate-witness and audit; a refusal is printed, not raised. A path with no
+    ledger is refused rather than created."""
     from .ledger import Ledger, LedgerError
+    if not (Path(args.ledger) / "entries.jsonl").is_file():
+        print(json.dumps({"ok": False, "error": f"no ledger at {args.ledger}"}, indent=2))
+        return None
     try:
         return Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
     except LedgerError as e:
@@ -134,25 +141,22 @@ def _rotate_witness(args) -> int:
     except LedgerError as e:
         print(json.dumps({"ok": False, "error": str(e)}, indent=2))
         return 1
-    result.pop("configured_pin_updated_in_memory")
     print(json.dumps({"ok": True, **result,
                       "next": "copy the new witness public key to where your --witness-public-key copy is "
-                              "kept; the old copy no longer opens this ledger"}, indent=2))
+                              "kept; the old copy no longer opens this ledger"
+                              + ("" if result["witness_public_key_path"] else
+                                 ". witness.pub.pem could not be written; the next open of the ledger writes it")},
+                     indent=2))
     return 0
 
 
 def _audit(args) -> int:
     from .audit import check_decision_digests
-    from .ledger import LedgerError
     key = load_private_key_file(args.key)
     ledger = _open_ledger(args, key)
     if ledger is None:
         return 1
-    try:
-        witness = ledger.verify()
-    except LedgerError as e:
-        print(json.dumps({"ok": False, "error": str(e)}, indent=2))
-        return 1
+    witness = ledger.witness_report()       # opening verified the chain, the head, and both pins
     problems = check_decision_digests(ledger)
     print(json.dumps({"ok": not problems, "size": ledger.size(), "witness": witness,
                       "decision_digest_problems": problems}, indent=2))
@@ -172,7 +176,7 @@ def _authorize(args) -> int:
     from .core import TwoKey
     from .identity import load_monitored_agent_file
     from .judges.config import load_config_file
-    from .ledger import Ledger
+    from .ledger import Ledger, LedgerError
     if args.agent_session is not None:
         print("--agent-session took the secret on the command line and is no longer accepted; "
               "put it in an environment variable and pass --agent-session-env NAME", file=sys.stderr)
@@ -199,7 +203,11 @@ def _authorize(args) -> int:
     judges, policy = load_config_file(Path(args.judges))
     # The monitored agent is declared by the operator in the judges file, never by the agent.
     agent = load_monitored_agent_file(Path(args.judges))
-    ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
+    try:
+        ledger = Ledger(args.ledger, key, witness_public_key=_witness_pin(args))
+    except LedgerError as e:
+        print(f"ledger refused: {e}", file=sys.stderr)
+        return 1
     tk = TwoKey.load(ledger, key.public_key(), load_envelope(args.constitution), judges,
                      private_key=key, quorum=policy, monitored_agent=agent,
                      ttl_seconds=args.ttl_seconds)
