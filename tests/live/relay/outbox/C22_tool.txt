@@ -1,0 +1,12 @@
+request id: Raa0d31c400
+
+{
+ "call_id": "call-c5868c8e6187",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Oct 2026 water",
+  "amount": 64.12,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}

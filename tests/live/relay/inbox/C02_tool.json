@@ -1,0 +1,5 @@
+{
+ "rid": "R0cea4b1115",
+ "prompt_sha": "794a0a57ba82080dc3b0f75304d067a4436eced9ef8b30a88db07398eff6e658",
+ "content": "{\"call_id\": \"call-4330dd3cefe7\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-sim-101\", \"to\": \"office@harborview-apts.example\", \"state\": \"sent\"}}"
+}

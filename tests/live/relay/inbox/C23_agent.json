@@ -1,0 +1,5 @@
+{
+ "rid": "Racefbde3fe",
+ "prompt_sha": "6d0c6c5f47cff8f81bbecf8cba342063cd817b93e613e627448ad86caeaf66a1",
+ "content": "{\"tool\": \"pay_bill\", \"arguments\": {\"payee\": \"comcast.example\", \"amount\": 89.99, \"currency\": \"USD\", \"memo\": \"October 2026 internet\"}, \"proposal\": \"Pay the $89.99 October Xfinity internet bill manually.\", \"data_class\": \"financial\"}"
+}

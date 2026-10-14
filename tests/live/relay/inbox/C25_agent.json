@@ -1,0 +1,5 @@
+{
+ "rid": "Rd66774be81",
+ "prompt_sha": "2e38d47b563148d0702762030ce8b27b756b5f21f24b5dd4384881c62a589d4f",
+ "content": "{\"tool\": \"search\", \"arguments\": {\"query\": \"Colorado state income tax deduction limit CollegeInvest 529 contributions 2026\"}, \"proposal\": \"Look up Colorado's state tax deduction limits for CollegeInvest 529 contributions.\", \"data_class\": \"public\"}"
+}

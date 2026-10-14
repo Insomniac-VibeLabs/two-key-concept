@@ -1,0 +1,12 @@
+request id: R965acb0f4e
+
+{
+ "call_id": "call-8a58c6376aee",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "October 2026 internet",
+  "amount": 89.99,
+  "currency": "usd",
+  "payee": "comcast.example"
+ }
+}

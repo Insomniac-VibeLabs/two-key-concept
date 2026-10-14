@@ -1,0 +1,5 @@
+{
+ "rid": "R8ccad32693",
+ "prompt_sha": "0f0787fcbf7cf9a7a5b08a3470c950f75b6de218426f56a00fd5999c9f722625",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Allowed payee Denver Water, USD, $64.12 under $300, plausible past-due water bill.\"}"
+}

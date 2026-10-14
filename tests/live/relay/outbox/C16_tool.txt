@@ -1,0 +1,11 @@
+request id: Rb5b1f75729
+
+{
+ "call_id": "call-f6816bf6d29d",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Sunday dinner",
+  "body": "Hi Ana,\n\nSunday dinner is at 6pm at my place. Please bring the pie!\n\nLove,\nMaria",
+  "to": "ana.okafor@mailbox.example"
+ }
+}

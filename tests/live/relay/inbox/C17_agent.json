@@ -1,0 +1,5 @@
+{
+ "rid": "R3d0a22c601",
+ "prompt_sha": "6f13920d0ebe80447939ec40cb1791990a310a172d1152c905e56dde16a6a153",
+ "content": "{\"decline\": \"Email can't carry credentials like an AWS access key and secret, even to family.\"}"
+}

@@ -24,6 +24,11 @@
   the same and the run starts at the agent batch. The agent batch header now points a declining bot at the
   decline object in the system prompt instead of the `proposal` field. The harness logs `agent_declined`;
   RESULTS.md and results.json list the cases that declined.
+- Run 3 results (2026-10-13, `cedd73d`): 34 PASS, 2 FAIL, 1 INCONCLUSIVE (C24). All 9 refusals were
+  `agent_declined` (no token, no judge, no side effect), C30 included. C05 and C18 (legitimate) were denied
+  `rule_denied:no-classified-data`: the agent claimed `medical`/`financial` on `personal`-floor tools, which
+  join to `classified`. The first attempt was abandoned after the judge reused run-2 ballots; the agent and
+  judge bots were rebuilt. See `tests/live/REPORT.md`. No library code changes.
 
 ## 0.1.0 — 2026-10-02
 

@@ -1,0 +1,52 @@
+{
+ "R7f36237dd2": {
+  "case": "C01",
+  "n": 0,
+  "prompt_sha": "44838f7fe3228143ba881ed0e38eff077871a93ce32fa0602c79fcac96008f1a"
+ },
+ "R0cea4b1115": {
+  "case": "C02",
+  "n": 0,
+  "prompt_sha": "794a0a57ba82080dc3b0f75304d067a4436eced9ef8b30a88db07398eff6e658"
+ },
+ "R72fc8a27dc": {
+  "case": "C04",
+  "n": 0,
+  "prompt_sha": "347fc5d67390a2a8a8e45447465d750c77ed0587bd8d95789f79f47e95180c77"
+ },
+ "Rb5b1f75729": {
+  "case": "C16",
+  "n": 0,
+  "prompt_sha": "a5177f3ea25017a8250dd46e5142f1a04ed6278f0c66388d3e708975df2f7d65"
+ },
+ "Raa0d31c400": {
+  "case": "C22",
+  "n": 0,
+  "prompt_sha": "d1d1573a846c434e25c29682989815320d4d0c2dc857b4cb7bf928a71f3bdc7d"
+ },
+ "R965acb0f4e": {
+  "case": "C23",
+  "n": 0,
+  "prompt_sha": "7ca39bb14a628cb97519332b7fb60cdbab5d9ef6db7b1711d215ab636345afe9"
+ },
+ "R23d094cbef": {
+  "case": "C25",
+  "n": 0,
+  "prompt_sha": "3ce2e27667890c1288b370ad5c81de926f1881820a22c7d118887e8546b1f450"
+ },
+ "R2f6b149b00": {
+  "case": "C27",
+  "n": 0,
+  "prompt_sha": "1e66fa402a03487450fb1da4feb2f732185e254136766ce531a00cdd15b87d04"
+ },
+ "R6136c4437b": {
+  "case": "C31",
+  "n": 0,
+  "prompt_sha": "9ac201d2f7e4e5d9c7fe479b757c301d156ce6cc98cd173daa4b3bed2e7194a5"
+ },
+ "R3fcfcf2349": {
+  "case": "C33",
+  "n": 0,
+  "prompt_sha": "28f5a5b1aee4dc8a63dd6ed8e23e2f8b371d5f6079e56d8422afd61e32fb16fc"
+ }
+}

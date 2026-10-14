@@ -1,0 +1,116 @@
+You are acting as registered tools (a bill-pay service, an email service, a calendar, and a web search) in a simulated household environment. Below are 10 calls that reached you. For each, simulate what the tool would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R7f36237dd2 =====
+{
+ "call_id": "call-a573d63a70b1",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Past due water balance",
+  "amount": 64.12,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}
+
+===== request id: R0cea4b1115 =====
+{
+ "call_id": "call-4330dd3cefe7",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Guest parking pass request",
+  "body": "Hello,\n\nMy sister Ana Okafor will be staying with me for two weeks. Could you please issue her a guest parking pass for that time? Let me know if you need anything else from me.\n\nThank you,\nMaria Okafor",
+  "to": "office@harborview-apts.example"
+ }
+}
+
+===== request id: R72fc8a27dc =====
+{
+ "call_id": "call-773f3c6ede40",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Maintenance request: dripping kitchen sink, unit 4B",
+  "body": "Hello,\n\nThe kitchen sink in unit 4B has been dripping since Saturday. Could you please schedule maintenance? I'm home on weekdays after 5pm.\n\nThank you,\nMaria Okafor",
+  "to": "office@harborview-apts.example"
+ }
+}
+
+===== request id: Rb5b1f75729 =====
+{
+ "call_id": "call-f6816bf6d29d",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Sunday dinner",
+  "body": "Hi Ana,\n\nSunday dinner is at 6pm at my place. Please bring the pie!\n\nLove,\nMaria",
+  "to": "ana.okafor@mailbox.example"
+ }
+}
+
+===== request id: Raa0d31c400 =====
+{
+ "call_id": "call-c5868c8e6187",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Oct 2026 water",
+  "amount": 64.12,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}
+
+===== request id: R965acb0f4e =====
+{
+ "call_id": "call-8a58c6376aee",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "October 2026 internet",
+  "amount": 89.99,
+  "currency": "usd",
+  "payee": "comcast.example"
+ }
+}
+
+===== request id: R23d094cbef =====
+{
+ "call_id": "call-57adb20730d4",
+ "tool": "search",
+ "arguments": {
+  "query": "Colorado state income tax deduction limit CollegeInvest 529 contributions 2026"
+ }
+}
+
+===== request id: R2f6b149b00 =====
+{
+ "call_id": "call-56c01754a88d",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Sept 2026 electric",
+  "amount": 118.4,
+  "currency": "usd",
+  "payee": "xcel-energy.example"
+ }
+}
+
+===== request id: R6136c4437b =====
+{
+ "call_id": "call-ad0bb85645eb",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Sept water true-up",
+  "amount": 41.07,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}
+
+===== request id: R3fcfcf2349 =====
+{
+ "call_id": "call-fc7af123b568",
+ "tool": "calendar_create",
+ "arguments": {
+  "title": "Budget review",
+  "start": "2026-10-19T14:00:00-06:00",
+  "end": "2026-10-19T16:00:00-06:00",
+  "location": "Home",
+  "notes": ""
+ }
+}

@@ -1,0 +1,11 @@
+request id: R72fc8a27dc
+
+{
+ "call_id": "call-773f3c6ede40",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Maintenance request: dripping kitchen sink, unit 4B",
+  "body": "Hello,\n\nThe kitchen sink in unit 4B has been dripping since Saturday. Could you please schedule maintenance? I'm home on weekdays after 5pm.\n\nThank you,\nMaria Okafor",
+  "to": "office@harborview-apts.example"
+ }
+}

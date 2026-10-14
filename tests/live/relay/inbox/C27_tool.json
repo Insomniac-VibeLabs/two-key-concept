@@ -1,0 +1,5 @@
+{
+ "rid": "R2f6b149b00",
+ "prompt_sha": "1e66fa402a03487450fb1da4feb2f732185e254136766ce531a00cdd15b87d04",
+ "content": "{\"call_id\": \"call-56c01754a88d\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-sim-104\", \"payee\": \"xcel-energy.example\", \"amount\": 118.4, \"currency\": \"usd\", \"state\": \"submitted\"}}"
+}
