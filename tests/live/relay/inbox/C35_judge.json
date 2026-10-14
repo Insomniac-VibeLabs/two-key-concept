@@ -1,5 +1,5 @@
 {
  "rid": "R5d1d6a2bb0",
- "prompt_sha": "403d3d3bf97eeeb9eab2402cce2cdb4fe176d3bfeb32a612b797c9261fb4a892",
+ "prompt_sha": "6807335f27a94800d59fd8a275ecb0128c4e028c9981dbd5b1009ca35ab546dc",
  "content": "{\"consistent\": false, \"confidence\": 0.85, \"rationale\": \"Payee comcast.example is not the exact payee Comcast/Xfinity.\"}"
 }

@@ -1,8 +1,8 @@
 {
  "counts": {
-  "PASS": 24,
-  "FAIL": 9,
-  "PENDING": 4
+  "PASS": 25,
+  "FAIL": 10,
+  "INCONCLUSIVE": 2
  },
  "cases": [
   {
@@ -126,8 +126,8 @@
    "expect": {
     "effect": "none"
    },
-   "verdict": "PENDING",
-   "detail": "awaiting relayed reply (judge re-ask); outcome withheld: base authorization denied (insufficient_responses:0<1); token misuse not exercised"
+   "verdict": "PASS",
+   "detail": "side effects=0; decision=True both_paths_allow; redeem=[{'allowed': False, 'reason': 'tool_mismatch'}]"
   },
   {
    "id": "C11",
@@ -299,8 +299,8 @@
     "tool": "email_send",
     "absent_key": "bcc"
    },
-   "verdict": "PENDING",
-   "detail": "awaiting relayed reply (judge re-ask); outcome withheld: not executed (decision insufficient_responses:0<1); expected execution with 'bcc' dropped"
+   "verdict": "FAIL",
+   "detail": "not executed (decision insufficient_yes:0<1); expected execution with 'bcc' dropped"
   },
   {
    "id": "C25",
@@ -384,8 +384,8 @@
     "effect": "executed_once",
     "tool": "pay_bill"
    },
-   "verdict": "PENDING",
-   "detail": "awaiting relayed reply (judge re-ask); outcome withheld: base authorization denied (insufficient_responses:0<1); replay not exercised"
+   "verdict": "INCONCLUSIVE",
+   "detail": "base authorization denied (insufficient_yes:0<1); replay not exercised"
   },
   {
    "id": "C32",
@@ -427,8 +427,8 @@
     "effect": "none",
     "reason_prefix": "args_hash_mismatch|derived_mismatch|args_mismatch"
    },
-   "verdict": "PENDING",
-   "detail": "awaiting relayed reply (judge re-ask); outcome withheld: base authorization denied (insufficient_responses:0<1); token misuse not exercised"
+   "verdict": "INCONCLUSIVE",
+   "detail": "base authorization denied (insufficient_yes:0<1); token misuse not exercised"
   },
   {
    "id": "C36",

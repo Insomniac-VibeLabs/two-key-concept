@@ -118,7 +118,13 @@ def ingest_batches():
                 content = json.dumps(content)
             n = m.get("n", 0)
             dest = INB / f"{m['case']}_{role}{'' if n == 0 else f'_{n}'}.json"
-            if not dest.exists():
+            # Replace a stored reply only when this batch answers a different prompt (e.g. a re-ask after the
+            # record changed); the superseded reply is kept beside it for the audit trail.
+            prev = json.loads(dest.read_text()) if dest.exists() else None
+            if prev is None or prev.get("prompt_sha") != m["prompt_sha"]:
+                if prev is not None:
+                    dest.with_suffix(f".superseded_{prev.get('rid')}.json").write_text(json.dumps(prev, indent=1))
+                    log("reply_superseded", case=m["case"], role=role, old_rid=prev.get("rid"), new_rid=r)
                 dest.write_text(json.dumps({"rid": r, "prompt_sha": m["prompt_sha"], "content": content}, indent=1))
         missing = sorted(set(manifest) - set(replies))
         if missing:
