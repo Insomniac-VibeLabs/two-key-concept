@@ -1482,3 +1482,107 @@ On branch `working`. Package version stays 0.3.0. No behavior changes.
   deliberately loosen permissions, to prove export refuses them, carry a
   `skipcq: BAN-B103` comment saying so.
 
+
+## DeepSource test-fixture findings — 2026-10-14
+
+Package version stays 0.3.0. No behavior changes, tests only.
+
+- BAN-B103 (`tests/test_issue_fixes.py`, `tests/test_capability_key.py`): the
+  two `os.chmod(..., 0o755)` calls deliberately loosen a directory to prove
+  the code under test tightens it back to 0o700. They carry a
+  `skipcq: BAN-B103` comment saying so, as `tests/test_key_backup.py` does.
+- BAN-B104 (`tests/test_netloc_allowlist.py`, `tests/test_b5_local_proxy.py`):
+  `"0.0.0.0"` appears only as a hostname string in a fixture list for the
+  address classifier. Nothing binds a socket. Both lines carry a
+  `skipcq: BAN-B104` comment.
+
+## Live-test findings: docs — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. No behavior changes.
+From the live functional test on `test/live-functional-2026-10-13` (0 of 9
+legitimate calls allowed; every safety check held).
+
+- HOWTO "Designing a constitution": point 4 says an omitted `data_class` is
+  `classified` whatever the floor is. New point 6: the monitored agent
+  sees only the prose, so name tool ids, argument keys, counterparty ids,
+  and the class to claim. New point 7: one vocabulary everywhere, ids with
+  optional display names; no display-name mapping or fuzzy matching.
+- HOWTO "Judges": judges do not enforce allow lists or data classes; Path A
+  does. `judges.yaml` and `agents.yaml` are trusted operator config (a
+  `callback` auth entry imports its module). Same note in README,
+  SECURITY.md, and THREAT_MODEL.
+- HOWTO "Authorize from Python": `decision.reason` names one cause (parse,
+  limit, or derive deny, then Path A, then Path B); read
+  `path_a["reason"]` and `path_b["reason"]` too.
+- HOWTO "Monitored agents": the agent is not sent `tool_specs`; an omitted
+  `data_class` is `classified`; there is no decline reply yet.
+- README: the agent is not sent `tool_specs`. The cloud-judge sentence now
+  says a `:cloud` or `-cloud` model counts as cloud on any host, as the code
+  does (`LLMJudge.is_cloud`).
+- `examples/constitution.md` names tools and parties by id. The golden v1
+  hash test reads a frozen copy of the old prose
+  (`tests/fixtures/v1_constitution.md`); its hashes are unchanged.
+- AGENTS.md: keep the `classified` default; no display-name mapping.
+
+## Agent prompt names the data classes — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. The agent system prompt
+changes; nothing Path A or Path B checks changes.
+
+- `two_key.agents.SYSTEM` lists the five data classes (`DATA_CLASSES`) and
+  says that omitting `data_class` means `classified`, whatever the tool is.
+  The `classified` default stays: it is not lowered to the tool's floor.
+- `tests/test_agent_prompt.py` pins both, and that the user prompt still
+  carries only the prose and the instruction.
+
+## Opt-in tool vocabulary for the monitored agent — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Neither path changes; a
+prompt changes only when the caller opts in.
+
+- `TwoKey.agent_vocabulary()` (and `two_key.agents.tool_vocabulary`) builds
+  read-only text from the signed constitution: each tool id, its
+  `irreversible` flag and `data_class_floor`, its amount, counterparty,
+  payload, and custom field paths, each `allow` list, each custom field's
+  type and values or bounds, and the five data classes. It leaves out rule
+  thresholds, `deny_counterparties`, bytecode, field descriptions, and
+  defaults.
+- `MonitoredAgent.complete(instruction, constitution, vocabulary=...)`
+  sends it in an escaped `<tool_vocabulary>` fence between the
+  constitution and the instruction. Without `vocabulary`, the prompt is
+  byte-for-byte the 0.3.0 prompt. An empty vocabulary is refused. The
+  Anthropic agent now splits its cached block at the instruction, so the
+  vocabulary is cached with the constitution and the instruction is not;
+  without a vocabulary the two blocks are what they were.
+- Allowed for local and cloud agents alike (operator decision): it grants
+  nothing. HOWTO "Known trade-offs" has a privacy note: cloud judges and a
+  cloud agent read their prompts at the vendor, HTTPS protects them only
+  in transit, and the vocabulary sends every allowed party on every call.
+- HOWTO, README, THREAT_MODEL, and llms.txt describe it.
+  `tests/test_agent_prompt.py` covers the contents, the exclusions, the
+  escaping, the unchanged default prompt, and that a guessed id still
+  denies.
+
+## Tool vocabulary lists syntax, never values — 2026-10-14
+
+On branch `working`. Package version stays 0.3.0. Neither path changes.
+Supersedes the contents listed under "Opt-in tool vocabulary for the
+monitored agent": an agent doing reconnaissance should learn the shape of
+a call, not which payee, value, or amount would pass.
+
+- `tool_vocabulary` / `TwoKey.agent_vocabulary()` no longer list `allow`
+  lists, enum values, integer `min`/`max`, or the `irreversible` flag. A
+  counterparty path says "an exact id given in the instruction or the
+  constitution"; a custom field gives its type (and a string's
+  `max_length`). Still listed: tool ids, the floor, amount path, unit, and
+  currency path, payload paths with shape and `max_length`, and
+  `deny_unmapped` when set. The header tells the agent to take values from
+  the instruction or the prose and to omit `irreversible`, `amount_usd`,
+  and `counterparty`, which come from the arguments and the spec.
+- No full mode: there is no option that sends the allow lists.
+- `agent_vocabulary(tools=[...])` limits the text to one task's tools. An
+  unknown, empty, or non-list `tools` is `AgentConfigError`.
+- HOWTO "Designing a constitution" points 6 and 7: put the exact values a
+  call needs in the instruction; ids written in the prose reach the
+  monitored agent's host too. HOWTO "Monitored agents", "Known trade-offs"
+  (privacy), README, THREAT_MODEL, and llms.txt match.

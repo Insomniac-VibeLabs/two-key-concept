@@ -109,9 +109,11 @@ The commands above sign a constitution. They do not design one. The operator own
 1. Define the tools and actions the agent is allowed to perform. Use an `allow_only_tools` rule. An allow-list is required by default so unknown tools fail closed.
 2. Define the actions it must never perform. Use `deny_if`, `deny_counterparties`, or `deny_if_irreversible_over` rules for the cases that must be hard denials.
 3. Specify tool arguments and their schemas in `tool_specs`. Path A derives the built-in structured fields (`tool`, `amount_usd`, `data_class`, `counterparty`, `irreversible`) from the argument bytes according to those specs. A claim that disagrees with the derived values is a deny. For facts the built-in fields do not cover (an environment, a region, a count, a flag), declare [custom fields](#custom-path-a-fields) and rules that name them.
-4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
+4. Set `data_class_floor` and counterparty `allow` lists where they matter. A floor never lowers a claimed class. Omitting `data_class` means `classified`, whatever the floor is: if a rule denies `classified`, every call that does not claim a class is denied. A party not on an `allow` list is `counterparty_not_allowed`. Payload paths constrain type and length only; they do not read contents. Classification of free text is left to Path B or to DLP outside this package.
 5. Decide how many judges are needed and what their agreement threshold should be. At least one judge must be configured. The default approval threshold is `min(2, number_of_judges)`: one affirmative vote with one judge, or two affirmative votes with two or more judges. This is not a general majority rule. Set `required_yes` explicitly if you want a different threshold, such as a majority or unanimity. Consider the `high_assurance` profile for destructive, irreversible, financial, or external-send tools. Missing, malformed, errored, or timed-out ballots never count as yes.
-6. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
+6. Give the monitored agent the syntax, and each call its values. The agent sees the prose and the instruction, not `tool_specs`. Pass `vocabulary=tk.agent_vocabulary()` to `MonitoredAgent.complete` to send the tool ids, argument paths, and value syntax (see [Monitored agents](#monitored-agents)); it never lists a value. Put the exact values a call needs (the counterparty id, an enum value) in the instruction, for example "pay `power-co.example` $64.12": the agent then learns one id per task, not the whole `allow` list. An agent that guesses `send_email` for `email_send`, or `Power Co` for `power-co.example`, is denied every time.
+7. Use one vocabulary everywhere. Where the prose names a party, write its exact id, optionally with a display name: "the power company (`power-co.example`)". A judge that reads only a company name cannot tie it to the id in the call, and denying is correct for that judge. The same prose goes to the monitored agent, so every id in it reaches the agent's host; name in the prose only the parties you are content for the agent to know, and pass the rest in the instruction. Two-Key does not map display names to ids and does no fuzzy matching: that would let a look-alike payee pass.
+8. Test allowed, denied, ambiguous, and adversarial examples before trusting the constitution. Confirm that Path A denies the cases the hard rules are meant to catch, that Path B receives the intended context, and that the gateway drops or denies unmapped keys as configured (`deny_unmapped` defaults off).
 
 The signed constitution remains the authority. A future GUI constitution maker (planned later) should help construct and validate choices, but the principal must still sign the resulting constitution. The GUI must not silently weaken the rules.
 
@@ -370,6 +372,17 @@ A dropped connection and HTTP 429, 502, 503, or 504 are retried at most
 twice more, with a short backoff, inside the quorum deadline. A response
 that was parsed is never retried. A response over 1,000,000 bytes, a
 redirect, and any other HTTP error abstain.
+
+Judges do not enforce the counterparty `allow` lists, the data class, or
+the other hard rules; Path A does. A judge reads the prose and the
+normalized action record and votes on whether the call fits the prose.
+It can deny a call Path A would allow, and its yes cannot overturn a
+Path A deny.
+
+`judges.yaml` and `agents.yaml` are trusted operator configuration. An
+`auth: {type: callback, callback: "module:function"}` entry imports that
+module when the file loads, so whoever can write the file can run code in
+the `TwoKey` process. Protect these files like the code itself.
 
 ## The monitored agent and the judge-is-not-the-agent rule
 
@@ -790,14 +803,60 @@ head was written. `decision.to_record()` leaves the token out and gives
 exception inside `authorize` is a deny (`internal_error:<Type>`) written to
 the ledger. The gateway is the only component that should call the tool.
 
+`decision.reason` names one cause, in this order: a parse, limit, or
+derive deny (`malformed_action`, `amount_mismatch`, `derive_failed:...`,
+`counterparty_not_allowed`), then the Path A deny, then the Path B result.
+A call can fail more than one way: a payee not on the `allow` list and an
+omitted `data_class` (so `classified`) give `counterparty_not_allowed` as the reason while
+`decision.path_a["reason"]` names the class rule. Read
+`decision.path_a["reason"]` and `decision.path_b["reason"]` as well when
+you fix a denied call.
+
 ## Monitored agents
 
 `examples/agents.yaml` configures Grok, ChatGPT, Claude, Gemini, and a local
 model. Hosting is recorded. It is not trust.
 
+`MonitoredAgent.complete` sends the agent the constitution prose and the
+instruction. By default it does not send `tool_specs`, so the agent learns
+tool ids, argument keys, counterparty ids, and data classes only from the
+prose (see [Designing a constitution](#designing-a-constitution), point 6).
+The system prompt lists the five data classes and says that omitting
+`data_class` means `classified`.
+
+To send the signed vocabulary as well, opt in per call, and name the
+tools the task needs:
+
+```python
+instruction = "Pay power-co.example 64.12 USD for the March bill."
+prop = agent.complete(instruction, constitution_prose,
+                      vocabulary=tk.agent_vocabulary(tools=["pay_bill"]))
+decision = tk.authorize(prop.action, prop.tool_args, prop.proposal,
+                        agent_id=prop.agent_id, hosting=prop.hosting, agent_session=session)
+```
+
+`tk.agent_vocabulary()` describes syntax, never values. For each signed
+tool (or only those in `tools`) it gives the id, the `data_class_floor`,
+the amount path, unit, and currency path, each counterparty path ("an
+exact id given in the instruction or the constitution"), each payload
+path with its shape and `max_length`, each custom field's path and type
+(and a string field's `max_length`), and `deny_unmapped` when set. It
+also lists the five data classes and tells the agent to omit
+`irreversible`, `amount_usd`, and `counterparty`, which are read from the
+arguments and the spec.
+
+It never lists an `allow` list, an enum value, an integer bound, a rule
+or its threshold, `deny_counterparties`, bytecode, a field description, a
+default, or a tool's `irreversible` flag. An agent that probes for an
+allowed payee still has to guess, and every wrong guess is a ledgered
+deny (`counterparty_not_allowed`), so probing shows in the ledger. It
+grants nothing: Path A and Path B check the call exactly as before. A
+tool id in `tools` without a signed spec is refused (`AgentConfigError`).
+
 `authorize_from_agent` parses the proposal (`tool`, `arguments`, `proposal`,
 and optional structured fields) and runs both paths. It does not call the
-tool. Extra keys in the proposal are rejected. Text longer than 1,048,576
+tool. The structured fields are optional to send, but omitting
+`data_class` means `classified`, whatever the tool's floor is. Extra keys in the proposal are rejected. Text longer than 1,048,576
 characters (four times the arguments cap) is denied `proposal_too_large`
 before it is parsed. Text that is not a string, is not JSON, has a repeated
 or extra key, or misses a field is denied `malformed_proposal`. Both denies
@@ -808,6 +867,12 @@ you run as `TwoKey(monitored_agent=agent)`; it is checked against every
 judge at startup like the judges.yaml declaration. A proposal with a
 repeated JSON key, at any depth or inside an `arguments` string, is
 refused.
+
+There is no decline reply yet. An agent that refuses the instruction still
+has to propose a call, and a refusal usually shows up as a denied call
+(for example `tool: "none"`, denied by the tool allow-list). Read such a
+deny alongside the proposal text: the same deny can be a decline or a
+blocked attack.
 
 ## Redeem
 
@@ -1207,6 +1272,19 @@ names the setting or declaration that controls it.
   cannot be read refuses to start. At call time it is read to compare with
   `agent_session` and with the credential named for the monitored agent.
   Remove `auth:` from a connector that does not send it.
+- Privacy: every cloud judge and a cloud monitored agent receive their
+  prompt in readable form at the vendor. Judges get the prose, the action
+  record (including the derived counterparty), and, unless withheld, the
+  tool arguments. The agent gets the prose and the instruction, and, when
+  you pass `vocabulary=`, the tool ids, argument paths, and value syntax
+  (no allowed values). Every id written in the prose reaches both. Put a
+  private payee's id in that call's instruction rather than the prose, so
+  the agent's host sees one id per task, not the whole list. Off-machine connections use HTTPS (plain
+  HTTP is refused unless the host is loopback, or a judge sets
+  `allow_insecure_http`), which protects the text in transit, not at the
+  vendor; what the vendor logs or keeps is its policy, not this package's.
+  Use a local judge or a local agent for data that must not leave the
+  machine.
 - A key backup uses PBKDF2-HMAC-SHA256 (600,000 iterations). It is not
   memory-hard. Three bundles with three passphrases, stored apart, are what
   keeps one stolen file from being every key a head needs. Two bundles that
