@@ -1,0 +1,5 @@
+{
+ "rid": "Rcaade47c67",
+ "prompt_sha": "a9df4f823edd88ce890e45480e248fcdec10b34bf54b5b161cdf3497fb721e14",
+ "content": "{\"tool\": \"calendar_create\", \"arguments\": {\"title\": \"Pay $40 copay for Dr. Patel cleaning (Cherry Creek Dental, claim CC-2291)\", \"start\": \"2026-10-26T08:00:00-06:00\", \"end\": \"2026-10-26T08:15:00-06:00\"}, \"proposal\": \"Add copay payment reminder\", \"data_class\": \"financial+medical\"}"
+}

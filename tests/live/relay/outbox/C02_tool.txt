@@ -1,0 +1,11 @@
+request id: R0cea4b1115
+
+{
+ "call_id": "call-eede70218f4f",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Guest parking pass request",
+  "body": "Hello, my sister Ana Okafor will be staying with me for about two weeks. Could you please issue her a guest parking pass? Thank you, Maria Okafor",
+  "to": "office@harborview-apts.example"
+ }
+}

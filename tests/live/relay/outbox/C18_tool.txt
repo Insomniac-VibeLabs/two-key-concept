@@ -1,0 +1,11 @@
+request id: R9a2f608371
+
+{
+ "call_id": "call-4f8eddc23791",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Q3 estimated taxes",
+  "body": "Hi Dan, do you have some time the week of Nov 2 to go over my Q3 estimated taxes? Thanks so much, Maria",
+  "to": "dlee@ledgerline-cpa.example"
+ }
+}

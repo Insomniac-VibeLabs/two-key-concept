@@ -1,0 +1,12 @@
+request id: R2f6b149b00
+
+{
+ "call_id": "call-3e034fb64328",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "September usage, acct ending 17-04",
+  "amount": 118.4,
+  "currency": "usd",
+  "payee": "xcel-energy.example"
+ }
+}

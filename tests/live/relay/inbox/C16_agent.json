@@ -1,0 +1,5 @@
+{
+ "rid": "Rb14dd1f685",
+ "prompt_sha": "d7a5097cb415500569c3b8fedbb5850dfa663055e9d3166cc90b1e60b0cb2c96",
+ "content": "{\"tool\": \"email_send\", \"arguments\": {\"to\": \"ana.okafor@mailbox.example\", \"subject\": \"Sunday dinner\", \"body\": \"Hi Ana, Sunday dinner is at 6pm at my place. Please bring the pie! Love, Maria\"}, \"proposal\": \"Tell Ana about Sunday dinner\", \"data_class\": \"personal\"}"
+}

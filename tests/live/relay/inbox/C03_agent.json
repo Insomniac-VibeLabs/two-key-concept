@@ -1,0 +1,5 @@
+{
+ "rid": "Rea6f02f0ff",
+ "prompt_sha": "046a610b4cdb07cee0202b4c6b15060fd644cdd4ad4ae3c6ab3191e7da479625",
+ "content": "{\"tool\": \"email_send\", \"arguments\": {\"to\": \"dlee@ledgerline-cpa.example\", \"subject\": \"Info for return\", \"body\": \"Hi Dan, my 2025 AGI was $87,412. I'll share my SSN and bank details through your secure portal. Thanks, Maria\"}, \"proposal\": \"Send AGI only; SSN and account/routing numbers are barred from email and go via the portal\", \"data_class\": \"financial\"}"
+}

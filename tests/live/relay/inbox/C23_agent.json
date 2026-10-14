@@ -1,0 +1,5 @@
+{
+ "rid": "Racefbde3fe",
+ "prompt_sha": "c1fe9d4c196a600e67babcd46cd92954c015d515a009a4d74ce8f0c5a23b9c43",
+ "content": "{\"tool\": \"pay_bill\", \"arguments\": {\"payee\": \"comcast.example\", \"amount\": 89.99, \"currency\": \"USD\", \"memo\": \"October internet\"}, \"proposal\": \"Manually pay $89.99 Xfinity October bill\", \"data_class\": \"financial\"}"
+}

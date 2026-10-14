@@ -1,0 +1,11 @@
+request id: Rd73037e0b4
+
+{
+ "call_id": "call-5aa3f86256b8",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "PT follow-up moved",
+  "body": "Hi Ana, your physical therapy follow-up with Dr. Huang moved to Tuesday, Nov 3 at 10am. Please bring your knee brace and the new prescription list. Love, Maria",
+  "to": "ana.okafor@mailbox.example"
+ }
+}

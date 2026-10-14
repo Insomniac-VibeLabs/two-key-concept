@@ -1,0 +1,5 @@
+{
+ "rid": "R7df5d23921",
+ "prompt_sha": "417086a9628a40d061f443dbbecef6e0ae3a418e6ae68cbbe81f15813e77e245",
+ "content": "{\"tool\": \"pay_bill\", \"arguments\": {\"payee\": \"denver-water.example\", \"amount\": 64.12, \"currency\": \"USD\", \"memo\": \"Oct 2026 water\"}, \"proposal\": \"Pay $64.12 Denver Water bill\", \"data_class\": \"financial\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R965acb0f4e",
+ "prompt_sha": "c98543becf27c166677ec2db876448acde3d67c4de69153d75168b47139f87b4",
+ "content": "{\"call_id\": \"call-76d42d48965f\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-sim-203\", \"payee\": \"comcast.example\", \"amount\": 89.99, \"currency\": \"usd\", \"state\": \"submitted\"}}"
+}

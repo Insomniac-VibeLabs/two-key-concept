@@ -1,0 +1,5 @@
+{
+ "rid": "Rd82edc1f8f",
+ "prompt_sha": "9ee823e7eb89f3023b1c22786e99419d6d2d2f2ee5ddee91c890825789d80d40",
+ "content": "{\"call_id\": \"call-3a772ed39dc0\", \"status\": \"ok\", \"result\": {\"event_id\": \"evt-sim-201\", \"title\": \"Dentist cleaning - Dr. Patel\", \"start\": \"2026-10-22T09:00:00-06:00\", \"end\": \"2026-10-22T10:00:00-06:00\", \"state\": \"created\"}}"
+}

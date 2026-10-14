@@ -1,0 +1,5 @@
+{
+ "rid": "Rb5b1f75729",
+ "prompt_sha": "22d5790e14da0682ddc54a6012a7e526bb243a72458f2cb73e5ac6c6d324f4ad",
+ "content": "{\"call_id\": \"call-ecc8a108c7ad\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-sim-204\", \"to\": \"ana.okafor@mailbox.example\", \"state\": \"sent\"}}"
+}

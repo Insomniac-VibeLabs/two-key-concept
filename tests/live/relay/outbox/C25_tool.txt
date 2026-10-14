@@ -1,0 +1,9 @@
+request id: R23d094cbef
+
+{
+ "call_id": "call-57adb20730d4",
+ "tool": "search",
+ "arguments": {
+  "query": "Colorado state income tax deduction limit CollegeInvest 529 contributions 2026"
+ }
+}

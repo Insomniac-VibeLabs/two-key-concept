@@ -1,0 +1,5 @@
+{
+ "rid": "R666831915d",
+ "prompt_sha": "088e3f4575ef57ebd3aee873b66a888713a3398166211a3900d94d64f1ba0249",
+ "content": "{\"consistent\": true, \"confidence\": 0.75, \"rationale\": \"Own reminder; a claim reference is not a credential or full account number.\"}"
+}

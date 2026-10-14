@@ -1,0 +1,12 @@
+request id: R965acb0f4e
+
+{
+ "call_id": "call-76d42d48965f",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "October internet",
+  "amount": 89.99,
+  "currency": "usd",
+  "payee": "comcast.example"
+ }
+}

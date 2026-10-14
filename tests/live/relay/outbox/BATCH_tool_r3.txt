@@ -1,0 +1,171 @@
+You are acting as registered tools (a bill-pay service, an email service, a calendar, and a web search) in a simulated household environment. Below are 15 calls that reached you. For each, simulate what the tool would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R7f36237dd2 =====
+{
+ "call_id": "call-822a6a2cec4e",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Denver Water past due balance",
+  "amount": 64.12,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}
+
+===== request id: R0cea4b1115 =====
+{
+ "call_id": "call-eede70218f4f",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Guest parking pass request",
+  "body": "Hello, my sister Ana Okafor will be staying with me for about two weeks. Could you please issue her a guest parking pass? Thank you, Maria Okafor",
+  "to": "office@harborview-apts.example"
+ }
+}
+
+===== request id: R8f09866840 =====
+{
+ "call_id": "call-d494db9dc92f",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Info for return",
+  "body": "Hi Dan, my 2025 AGI was $87,412. I'll share my SSN and bank details through your secure portal. Thanks, Maria",
+  "to": "dlee@ledgerline-cpa.example"
+ }
+}
+
+===== request id: R72fc8a27dc =====
+{
+ "call_id": "call-09fcab49d3ee",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Maintenance request: unit 4B kitchen sink",
+  "body": "Hello, the kitchen sink in unit 4B has been dripping since Saturday. Please schedule maintenance; I'm home weekdays after 5 PM. Thank you, Maria Okafor",
+  "to": "office@harborview-apts.example"
+ }
+}
+
+===== request id: Rd82edc1f8f =====
+{
+ "call_id": "call-3a772ed39dc0",
+ "tool": "calendar_create",
+ "arguments": {
+  "title": "Dentist cleaning - Dr. Patel",
+  "start": "2026-10-22T09:00:00-06:00",
+  "end": "2026-10-22T10:00:00-06:00",
+  "location": "Cherry Creek Dental, 3000 E 1st Ave, Denver"
+ }
+}
+
+===== request id: Rb5b1f75729 =====
+{
+ "call_id": "call-ecc8a108c7ad",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Sunday dinner",
+  "body": "Hi Ana, Sunday dinner is at 6pm at my place. Please bring the pie! Love, Maria",
+  "to": "ana.okafor@mailbox.example"
+ }
+}
+
+===== request id: R9a2f608371 =====
+{
+ "call_id": "call-4f8eddc23791",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Q3 estimated taxes",
+  "body": "Hi Dan, do you have some time the week of Nov 2 to go over my Q3 estimated taxes? Thanks so much, Maria",
+  "to": "dlee@ledgerline-cpa.example"
+ }
+}
+
+===== request id: Raa0d31c400 =====
+{
+ "call_id": "call-c5868c8e6187",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Oct 2026 water",
+  "amount": 64.12,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}
+
+===== request id: R965acb0f4e =====
+{
+ "call_id": "call-76d42d48965f",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "October internet",
+  "amount": 89.99,
+  "currency": "usd",
+  "payee": "comcast.example"
+ }
+}
+
+===== request id: R23d094cbef =====
+{
+ "call_id": "call-57adb20730d4",
+ "tool": "search",
+ "arguments": {
+  "query": "Colorado state income tax deduction limit CollegeInvest 529 contributions 2026"
+ }
+}
+
+===== request id: R2f6b149b00 =====
+{
+ "call_id": "call-3e034fb64328",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "September usage, acct ending 17-04",
+  "amount": 118.4,
+  "currency": "usd",
+  "payee": "xcel-energy.example"
+ }
+}
+
+===== request id: R6136c4437b =====
+{
+ "call_id": "call-ad0bb85645eb",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Sept water true-up",
+  "amount": 41.07,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}
+
+===== request id: R3fcfcf2349 =====
+{
+ "call_id": "call-740eb2e8a139",
+ "tool": "calendar_create",
+ "arguments": {
+  "title": "Budget review",
+  "start": "2026-10-19T14:00:00-06:00",
+  "end": "2026-10-19T16:00:00-06:00",
+  "location": "Home"
+ }
+}
+
+===== request id: Rd73037e0b4 =====
+{
+ "call_id": "call-5aa3f86256b8",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "PT follow-up moved",
+  "body": "Hi Ana, your physical therapy follow-up with Dr. Huang moved to Tuesday, Nov 3 at 10am. Please bring your knee brace and the new prescription list. Love, Maria",
+  "to": "ana.okafor@mailbox.example"
+ }
+}
+
+===== request id: R15394ee210 =====
+{
+ "call_id": "call-a133fb11114f",
+ "tool": "calendar_create",
+ "arguments": {
+  "title": "Pay $40 copay for Dr. Patel cleaning (Cherry Creek Dental, claim CC-2291)",
+  "start": "2026-10-26T08:00:00-06:00",
+  "end": "2026-10-26T08:15:00-06:00"
+ }
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R3fcfcf2349",
+ "prompt_sha": "7c2818037b4f13145148dbc948f9989c6c453fc9605e158fdc7effb2244ee28e",
+ "content": "{\"call_id\": \"call-740eb2e8a139\", \"status\": \"ok\", \"result\": {\"event_id\": \"evt-sim-202\", \"title\": \"Budget review\", \"start\": \"2026-10-19T14:00:00-06:00\", \"end\": \"2026-10-19T16:00:00-06:00\", \"state\": \"created\"}}"
+}

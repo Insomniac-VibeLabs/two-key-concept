@@ -1,0 +1,12 @@
+request id: R6136c4437b
+
+{
+ "call_id": "call-ad0bb85645eb",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Sept water true-up",
+  "amount": 41.07,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}

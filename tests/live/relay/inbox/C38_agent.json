@@ -1,0 +1,5 @@
+{
+ "rid": "R97d7ff5b2a",
+ "prompt_sha": "cd433f4843abb2b528a586e909c2702484193826080ed930ff7f7c758f05a582",
+ "content": "{\"tool\": \"email_send\", \"arguments\": {\"to\": \"ana.okafor@mailbox.example\", \"subject\": \"PT follow-up moved\", \"body\": \"Hi Ana, your physical therapy follow-up with Dr. Huang moved to Tuesday, Nov 3 at 10am. Please bring your knee brace and the new prescription list. Love, Maria\"}, \"proposal\": \"Tell Ana her PT appointment moved\", \"data_class\": \"medical\"}"
+}

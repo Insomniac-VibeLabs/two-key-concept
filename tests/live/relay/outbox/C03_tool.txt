@@ -1,0 +1,11 @@
+request id: R8f09866840
+
+{
+ "call_id": "call-d494db9dc92f",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Info for return",
+  "body": "Hi Dan, my 2025 AGI was $87,412. I'll share my SSN and bank details through your secure portal. Thanks, Maria",
+  "to": "dlee@ledgerline-cpa.example"
+ }
+}

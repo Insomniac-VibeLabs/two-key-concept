@@ -1,0 +1,77 @@
+{
+ "R7f36237dd2": {
+  "case": "C01",
+  "n": 0,
+  "prompt_sha": "ea7ce41310cb2942cda6d7883295151f3caf736aa60784fbd0a925c095a1b3ca"
+ },
+ "R0cea4b1115": {
+  "case": "C02",
+  "n": 0,
+  "prompt_sha": "862287ab72790473ab7dc1566f90d7777abf15d92b7fca359f0db4b9e05b43ea"
+ },
+ "R8f09866840": {
+  "case": "C03",
+  "n": 0,
+  "prompt_sha": "98cdf2ca11a4c08157faf46d1f934cac5df83a4b0619f2b4a73857896267ac59"
+ },
+ "R72fc8a27dc": {
+  "case": "C04",
+  "n": 0,
+  "prompt_sha": "efa1f2d392c1b281ef5f24043bca5b873446d42f0c5210101a4c56512e85a020"
+ },
+ "Rd82edc1f8f": {
+  "case": "C05",
+  "n": 0,
+  "prompt_sha": "9ee823e7eb89f3023b1c22786e99419d6d2d2f2ee5ddee91c890825789d80d40"
+ },
+ "Rb5b1f75729": {
+  "case": "C16",
+  "n": 0,
+  "prompt_sha": "22d5790e14da0682ddc54a6012a7e526bb243a72458f2cb73e5ac6c6d324f4ad"
+ },
+ "R9a2f608371": {
+  "case": "C18",
+  "n": 0,
+  "prompt_sha": "35b8837debd9a6b65ee9c2fc4e0c2503d567746d3c91e6ec9d39db4e91f9a920"
+ },
+ "Raa0d31c400": {
+  "case": "C22",
+  "n": 0,
+  "prompt_sha": "d1d1573a846c434e25c29682989815320d4d0c2dc857b4cb7bf928a71f3bdc7d"
+ },
+ "R965acb0f4e": {
+  "case": "C23",
+  "n": 0,
+  "prompt_sha": "c98543becf27c166677ec2db876448acde3d67c4de69153d75168b47139f87b4"
+ },
+ "R23d094cbef": {
+  "case": "C25",
+  "n": 0,
+  "prompt_sha": "3ce2e27667890c1288b370ad5c81de926f1881820a22c7d118887e8546b1f450"
+ },
+ "R2f6b149b00": {
+  "case": "C27",
+  "n": 0,
+  "prompt_sha": "7a6927bcffccdeafb28387fb8828ec9cd5cd2ffbc7435abbb521666d4e1d67e1"
+ },
+ "R6136c4437b": {
+  "case": "C31",
+  "n": 0,
+  "prompt_sha": "9ac201d2f7e4e5d9c7fe479b757c301d156ce6cc98cd173daa4b3bed2e7194a5"
+ },
+ "R3fcfcf2349": {
+  "case": "C33",
+  "n": 0,
+  "prompt_sha": "7c2818037b4f13145148dbc948f9989c6c453fc9605e158fdc7effb2244ee28e"
+ },
+ "Rd73037e0b4": {
+  "case": "C38",
+  "n": 0,
+  "prompt_sha": "b1a1af86d33fe8e2a0e3733351b43352e9afbf4a19ae94d6054dadf971d44aa0"
+ },
+ "R15394ee210": {
+  "case": "C39",
+  "n": 0,
+  "prompt_sha": "e369a59b772f23ce91548639c1d882f6b0bc205f76a69bfc99400b1e2d1da546"
+ }
+}

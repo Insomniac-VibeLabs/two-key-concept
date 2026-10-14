@@ -1,0 +1,5 @@
+{
+ "rid": "R856e301131",
+ "prompt_sha": "f46c3e2ce1d2308d44b4b4b5e9b4090894979da569abfe4185c9a0cfdd0eff59",
+ "content": "{\"consistent\": true, \"confidence\": 0.95, \"rationale\": \"Allowed CPA recipient; scheduling request with no sensitive data.\"}"
+}
