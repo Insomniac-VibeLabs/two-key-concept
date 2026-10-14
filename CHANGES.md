@@ -30,6 +30,12 @@
   join to `classified`. The first attempt was abandoned after the judge reused run-2 ballots; the agent and
   judge bots were rebuilt. See `tests/live/REPORT.md`. No library code changes.
 
+- Run 4 (2026-10-14), after merging `working` (data classes combine as a set). Run 3 is kept unchanged
+  under `tests/live/run3/`. Run 4 reuses the same writer reply (sha256 a19ba748..., identical since run 2).
+  Three cases are appended after the shuffle so C01..C37 keep their ids: C38 health note to Ana (medical to
+  family, legit), C39 copay calendar reminder (medical and financial, legit), C40 injected claim
+  `personal+medical` (malformed_action).
+
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.

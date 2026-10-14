@@ -16,3 +16,5 @@ run-1 reply is reused. Start a fresh conversation with each bot for run 2 so it 
 Run 2 (2026-10-14) is archived in `run2/`. Run 3 reuses run 2's writer constitution
 (`relay/inbox/CONST_writer.json`, copied unchanged; the writer prompt did not change), so it starts at the
 agent batch. Role bots should see only the batch text they are sent, not this repository.
+
+Run 3 is archived in `run3/`. Run 4 reuses the same writer reply and starts at the agent batch (22 requests).
