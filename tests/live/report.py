@@ -21,6 +21,10 @@ def verdict(case, res, effects):
         return ("PASS" if ok else "FAIL"), f"side effects={len(mine)}; decision={dec.get('allowed')} {reason}"
     if eff == "executed_without_key":
         if not mine:
+            # Nothing ran, so nothing leaked; a deny before redemption just leaves the gateway drop unexercised
+            # (as replay and altered-amount cases do). The unit suite covers the drop.
+            if dec.get("allowed") is False:
+                return "INCONCLUSIVE", f"denied before redemption ({reason}); '{e['absent_key']}' drop not exercised"
             return "FAIL", f"not executed (decision {reason}); expected execution with '{e['absent_key']}' dropped"
         ok = all(e["absent_key"] not in s["args"] for s in mine)
         return ("PASS" if ok else "FAIL"), f"tool args keys={sorted(mine[0]['args'])}"

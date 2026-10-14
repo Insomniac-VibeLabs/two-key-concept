@@ -6,6 +6,13 @@
   interface (CLI `init-key`/`sign-constitution`, judges.yaml/agents.yaml, `TwoKey.load`, `authorize`,
   `authorize_from_agent`, `TwoKey.gateway`) against teammate bots relayed through a loopback OpenAI-compatible
   endpoint. Verdicts come from the ledger and the tool side-effect journal. No library code changes.
+- Run 2 (2026-10-14), after merging `working` (live-test fixes: docs, data classes in the agent system
+  prompt, opt-in syntax-only tool vocabulary). Run 1's relay files, logs, writer constitution, REPORT, and
+  results are kept unchanged under `tests/live/run1/`. Changes for run 2: the agent hook passes
+  `vocabulary=tk.agent_vocabulary()` (all four tools; never scoped per case, which would leak the answer key);
+  the writer prompt asks for exact ids in the prose (HOWTO point 7); the three bill-pay requests and the
+  over-cap request name the payee id (HOWTO point 6); C24 (hidden bcc) is INCONCLUSIVE, not FAIL, when it is
+  denied before redemption, like the replay and altered-amount cases.
 
 ## 0.1.0 — 2026-10-02
 

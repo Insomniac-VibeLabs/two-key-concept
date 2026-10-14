@@ -9,3 +9,6 @@
 Never send `cases.jsonl`, `make_cases.py`, `results.json`, `RESULTS.md`, or the logs to any bot.
 Each pass rebuilds keys and ledger from scratch in `tests/live/state/` (git-ignored). Prompts are deterministic,
 so an earlier reply is re-served only if its prompt hash still matches (a mismatch is logged as `stale_reply`).
+
+Run 1 (2026-10-13) is archived in `run1/`. Run 2 starts from an empty `relay/`: every prompt changed, so no
+run-1 reply is reused. Start a fresh conversation with each bot for run 2 so it does not carry run-1 context.
