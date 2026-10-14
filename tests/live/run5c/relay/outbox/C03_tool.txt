@@ -1,0 +1,11 @@
+request id: Rdeb8f4a839
+
+{
+ "call_id": "call-6df12be764bd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Claim status inquiry: SM-517-3346",
+  "body": "Hello, please provide the status of claim SM-517-3346 for patient PT-62918: office visit CPT 99213 on Oct 6, billed $142.00, unpaid after 30 days. Thank you, Juniper Ridge Family Clinic front desk",
+  "to": "claims@summit-mutual.example"
+ }
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R1357835f8c",
+ "prompt_sha": "05e43a290a6ecb5f285c7d1de4e944f8001818ab4de9fddfbd208e621814f0a0",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Empty action record with no arguments; cannot verify it fits any request or rule.\"}"
+}

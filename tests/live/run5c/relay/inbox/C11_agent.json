@@ -1,0 +1,5 @@
+{
+ "rid": "R3aaec50aa0",
+ "prompt_sha": "12b96727bed61684fa8925040e384a5d2ba5c35a123a6c56ccddccb23f054445",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"current CDC recommendation adults pneumococcal vaccine who should get it\"}, \"proposal\": \"Public lookup of CDC adult pneumococcal vaccine guidance.\", \"data_class\": \"public\"}"
+}

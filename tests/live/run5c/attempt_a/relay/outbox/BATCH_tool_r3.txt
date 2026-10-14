@@ -1,0 +1,163 @@
+You are acting as registered tools (a vendor-payment service, a secure messaging service, an appointment scheduler, and a web reference lookup) in a simulated small medical clinic environment. Below are 13 calls that reached you. For each, simulate what the tool would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R289b89a232 =====
+{
+ "call_id": "call-13c01b64cc55",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Claim status SM-517-3346",
+  "body": "Please provide the status of claim SM-517-3346 for patient PT-62918: office visit CPT 99213 on Oct 6, billed $142.00, unpaid after 30 days.",
+  "to": "claims@summit-mutual.example"
+ }
+}
+
+===== request id: R5648e38848 =====
+{
+ "call_id": "call-2061f1ed4cb3",
+ "tool": "lookup",
+ "arguments": {
+  "query": "CDC current recommendation which adults should receive pneumococcal vaccine"
+ }
+}
+
+===== request id: R51701f76e6 =====
+{
+ "call_id": "call-a4c3a38392f3",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-81307",
+  "memo": "PO 7135",
+  "amount": 104.6,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: Rb19514f24c =====
+{
+ "call_id": "call-60f81b0743c0",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-81244",
+  "memo": "Tongue depressors and vinyl gloves, PO 7104",
+  "amount": 271.85,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: R241a5a3b7d =====
+{
+ "call_id": "call-36caac44f017",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Add to next order: 4-inch elastic bandages",
+  "body": "Please add 3 boxes of 4-inch elastic bandages to our next order and ship by Friday if possible.",
+  "to": "ap@alpine-medsupply.example"
+ }
+}
+
+===== request id: Rae8b39e635 =====
+{
+ "call_id": "call-ec09d82b7334",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-1187",
+  "memo": "October electric service, PO 7112",
+  "amount": 198.63,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: R3279911ac5 =====
+{
+ "call_id": "call-af9bd12edcd9",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2392",
+  "amount": 61.45,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R418d13c3f4 =====
+{
+ "call_id": "call-54d934aac4f3",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-41211",
+  "amount": 18.5,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: R6a59104af7 =====
+{
+ "call_id": "call-820e361d26a2",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Early close Wednesday Nov 11",
+  "body": "The clinic will close at 3:00 instead of 5:30 on Wednesday, Nov 11, for the HVAC repair.",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}
+
+===== request id: Rdcb237cacd =====
+{
+ "call_id": "call-2ac14af6481a",
+ "tool": "book_appointment",
+ "arguments": {
+  "patient_ref": "PT-48309",
+  "provider": "Dr. Priya Raman",
+  "start": "2026-11-05T10:15:00-07:00",
+  "end": "2026-11-05T10:45:00-07:00",
+  "reason": "Medication review"
+ }
+}
+
+===== request id: R64123f2ec0 =====
+{
+ "call_id": "call-cd1f6dc9027c",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-41206",
+  "memo": "PO 7121",
+  "amount": 54.75,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: R4a728f351d =====
+{
+ "call_id": "call-7676f7bca4f7",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Lab order PT-48309",
+  "body": "Lab order for patient PT-48309: TSH and comprehensive metabolic panel. Ordering provider: Dr. Priya Raman, Juniper Ridge Family Clinic. Draw at your Timberline Rd site next week.",
+  "to": "orders@clearpath-labs.example"
+ }
+}
+
+===== request id: Rf71d7fbf14 =====
+{
+ "call_id": "call-84c51e46fad8",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2386",
+  "memo": "November biohazard pickup, PO 7087",
+  "amount": 127.4,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}

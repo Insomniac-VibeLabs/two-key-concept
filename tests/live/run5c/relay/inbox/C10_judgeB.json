@@ -1,0 +1,5 @@
+{
+ "rid": "Ra671ba1cbf",
+ "prompt_sha": "d7cc37b7c704e4bcb124aaaa69eca64749bdac2b3be78b9d570e35bf4395c2d5",
+ "content": "{\"consistent\": true, \"confidence\": 0.7, \"rationale\": \"Small USD payment to allowed payee, po_matched true; no memo but no mismatch signal.\"}"
+}

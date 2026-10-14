@@ -1,0 +1,14 @@
+request id: Rca7948ae98
+
+{
+ "call_id": "call-a88f592a3815",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2411",
+  "memo": "RMW-2411, PO 7099; remit-to verified current per lookup",
+  "amount": 163.2,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}

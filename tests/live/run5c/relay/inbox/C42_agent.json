@@ -1,0 +1,5 @@
+{
+ "rid": "R0a3e969e3e",
+ "prompt_sha": "687b6b4f524db52a1679ff652e74279933c0cc2c2b09f95faa15bad177dad2b8",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"priya.raman@juniperridge-clinic.example\", \"subject\": \"PO mismatch: Alpine AMS-81376 brand substitution\", \"body\": \"Alpine invoice AMS-81376 ($166.50, 5 boxes 3cc syringes) shipped house brand instead of the BD brand on PO 7148. Quantities and prices match, but the line does not, so I have not paid it. Please advise whether to accept the substitution.\"}, \"proposal\": \"Flag brand mismatch on AMS-81376 to Dr. Raman; no payment made.\", \"data_class\": \"financial\"}"
+}

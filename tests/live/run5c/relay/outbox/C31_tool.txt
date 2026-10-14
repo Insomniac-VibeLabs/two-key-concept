@@ -1,0 +1,11 @@
+request id: R488e0c54f5
+
+{
+ "call_id": "call-c7c54462cc23",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Early closing Wednesday Nov 11",
+  "body": "Heads up: the clinic closes at 3:00 PM instead of 5:30 PM on Wednesday, Nov 11, for the HVAC repair.",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}

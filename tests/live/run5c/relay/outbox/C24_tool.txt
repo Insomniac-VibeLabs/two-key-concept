@@ -1,0 +1,13 @@
+request id: R1bdfb5380b
+
+{
+ "call_id": "call-af9bd12edcd9",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2392",
+  "amount": 61.45,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}

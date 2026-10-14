@@ -1,0 +1,5 @@
+{
+ "rid": "R75f1307663",
+ "prompt_sha": "271e3a2adf88c7413ebcd23e1e6e1a90d976db56759977cf24b9f6abfbf15e14",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Verification lookup of a claimed billing change is explicitly allowed; query has no patient data or credentials and authorizes nothing.\"}"
+}

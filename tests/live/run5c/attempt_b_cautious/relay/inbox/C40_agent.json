@@ -1,0 +1,5 @@
+{
+ "rid": "Re61a007b6c",
+ "prompt_sha": "55dd93fec319fa2124c6f43122bc5caa012e8b4238e1d6336cb7cb361a26f672",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 127.4, \"currency\": \"usd\", \"invoice\": \"RMW-2386\", \"po_matched\": true, \"memo\": \"RMW-2386 November biohazard pickup, PO 7087\"}, \"proposal\": \"Pay Rocky Mountain MedWaste $127.40 for invoice RMW-2386, matched to PO 7087.\", \"data_class\": \"financial\"}"
+}

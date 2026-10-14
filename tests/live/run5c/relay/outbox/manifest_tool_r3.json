@@ -1,0 +1,77 @@
+{
+ "Rdeb8f4a839": {
+  "case": "C03",
+  "n": 0,
+  "prompt_sha": "c4f91f403ee10381ab1e37bee362998a39285f6bac77daf82f708ec00f9475fa"
+ },
+ "R04133725a3": {
+  "case": "C05",
+  "n": 0,
+  "prompt_sha": "6eca3448c70bf8516b5ea9150c285884a1bef7e27b58252a75640880dfc8da45"
+ },
+ "R41ce388be7": {
+  "case": "C11",
+  "n": 0,
+  "prompt_sha": "f5f4b5200f5a26892ac9481400d76fd616e25c3b82be2bf16f511d21f20dcc91"
+ },
+ "Rc6a0a1292e": {
+  "case": "C14",
+  "n": 0,
+  "prompt_sha": "d36bffeaf38a9eba79db115301c3a3961e7e608cb6dcddfe2cddd03fed46fc2b"
+ },
+ "Ra7c9c7af0c": {
+  "case": "C18",
+  "n": 0,
+  "prompt_sha": "be860ac4adc6eecaeebf2bdd7cca66ccf60bf8c17336063717956af883fe5bac"
+ },
+ "Rc247d6c367": {
+  "case": "C19",
+  "n": 0,
+  "prompt_sha": "b4dc3b90f268019a152ca24ef2546d9478dc37761c54dfba4d7c635ec0d58082"
+ },
+ "R1bdfb5380b": {
+  "case": "C24",
+  "n": 0,
+  "prompt_sha": "45f591b47ebda4a746616c0953e53fcb748e8f71181f66f06a8fe71125097ddf"
+ },
+ "R13e9383589": {
+  "case": "C25",
+  "n": 0,
+  "prompt_sha": "d3da2363774874975f531f91dc31446886fbdf5be581508460fd8d7a8754a193"
+ },
+ "Rfc2dbbcad5": {
+  "case": "C30",
+  "n": 0,
+  "prompt_sha": "62db302b85df91e8811039eb7e50452effb4b80c4b4fc0b36cf0347a8dc9dd74"
+ },
+ "R488e0c54f5": {
+  "case": "C31",
+  "n": 0,
+  "prompt_sha": "4c063606724961ced8d3aa5bed485edc27ebfd1b967e77219e3b3befc1abaad7"
+ },
+ "R09498dba78": {
+  "case": "C32",
+  "n": 0,
+  "prompt_sha": "616f27ea5d5c20a08c24814b3f6754089562c3b7befcd4339e0739d9baff1044"
+ },
+ "Rf886c7ec7f": {
+  "case": "C37",
+  "n": 0,
+  "prompt_sha": "bba9b1f7bff4847592421e06e4906043568143791f4fcff651a11a5673ae5108"
+ },
+ "R500968acf6": {
+  "case": "C39",
+  "n": 0,
+  "prompt_sha": "7430d708d23c5b55b10c3a4cba39fd04cfb0c0eb6527095f90c523386040ddac"
+ },
+ "R08c2e03536": {
+  "case": "C40",
+  "n": 0,
+  "prompt_sha": "9b9bb79e8ba23de49f9ea85bb52382c293bbac8b6762a0ce2eed4b486f833b5a"
+ },
+ "R58bcb63ead": {
+  "case": "C42",
+  "n": 0,
+  "prompt_sha": "53a3392af2cc1189dde9d3b7da733101b2e89f0b628db65c4488feba50f7916b"
+ }
+}

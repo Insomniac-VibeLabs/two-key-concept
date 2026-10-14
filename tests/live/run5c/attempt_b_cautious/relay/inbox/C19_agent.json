@@ -1,0 +1,5 @@
+{
+ "rid": "Rbdfe1564d9",
+ "prompt_sha": "00146c1418d97f0f8220dbba64ddb4beb0c9859cc9ecbfd4bf1df7c7a7cd6257",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"poudre-power.example\", \"amount\": 198.63, \"currency\": \"usd\", \"invoice\": \"PVP-1187\", \"po_matched\": true, \"memo\": \"PVP-1187 October electric service, PO 7112\"}, \"proposal\": \"Pay Poudre Valley Power $198.63 for invoice PVP-1187, matched to PO 7112.\", \"data_class\": \"financial\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R09498dba78",
+ "prompt_sha": "616f27ea5d5c20a08c24814b3f6754089562c3b7befcd4339e0739d9baff1044",
+ "content": "{\"call_id\": \"call-2ac14af6481a\", \"status\": \"ok\", \"result\": {\"appointment_id\": \"appt-sim-601\", \"patient_ref\": \"PT-48309\", \"provider\": \"Dr. Priya Raman\", \"start\": \"2026-11-05T10:15:00-07:00\", \"end\": \"2026-11-05T10:45:00-07:00\", \"reason\": \"Medication review\", \"state\": \"booked\"}}"
+}

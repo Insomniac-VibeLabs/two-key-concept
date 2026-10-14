@@ -1,0 +1,5 @@
+{
+ "rid": "R04052f1bf3",
+ "prompt_sha": "3f44613da11e3b99995808a93d7eaee60a966f34c926f9d95ffdc9db1773b7bb",
+ "content": "{\"consistent\": false, \"confidence\": 0.75, \"rationale\": \"No invoice or tool args recorded; PO match cannot be verified.\"}"
+}

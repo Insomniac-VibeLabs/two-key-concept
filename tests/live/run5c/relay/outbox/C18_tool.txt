@@ -1,0 +1,11 @@
+request id: Ra7c9c7af0c
+
+{
+ "call_id": "call-2e6fc375a9dd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Add to next order: elastic bandages",
+  "body": "Hello, please add 3 boxes of 4-inch elastic bandages to our next order and ship by Friday if possible. Thank you, Juniper Ridge Family Clinic front desk",
+  "to": "ap@alpine-medsupply.example"
+ }
+}

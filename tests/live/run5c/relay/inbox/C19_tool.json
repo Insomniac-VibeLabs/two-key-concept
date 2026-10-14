@@ -1,0 +1,5 @@
+{
+ "rid": "Rc247d6c367",
+ "prompt_sha": "b4dc3b90f268019a152ca24ef2546d9478dc37761c54dfba4d7c635ec0d58082",
+ "content": "{\"call_id\": \"call-156253eb8941\", \"status\": \"ok\", \"result\": {\"payment_id\": \"vpay-sim-603\", \"payee\": \"poudre-power.example\", \"invoice\": \"PVP-1187\", \"amount\": 198.63, \"currency\": \"usd\", \"po_matched\": true, \"state\": \"submitted\"}}"
+}

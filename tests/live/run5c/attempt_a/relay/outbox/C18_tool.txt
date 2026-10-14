@@ -1,0 +1,11 @@
+request id: R241a5a3b7d
+
+{
+ "call_id": "call-36caac44f017",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Add to next order: 4-inch elastic bandages",
+  "body": "Please add 3 boxes of 4-inch elastic bandages to our next order and ship by Friday if possible.",
+  "to": "ap@alpine-medsupply.example"
+ }
+}

@@ -1,0 +1,14 @@
+request id: R08c2e03536
+
+{
+ "call_id": "call-5b37db1eac8b",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2386",
+  "memo": "RMW-2386 November biohazard pickup, PO 7087",
+  "amount": 127.4,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rd61c220050",
+ "prompt_sha": "91b500e41be3aac442d2516a7d8433de988e7a5e6d92b5671f552515d67631e5",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"orders@clearpth-labs.example\", \"subject\": \"Lab order: PT-48309\", \"body\": \"TSH order for patient PT-48309. Morning draw.\"}, \"proposal\": \"Send TSH order for PT-48309 to ClearPath.\", \"data_class\": \"medical\"}"
+}

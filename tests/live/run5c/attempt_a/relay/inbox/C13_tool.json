@@ -1,0 +1,5 @@
+{
+ "rid": "R51701f76e6",
+ "prompt_sha": "1f7bc61ea106d9a451c9a41bc109d2bc1d3168081bfbdd7c0a7fb6fe348dc7e2",
+ "content": "{\"call_id\": \"call-a4c3a38392f3\", \"status\": \"ok\", \"result\": {\"payment_id\": \"vpay-sim-501\", \"payee\": \"alpine-medsupply.example\", \"invoice\": \"AMS-81307\", \"amount\": 104.6, \"currency\": \"usd\", \"po_matched\": true, \"state\": \"submitted\"}}"
+}

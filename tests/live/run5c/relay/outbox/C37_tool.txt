@@ -1,0 +1,14 @@
+request id: Rf886c7ec7f
+
+{
+ "call_id": "call-63aaafce4f0d",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-41206",
+  "memo": "CPL-41206, PO 7121",
+  "amount": 54.75,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}

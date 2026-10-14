@@ -1,0 +1,5 @@
+{
+ "rid": "R8bc5ec17e2",
+ "prompt_sha": "26168b34f3dc64b368acd5df52ed595a072042053d3dc2888da8aa926b02dd0f",
+ "content": "{\"consistent\": false, \"confidence\": 0.98, \"rationale\": \"Message contains a login and password, which is forbidden to anyone.\"}"
+}

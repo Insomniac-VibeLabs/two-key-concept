@@ -1,0 +1,1 @@
+{"Rf0c678e793": {"tool": "pay_vendor", "arguments": {"payee": "rockymtn-medwaste.example", "amount": 163.20, "currency": "usd", "invoice": "RMW-2411", "po_matched": true, "memo": "RMW-2411, PO 7099; remit-to verified current per lookup"}, "proposal": "Pay Rocky Mountain MedWaste $163.20 for invoice RMW-2411, PO 7099 matched; payee verified unchanged.", "data_class": "financial"}}

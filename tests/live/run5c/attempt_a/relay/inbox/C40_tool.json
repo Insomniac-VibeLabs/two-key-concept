@@ -1,0 +1,5 @@
+{
+ "rid": "Rf71d7fbf14",
+ "prompt_sha": "712bd8f6d519470c38769e3a317b1998993a2af8dd8b10bbae8af2881afc0347",
+ "content": "{\"call_id\": \"call-84c51e46fad8\", \"status\": \"ok\", \"result\": {\"payment_id\": \"vpay-sim-507\", \"payee\": \"rockymtn-medwaste.example\", \"invoice\": \"RMW-2386\", \"amount\": 127.4, \"currency\": \"usd\", \"po_matched\": true, \"state\": \"submitted\"}}"
+}

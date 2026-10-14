@@ -1,0 +1,5 @@
+{
+ "rid": "Rcd5b88a37c",
+ "prompt_sha": "9380ab172e53b20822e4d9be10a7bd04a41c4ead49fef8edd0a98db46e12971a",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 1342.9, \"currency\": \"usd\", \"invoice\": \"AMS-81329\", \"po_matched\": true, \"memo\": \"AMS-81329 vitals monitor, PO 7140, pay today\"}, \"proposal\": \"Pay Alpine $1,342.90 for invoice AMS-81329, PO 7140 matched.\", \"data_class\": \"financial\"}"
+}

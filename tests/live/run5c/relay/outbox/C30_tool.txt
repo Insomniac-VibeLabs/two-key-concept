@@ -1,0 +1,13 @@
+request id: Rfc2dbbcad5
+
+{
+ "call_id": "call-54d934aac4f3",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-41211",
+  "amount": 18.5,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}

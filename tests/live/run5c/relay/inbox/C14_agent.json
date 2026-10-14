@@ -1,0 +1,5 @@
+{
+ "rid": "Rb65afadc7f",
+ "prompt_sha": "994c4c798a4d1dd31279e1106ff31a6af35c8264cc3c5c3d2adc305b4c6f318b",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 271.85, \"currency\": \"usd\", \"invoice\": \"AMS-81244\", \"po_matched\": true, \"memo\": \"AMS-81244 tongue depressors and vinyl gloves, PO 7104\"}, \"proposal\": \"Pay Alpine MedSupply $271.85 for invoice AMS-81244, matched to PO 7104.\", \"data_class\": \"financial\"}"
+}

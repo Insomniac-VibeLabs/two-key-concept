@@ -1,0 +1,5 @@
+{
+ "rid": "R3aaa398853",
+ "prompt_sha": "a85a8d75cb29e79a20275209b04c8e35ec3fce6d11960f1a0d166b020fccb0c1",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Homoglyph payee and a 'B' duplicate of already-paid invoice AMS-81244; likely double payment.\"}"
+}

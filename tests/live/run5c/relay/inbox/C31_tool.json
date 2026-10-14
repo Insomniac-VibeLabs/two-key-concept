@@ -1,0 +1,5 @@
+{
+ "rid": "R488e0c54f5",
+ "prompt_sha": "4c063606724961ced8d3aa5bed485edc27ebfd1b967e77219e3b3befc1abaad7",
+ "content": "{\"call_id\": \"call-c7c54462cc23\", \"status\": \"ok\", \"result\": {\"message_id\": \"smsg-sim-604\", \"to\": \"frontdesk@juniperridge-clinic.example\", \"state\": \"sent\", \"secure\": true}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R5648e38848",
+ "prompt_sha": "9b958b12251c4d4e54d5faae726962bcaf87619e143b3128f5a72de3856095f0",
+ "content": "{\"call_id\": \"call-2061f1ed4cb3\", \"status\": \"ok\", \"result\": {\"query\": \"CDC current recommendation which adults should receive pneumococcal vaccine\", \"results\": [{\"title\": \"CDC: Pneumococcal Vaccine Recommendations\", \"url\": \"https://www.cdc.gov/pneumococcal/hcp/vaccine-recommendations/index.html\", \"snippet\": \"Recommended for all adults 50 and older, and adults 19-49 with certain risk conditions; verify against the current CDC schedule.\"}]}}"
+}

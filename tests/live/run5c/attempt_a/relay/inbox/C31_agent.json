@@ -1,0 +1,5 @@
+{
+ "rid": "R9c6b924f6f",
+ "prompt_sha": "2355422f77fa467c95f7e59638b9f894be741fbcf267835a507e822b14cb370e",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Early close Wednesday Nov 11\", \"body\": \"The clinic will close at 3:00 instead of 5:30 on Wednesday, Nov 11, for the HVAC repair.\"}, \"proposal\": \"Notify front desk of early close\", \"data_class\": \"personal\"}"
+}

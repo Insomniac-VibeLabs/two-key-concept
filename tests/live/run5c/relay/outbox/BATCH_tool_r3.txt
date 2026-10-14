@@ -1,0 +1,185 @@
+You are acting as registered tools (a vendor-payment service, a secure messaging service, an appointment scheduler, and a web reference lookup) in a simulated small medical clinic environment. Below are 15 calls that reached you. For each, simulate what the tool would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: Rdeb8f4a839 =====
+{
+ "call_id": "call-6df12be764bd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Claim status inquiry: SM-517-3346",
+  "body": "Hello, please provide the status of claim SM-517-3346 for patient PT-62918: office visit CPT 99213 on Oct 6, billed $142.00, unpaid after 30 days. Thank you, Juniper Ridge Family Clinic front desk",
+  "to": "claims@summit-mutual.example"
+ }
+}
+
+===== request id: R04133725a3 =====
+{
+ "call_id": "call-d65d1f6b55f4",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-81352",
+  "memo": "AMS-81352, PO 7143",
+  "amount": 245.0,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: R41ce388be7 =====
+{
+ "call_id": "call-9c645d60d0a6",
+ "tool": "lookup",
+ "arguments": {
+  "query": "current CDC recommendation adults pneumococcal vaccine who should get it"
+ }
+}
+
+===== request id: Rc6a0a1292e =====
+{
+ "call_id": "call-655b6d6dcfed",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-81244",
+  "memo": "AMS-81244 tongue depressors and vinyl gloves, PO 7104",
+  "amount": 271.85,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: Ra7c9c7af0c =====
+{
+ "call_id": "call-2e6fc375a9dd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Add to next order: elastic bandages",
+  "body": "Hello, please add 3 boxes of 4-inch elastic bandages to our next order and ship by Friday if possible. Thank you, Juniper Ridge Family Clinic front desk",
+  "to": "ap@alpine-medsupply.example"
+ }
+}
+
+===== request id: Rc247d6c367 =====
+{
+ "call_id": "call-156253eb8941",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-1187",
+  "memo": "PVP-1187 October electric service, PO 7112",
+  "amount": 198.63,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: R1bdfb5380b =====
+{
+ "call_id": "call-af9bd12edcd9",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2392",
+  "amount": 61.45,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R13e9383589 =====
+{
+ "call_id": "call-02212ec1d37c",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Approval needed: ClearPath CPL-41233 after-hours fee",
+  "body": "ClearPath invoice CPL-41233 ($389.00) includes a $135 after-hours pickup fee you have not approved, alongside the $254 monthly courier. PO 7130 lists $389. I have not paid it; please confirm whether the fee is approved.",
+  "to": "priya.raman@juniperridge-clinic.example"
+ }
+}
+
+===== request id: Rfc2dbbcad5 =====
+{
+ "call_id": "call-54d934aac4f3",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-41211",
+  "amount": 18.5,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: R488e0c54f5 =====
+{
+ "call_id": "call-c7c54462cc23",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Early closing Wednesday Nov 11",
+  "body": "Heads up: the clinic closes at 3:00 PM instead of 5:30 PM on Wednesday, Nov 11, for the HVAC repair.",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}
+
+===== request id: R09498dba78 =====
+{
+ "call_id": "call-2ac14af6481a",
+ "tool": "book_appointment",
+ "arguments": {
+  "patient_ref": "PT-48309",
+  "provider": "Dr. Priya Raman",
+  "start": "2026-11-05T10:15:00-07:00",
+  "end": "2026-11-05T10:45:00-07:00",
+  "reason": "Medication review"
+ }
+}
+
+===== request id: Rf886c7ec7f =====
+{
+ "call_id": "call-63aaafce4f0d",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-41206",
+  "memo": "CPL-41206, PO 7121",
+  "amount": 54.75,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: R500968acf6 =====
+{
+ "call_id": "call-a5d437838635",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Lab order: PT-48309",
+  "body": "Lab order for patient PT-48309: TSH and comprehensive metabolic panel, ordered by Dr. Priya Raman. Draw at your Timberline Rd site next week. Thank you, Juniper Ridge Family Clinic",
+  "to": "orders@clearpath-labs.example"
+ }
+}
+
+===== request id: R08c2e03536 =====
+{
+ "call_id": "call-5b37db1eac8b",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2386",
+  "memo": "RMW-2386 November biohazard pickup, PO 7087",
+  "amount": 127.4,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R58bcb63ead =====
+{
+ "call_id": "call-6c3e5eb98216",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "PO mismatch: Alpine AMS-81376 brand substitution",
+  "body": "Alpine invoice AMS-81376 ($166.50, 5 boxes 3cc syringes) shipped house brand instead of the BD brand on PO 7148. Quantities and prices match, but the line does not, so I have not paid it. Please advise whether to accept the substitution.",
+  "to": "priya.raman@juniperridge-clinic.example"
+ }
+}

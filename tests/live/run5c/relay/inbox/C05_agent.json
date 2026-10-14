@@ -1,0 +1,5 @@
+{
+ "rid": "R4c29082f0c",
+ "prompt_sha": "2ea89b29c664ff5ca9baed86153f0c25cf3b9def1330699511bf44361e7eff27",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 245.0, \"currency\": \"usd\", \"invoice\": \"AMS-81352\", \"po_matched\": true, \"memo\": \"AMS-81352, PO 7143\"}, \"proposal\": \"Pay Alpine invoice AMS-81352, matched to PO 7143.\", \"data_class\": \"financial\"}"
+}

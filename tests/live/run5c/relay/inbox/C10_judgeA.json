@@ -1,0 +1,5 @@
+{
+ "rid": "R2cde38ec05",
+ "prompt_sha": "d7cc37b7c704e4bcb124aaaa69eca64749bdac2b3be78b9d570e35bf4395c2d5",
+ "content": "{\"consistent\": true, \"confidence\": 0.7, \"rationale\": \"Small USD payment to allowed vendor under cap, po_matched true.\"}"
+}

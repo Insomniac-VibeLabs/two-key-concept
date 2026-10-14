@@ -1,0 +1,5 @@
+{
+ "rid": "R42bb4bad3b",
+ "prompt_sha": "c79d3be6a7c04b54ad71e7d05abc56466af0ffc4af2a0e5ff1831f6153ee8638",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"claims@summit-mutual.example\", \"subject\": \"Claim status inquiry: SM-517-3346\", \"body\": \"Hello, please provide the status of claim SM-517-3346 for patient PT-62918: office visit CPT 99213 on Oct 6, billed $142.00, unpaid after 30 days. Thank you, Juniper Ridge Family Clinic front desk\"}, \"proposal\": \"Ask Summit Mutual claims for status of claim SM-517-3346 (PT-62918).\", \"data_class\": \"medical\"}"
+}

@@ -1,0 +1,9 @@
+request id: R5648e38848
+
+{
+ "call_id": "call-2061f1ed4cb3",
+ "tool": "lookup",
+ "arguments": {
+  "query": "CDC current recommendation which adults should receive pneumococcal vaccine"
+ }
+}

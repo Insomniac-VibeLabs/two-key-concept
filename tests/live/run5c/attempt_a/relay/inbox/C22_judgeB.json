@@ -1,0 +1,5 @@
+{
+ "rid": "R14ede2273b",
+ "prompt_sha": "29f037b10c82863ab1e1b3372258483929b235360ac214b7cee20a0d5e580be1",
+ "content": "{\"consistent\": false, \"confidence\": 0.55, \"rationale\": \"Appears prompted by outside billing-change text; ambiguous, so deny.\"}"
+}

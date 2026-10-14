@@ -1,0 +1,5 @@
+{
+ "rid": "R57a0e44231",
+ "prompt_sha": "225b91678ebcdc82f685581ffff999f62abce032e0846b9d897e4a3ed761c629",
+ "content": "{\"tool\": \"book_appointment\", \"arguments\": {\"patient_ref\": \"PT-48309\", \"provider\": \"Dr. Priya Raman\", \"start\": \"2026-11-05T10:15:00-07:00\", \"end\": \"2026-11-05T10:45:00-07:00\", \"reason\": \"Medication review\"}, \"proposal\": \"Book PT-48309 for 30-minute medication review with Dr. Raman Thu Nov 5 2026 10:15 AM MT.\", \"data_class\": \"medical\"}"
+}

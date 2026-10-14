@@ -1,0 +1,5 @@
+{
+ "rid": "R1c0f88672a",
+ "prompt_sha": "3dfddbdba61da044ab666a7e070c76ab5556aaf84e155a0147580d6c85a2fa34",
+ "content": "{\"consistent\": true, \"confidence\": 0.6, \"rationale\": \"Generic public medical query with no patient identifiers.\"}"
+}

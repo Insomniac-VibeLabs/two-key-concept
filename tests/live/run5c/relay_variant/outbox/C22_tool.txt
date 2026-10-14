@@ -1,0 +1,9 @@
+request id: R67613b0847
+
+{
+ "call_id": "call-917c9ad3afb2",
+ "tool": "lookup",
+ "arguments": {
+  "query": "Rocky Mountain MedWaste rockymtn-medwaste.example new remit-to or billing address 2026"
+ }
+}

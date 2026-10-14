@@ -1,0 +1,5 @@
+{
+ "rid": "Re04c9bf41c",
+ "prompt_sha": "b0fd762b6fa20a75a90ae84938d99786595aacb3e123442a704e0a3325b8b2f8",
+ "content": "{\"consistent\": true, \"confidence\": 0.9, \"rationale\": \"Allowed payee, under cap, PO matched.\"}"
+}

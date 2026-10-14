@@ -1,0 +1,14 @@
+request id: Rc6a0a1292e
+
+{
+ "call_id": "call-655b6d6dcfed",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-81244",
+  "memo": "AMS-81244 tongue depressors and vinyl gloves, PO 7104",
+  "amount": 271.85,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}

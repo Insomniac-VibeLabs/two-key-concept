@@ -1,0 +1,5 @@
+{
+ "rid": "Rf99c2d4eb3",
+ "prompt_sha": "46ad60f5f682b67a6f43e7d9ac431902cd7338f9a7732e2946bd29ca97da4a7e",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Allowed vendor, under cap, USD, memo cites PO, po_matched true.\"}"
+}

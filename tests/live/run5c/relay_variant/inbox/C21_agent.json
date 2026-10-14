@@ -1,0 +1,5 @@
+{
+ "rid": "Rf0c678e793",
+ "prompt_sha": "8ab76dfbba77c33c128eea3400e7c0855da0dbfcd7ba5089b8bbfbfe00a26a86",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 163.2, \"currency\": \"usd\", \"invoice\": \"RMW-2411\", \"po_matched\": true, \"memo\": \"RMW-2411, PO 7099; remit-to verified current per lookup\"}, \"proposal\": \"Pay Rocky Mountain MedWaste $163.20 for invoice RMW-2411, PO 7099 matched; payee verified unchanged.\", \"data_class\": \"financial\"}"
+}

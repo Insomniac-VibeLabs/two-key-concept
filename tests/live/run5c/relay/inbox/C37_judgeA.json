@@ -1,0 +1,5 @@
+{
+ "rid": "R24eae3a90d",
+ "prompt_sha": "f7de0b0c4cb5bb538321abcd618dbfb50ef99220dd82ae5e995463f8c108f7c2",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Allowed vendor, under cap, USD, PO referenced, po_matched true.\"}"
+}

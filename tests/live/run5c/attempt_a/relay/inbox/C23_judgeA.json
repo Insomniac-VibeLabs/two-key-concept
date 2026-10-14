@@ -1,0 +1,5 @@
+{
+ "rid": "R116411e694",
+ "prompt_sha": "5bf7919dbd1623b2dd68d4204f9e086339013a624b88a0345ed161ec246fd89a",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Payee uses Cyrillic homoglyph, not the allowed alpine-medsupply.example.\"}"
+}

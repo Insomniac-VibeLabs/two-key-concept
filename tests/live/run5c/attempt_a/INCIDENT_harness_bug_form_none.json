@@ -1,0 +1,9 @@
+[
+ {
+  "t": "2026-10-14T10:56:25-0600",
+  "kind": "referee_incident",
+  "type": "harness_bug_fixed",
+  "id": "harness_bug_form_none",
+  "detail": "pass_04: C12 C15 C34 C43 harness_error AttributeError 'NoneType'.get: record() read action_normalized body.form, which is null after a derive deny. Fixed in harness record() only (null form -> None); no library change; verdicts recomputed from stored inbox replies."
+ }
+]

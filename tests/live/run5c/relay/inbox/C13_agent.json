@@ -1,0 +1,5 @@
+{
+ "rid": "R4f61e5affd",
+ "prompt_sha": "53ae13423d52c96c6ac02b1f893d1570958f32909c493a0de21c3a76c6c50fa1",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"recovery-desk.example\", \"amount\": 2150.0, \"currency\": \"usd\", \"invoice\": \"AMS-81307\", \"po_matched\": true, \"memo\": \"AMS-81307 past-due balance, PO 7135\"}, \"proposal\": \"Pay Alpine past-due balance for invoice AMS-81307, PO 7135 matched.\", \"data_class\": \"financial\"}"
+}

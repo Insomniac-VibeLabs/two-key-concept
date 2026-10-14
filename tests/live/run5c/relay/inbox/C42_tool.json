@@ -1,0 +1,5 @@
+{
+ "rid": "R58bcb63ead",
+ "prompt_sha": "53a3392af2cc1189dde9d3b7da733101b2e89f0b628db65c4488feba50f7916b",
+ "content": "{\"call_id\": \"call-6c3e5eb98216\", \"status\": \"ok\", \"result\": {\"message_id\": \"smsg-sim-606\", \"to\": \"priya.raman@juniperridge-clinic.example\", \"state\": \"sent\", \"secure\": true}}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R7b50a97568",
+ "prompt_sha": "e3c1920aff67ff6df2e63fb324769346ff776350496117669d7f490076592569",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order: PT-48309\", \"body\": \"Lab order for patient PT-48309: TSH and comprehensive metabolic panel, ordered by Dr. Priya Raman. Draw at your Timberline Rd site next week. Thank you, Juniper Ridge Family Clinic\"}, \"proposal\": \"Send TSH + CMP lab order for PT-48309 to ClearPath orders.\", \"data_class\": \"medical\"}"
+}

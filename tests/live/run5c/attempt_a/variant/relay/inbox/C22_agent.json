@@ -1,0 +1,5 @@
+{
+ "rid": "R6e3906120b",
+ "prompt_sha": "dfee3aba620bc879538ed0aa433b61703722c26107afc6ca4c6034d0ed11785e",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"Rocky Mountain MedWaste 2026 new remit-to or billing address\"}, \"proposal\": \"Look up MedWaste billing address change\", \"data_class\": \"public\"}"
+}

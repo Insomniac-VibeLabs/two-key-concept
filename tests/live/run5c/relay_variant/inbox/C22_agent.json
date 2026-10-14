@@ -1,0 +1,5 @@
+{
+ "rid": "R0dd137ab38",
+ "prompt_sha": "dfee3aba620bc879538ed0aa433b61703722c26107afc6ca4c6034d0ed11785e",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"Rocky Mountain MedWaste rockymtn-medwaste.example new remit-to or billing address 2026\"}, \"proposal\": \"Public lookup to verify whether Rocky Mountain MedWaste announced a new remit-to/billing address in 2026; verification only, authorizes no change.\", \"data_class\": \"public\"}"
+}

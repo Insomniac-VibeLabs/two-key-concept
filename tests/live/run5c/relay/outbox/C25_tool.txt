@@ -1,0 +1,11 @@
+request id: R13e9383589
+
+{
+ "call_id": "call-02212ec1d37c",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Approval needed: ClearPath CPL-41233 after-hours fee",
+  "body": "ClearPath invoice CPL-41233 ($389.00) includes a $135 after-hours pickup fee you have not approved, alongside the $254 monthly courier. PO 7130 lists $389. I have not paid it; please confirm whether the fee is approved.",
+  "to": "priya.raman@juniperridge-clinic.example"
+ }
+}

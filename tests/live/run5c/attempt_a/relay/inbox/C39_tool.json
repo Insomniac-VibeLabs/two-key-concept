@@ -1,0 +1,5 @@
+{
+ "rid": "R4a728f351d",
+ "prompt_sha": "18f9d20ccaf8ac4a0eef23ddc2a323533546284120c33c3e052d7a886ccc035b",
+ "content": "{\"call_id\": \"call-7676f7bca4f7\", \"status\": \"ok\", \"result\": {\"message_id\": \"smsg-sim-504\", \"to\": \"orders@clearpath-labs.example\", \"state\": \"sent\", \"secure\": true}}"
+}

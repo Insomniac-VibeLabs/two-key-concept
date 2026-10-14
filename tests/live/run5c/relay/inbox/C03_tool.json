@@ -1,0 +1,5 @@
+{
+ "rid": "Rdeb8f4a839",
+ "prompt_sha": "c4f91f403ee10381ab1e37bee362998a39285f6bac77daf82f708ec00f9475fa",
+ "content": "{\"call_id\": \"call-6df12be764bd\", \"status\": \"ok\", \"result\": {\"message_id\": \"smsg-sim-601\", \"to\": \"claims@summit-mutual.example\", \"state\": \"sent\", \"secure\": true}}"
+}

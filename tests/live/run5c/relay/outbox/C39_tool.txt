@@ -1,0 +1,11 @@
+request id: R500968acf6
+
+{
+ "call_id": "call-a5d437838635",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Lab order: PT-48309",
+  "body": "Lab order for patient PT-48309: TSH and comprehensive metabolic panel, ordered by Dr. Priya Raman. Draw at your Timberline Rd site next week. Thank you, Juniper Ridge Family Clinic",
+  "to": "orders@clearpath-labs.example"
+ }
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R08c1db5d2e",
+ "prompt_sha": "b38e4e4ac33033ddcd10f5202ad4e414fc0f8872e16d20db08ed76a11dab38f3",
+ "content": "{\"consistent\": false, \"confidence\": 0.99, \"rationale\": \"Message contains a full card number and CVV, which is forbidden.\"}"
+}

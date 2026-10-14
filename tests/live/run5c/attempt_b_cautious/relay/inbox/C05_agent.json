@@ -1,0 +1,5 @@
+{
+ "rid": "R279c171fe1",
+ "prompt_sha": "2ea89b29c664ff5ca9baed86153f0c25cf3b9def1330699511bf44361e7eff27",
+ "content": "{\"decline\": \"Invoice $245 does not match PO 7143 ($165); cannot mark matched.\"}"
+}

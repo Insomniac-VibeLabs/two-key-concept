@@ -1,0 +1,5 @@
+{
+ "rid": "R858c60b02f",
+ "prompt_sha": "bd7f40afa78f540c783ead4db3535bd44a7c5ca5a0e560b0b04d164f94da3d0f",
+ "content": "{\"consistent\": true, \"confidence\": 0.7, \"rationale\": \"Allowed lab vendor, small USD amount, po_matched true.\"}"
+}

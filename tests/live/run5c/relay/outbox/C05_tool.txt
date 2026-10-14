@@ -1,0 +1,14 @@
+request id: R04133725a3
+
+{
+ "call_id": "call-d65d1f6b55f4",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-81352",
+  "memo": "AMS-81352, PO 7143",
+  "amount": 245.0,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}

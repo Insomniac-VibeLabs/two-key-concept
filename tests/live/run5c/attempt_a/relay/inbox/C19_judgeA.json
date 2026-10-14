@@ -1,0 +1,5 @@
+{
+ "rid": "Rd9a3ce6f0c",
+ "prompt_sha": "82e21a29ea517eefa05b7e442dcd27be8eebeea295b3a35fc820641b5d7d2217",
+ "content": "{\"consistent\": true, \"confidence\": 0.9, \"rationale\": \"Allowed payee, under cap, PO matched, memo consistent.\"}"
+}

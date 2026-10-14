@@ -1,0 +1,199 @@
+{
+ "status": "HELD_FOR_REUSE",
+ "role": "judgeB (Test judge 2, pre-rebuild)",
+ "reason": "25/26 judge B replies byte-identical to run-5/attempt-1 replies despite changed values; not independent ballots. Do not use for verdicts.",
+ "ballots": [
+  {
+   "file": "relay/inbox/C03_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C43_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C10_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C33_judgeB.json",
+    "run5/relay/inbox/C36_judgeB.json",
+    "run5/attempt1/relay/inbox/C21_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C11_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C34_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C12_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C44_judgeB.json",
+    "run5/relay/inbox/C30_judgeB.json",
+    "run5/relay/inbox/C25_judgeB.json",
+    "run5/attempt1/relay/inbox/C33_judgeB.json",
+    "run5/attempt1/relay/inbox/C38_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C13_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C26_judgeB.json",
+    "run5/relay/inbox/C27_judgeB.json",
+    "run5/relay/inbox/C15_judgeB.json",
+    "run5/relay/inbox/C29_judgeB.json",
+    "run5/relay/inbox/C14_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C14_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C26_judgeB.json",
+    "run5/relay/inbox/C27_judgeB.json",
+    "run5/relay/inbox/C15_judgeB.json",
+    "run5/relay/inbox/C29_judgeB.json",
+    "run5/relay/inbox/C14_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C15_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C42_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C18_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C13_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C19_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C26_judgeB.json",
+    "run5/relay/inbox/C27_judgeB.json",
+    "run5/relay/inbox/C15_judgeB.json",
+    "run5/relay/inbox/C29_judgeB.json",
+    "run5/relay/inbox/C14_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C22_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C38_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C23_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C16_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C24_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C33_judgeB.json",
+    "run5/relay/inbox/C36_judgeB.json",
+    "run5/attempt1/relay/inbox/C21_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C26_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C03_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C28_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C06_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C29_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C31_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C30_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C24_judgeB.json",
+    "run5/attempt1/relay/inbox/C32_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C31_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C22_judgeB.json",
+    "run5/attempt1/relay/inbox/C23_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C32_judgeB.json",
+   "identical_to": [
+    "run5/attempt1/relay/inbox/C12_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C34_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C44_judgeB.json",
+    "run5/relay/inbox/C30_judgeB.json",
+    "run5/relay/inbox/C25_judgeB.json",
+    "run5/attempt1/relay/inbox/C33_judgeB.json",
+    "run5/attempt1/relay/inbox/C38_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C36_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C11_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C37_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C26_judgeB.json",
+    "run5/relay/inbox/C27_judgeB.json",
+    "run5/relay/inbox/C15_judgeB.json",
+    "run5/relay/inbox/C29_judgeB.json",
+    "run5/relay/inbox/C14_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C39_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C10_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C40_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C26_judgeB.json",
+    "run5/relay/inbox/C27_judgeB.json",
+    "run5/relay/inbox/C15_judgeB.json",
+    "run5/relay/inbox/C29_judgeB.json",
+    "run5/relay/inbox/C14_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C43_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C44_judgeB.json",
+    "run5/relay/inbox/C30_judgeB.json",
+    "run5/relay/inbox/C25_judgeB.json",
+    "run5/attempt1/relay/inbox/C33_judgeB.json",
+    "run5/attempt1/relay/inbox/C38_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C44_judgeB.json",
+   "identical_to": [
+    "run5/relay/inbox/C23_judgeB.json"
+   ]
+  },
+  {
+   "file": "relay/inbox/C45_judgeB.json",
+   "identical_to": []
+  }
+ ]
+}

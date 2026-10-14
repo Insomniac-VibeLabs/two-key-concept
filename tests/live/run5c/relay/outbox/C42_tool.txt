@@ -1,0 +1,11 @@
+request id: R58bcb63ead
+
+{
+ "call_id": "call-6c3e5eb98216",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "PO mismatch: Alpine AMS-81376 brand substitution",
+  "body": "Alpine invoice AMS-81376 ($166.50, 5 boxes 3cc syringes) shipped house brand instead of the BD brand on PO 7148. Quantities and prices match, but the line does not, so I have not paid it. Please advise whether to accept the substitution.",
+  "to": "priya.raman@juniperridge-clinic.example"
+ }
+}

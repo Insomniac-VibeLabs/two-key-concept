@@ -1,0 +1,14 @@
+request id: Rae8b39e635
+
+{
+ "call_id": "call-ec09d82b7334",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-1187",
+  "memo": "October electric service, PO 7112",
+  "amount": 198.63,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
