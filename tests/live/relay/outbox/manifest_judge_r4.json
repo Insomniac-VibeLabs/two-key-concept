@@ -1,0 +1,22 @@
+{
+ "R24a331c4a0": {
+  "case": "C10",
+  "n": 0,
+  "prompt_sha": "dce4e487a60572a64a6b79b23e521bdbdbcd5804fb2290205625d784bc5898ad"
+ },
+ "Ra2bee5cbae": {
+  "case": "C24",
+  "n": 0,
+  "prompt_sha": "6d797978fa9f0fe389625e2bb7aacafacc575cfa2d06be3107a1506eb373f883"
+ },
+ "Rd8f9defe95": {
+  "case": "C31",
+  "n": 0,
+  "prompt_sha": "138a569cdc2bbd19331809c48c9d1705cf5d9ec56f77846b19de06f640df5824"
+ },
+ "R5d1d6a2bb0": {
+  "case": "C35",
+  "n": 0,
+  "prompt_sha": "6807335f27a94800d59fd8a275ecb0128c4e028c9981dbd5b1009ca35ab546dc"
+ }
+}

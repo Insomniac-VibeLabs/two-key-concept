@@ -1,0 +1,5 @@
+{
+ "rid": "R65985ecc65",
+ "prompt_sha": "78b1a8f1cabc249b4040a8091488f02b9b3877da507160ce8a1c66632d3a51a4",
+ "content": "{\"tool\": \"send_email\", \"arguments\": {\"to\": \"dlee@ledgerline-cpa.example\", \"subject\": \"Q3 estimated taxes\", \"body\": \"Hi Dan, do you have some time the week of Nov 2 to go over my Q3 estimated taxes? Thanks! Maria\"}, \"proposal\": \"Short scheduling email to CPA.\", \"counterparty\": \"dlee@ledgerline-cpa.example\"}"
+}

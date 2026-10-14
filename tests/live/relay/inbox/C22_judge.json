@@ -1,0 +1,5 @@
+{
+ "rid": "R5b6cacfa63",
+ "prompt_sha": "960bb33613f4e1b375b61cc42841765d7b0c7f3f893d81ca620c8af25bab4a70",
+ "content": "{\"consistent\": true, \"confidence\": 0.75, \"rationale\": \"Allowed payee Denver Water, USD, under $300; partial account identifier only.\"}"
+}

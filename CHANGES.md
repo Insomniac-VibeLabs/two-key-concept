@@ -1,5 +1,12 @@
 # Changes
 
+## test/live-functional-2026-10-13 (test branch only, not for main)
+
+- Add `tests/live/`: a refereed live functional test harness. It drives Two-Key only through the documented
+  interface (CLI `init-key`/`sign-constitution`, judges.yaml/agents.yaml, `TwoKey.load`, `authorize`,
+  `authorize_from_agent`, `TwoKey.gateway`) against teammate bots relayed through a loopback OpenAI-compatible
+  endpoint. Verdicts come from the ledger and the tool side-effect journal. No library code changes.
+
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.
