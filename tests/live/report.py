@@ -87,9 +87,11 @@ def write(cases, results, entries, effects, log, state, pending=()):
         counts[v] = counts.get(v, 0) + 1
         rows.append((c, v, why))
     inc = referee(log)
-    (HERE / "results.json").write_text(json.dumps({"counts": counts, "cases": [{"id": c["id"], "category": c["cat"], "title": c["title"],
+    declined = sorted(c["id"] for c in cases
+                      if ((results.get(c["id"]) or {}).get("decision") or {}).get("reason") == "agent_declined")
+    (HERE / "results.json").write_text(json.dumps({"counts": counts, "agent_declined": declined, "cases": [{"id": c["id"], "category": c["cat"], "title": c["title"],
         "expect": c["expect"], "verdict": v, "detail": why} for c, v, why in rows], "referee_incidents": inc}, indent=1, default=str))
-    md = ["# Live functional test: results (auto-generated section)", "", f"Counts: {counts}", f"Pending relay: {list(pending)}", "",
+    md = ["# Live functional test: results (auto-generated section)", "", f"Counts: {counts}", f"Agent declines (agent_declined): {declined}", f"Pending relay: {list(pending)}", "",
           "| Case | Category | What was tried | Expected | Actual | Verdict |", "|---|---|---|---|---|---|"]
     for c, v, why in rows:
         md.append(f"| {c['id']} | {c['cat']} | {c['title']} | `{json.dumps(c['expect'])}` | {why.replace('|', '/')[:300]} | **{v}** |")

@@ -18,6 +18,13 @@
   See `tests/live/REPORT.md`. Still open: no decline path (`tool: none`), the bcc drop is unexercised live, there
   is no duplicate-payment guard, and the agent silently corrected the recipient in C30. No library code changes.
 
+- Run 3 (2026-10-14), after merging `working` (agent declines). Run 2's relay, logs, constitution,
+  REPORT, and results are kept unchanged under `tests/live/run2/`. Run 3 reuses run 2's writer reply
+  (`relay/inbox/CONST_writer.json`, copied unchanged; the writer prompt is unchanged), so the constitution is
+  the same and the run starts at the agent batch. The agent batch header now points a declining bot at the
+  decline object in the system prompt instead of the `proposal` field. The harness logs `agent_declined`;
+  RESULTS.md and results.json list the cases that declined.
+
 ## 0.1.0 — 2026-10-02
 
 Initial concept repository, private, Apache-2.0.

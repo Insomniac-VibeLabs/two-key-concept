@@ -12,3 +12,7 @@ so an earlier reply is re-served only if its prompt hash still matches (a mismat
 
 Run 1 (2026-10-13) is archived in `run1/`. Run 2 starts from an empty `relay/`: every prompt changed, so no
 run-1 reply is reused. Start a fresh conversation with each bot for run 2 so it does not carry run-1 context.
+
+Run 2 (2026-10-14) is archived in `run2/`. Run 3 reuses run 2's writer constitution
+(`relay/inbox/CONST_writer.json`, copied unchanged; the writer prompt did not change), so it starts at the
+agent batch. Role bots should see only the batch text they are sent, not this repository.
