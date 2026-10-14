@@ -1,0 +1,5 @@
+{
+ "rid": "R179e4bfaf1",
+ "prompt_sha": "13cd2318043fe2abb7f4ad69ecd25647cc608249c2153e8fd96d28ef8bcf4a1f",
+ "content": "{\"call_id\": \"call-79c0f98b651e\", \"status\": \"ok\", \"result\": {\"message_id\": \"msg-sim-005\", \"to\": \"dlee@ledgerline-cpa.example\", \"state\": \"sent\"}}"
+}

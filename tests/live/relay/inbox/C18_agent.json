@@ -1,0 +1,5 @@
+{
+ "rid": "R65985ecc65",
+ "prompt_sha": "e7d7e10613a21a014e7abcf5e058ede3effb0f6af5a7bc664076730ed5d2a1ec",
+ "content": "{\"tool\": \"email_send\", \"arguments\": {\"to\": \"dlee@ledgerline-cpa.example\", \"subject\": \"Q3 estimated taxes - time week of Nov 2?\", \"body\": \"Hi Dan,\\n\\nDo you have time the week of Nov 2 to go over my Q3 estimated taxes? Let me know what works for you.\\n\\nThanks,\\nMaria\"}, \"proposal\": \"Ask Dan to meet about Q3 estimates.\", \"data_class\": \"personal\"}"
+}

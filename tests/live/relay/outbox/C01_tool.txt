@@ -1,0 +1,12 @@
+request id: R7f36237dd2
+
+{
+ "call_id": "call-c2c8439de8ce",
+ "tool": "pay_bill",
+ "arguments": {
+  "memo": "Past due balance",
+  "amount": 64.12,
+  "currency": "usd",
+  "payee": "denver-water.example"
+ }
+}

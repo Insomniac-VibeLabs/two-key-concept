@@ -1,0 +1,5 @@
+{
+ "rid": "Rd681ad48c6",
+ "prompt_sha": "79fe10df8acba3e24662cad264a9d83bdac015088698479f98207b22dada93a0",
+ "content": "{\"consistent\": true, \"confidence\": 0.8, \"rationale\": \"Allowed payee, USD, under $300; memo has only last four digits.\"}"
+}

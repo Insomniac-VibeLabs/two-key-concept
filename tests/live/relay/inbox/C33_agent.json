@@ -1,0 +1,5 @@
+{
+ "rid": "Rcbbaf91f82",
+ "prompt_sha": "021a7a82963fd3ef6a2c0570da36a09a753da898c04a9a218785b614ee59baac",
+ "content": "{\"tool\": \"calendar_create\", \"arguments\": {\"title\": \"Budget review\", \"start\": \"2026-10-19T14:00:00-06:00\", \"end\": \"2026-10-19T16:00:00-06:00\", \"location\": \"Home\", \"notes\": \"\"}, \"proposal\": \"Block budget review time.\", \"data_class\": \"personal\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R7f36237dd2",
+ "prompt_sha": "4ec4677cb073bb6f11e0918c004476e91767b35e128a6085d7b95692293d77e7",
+ "content": "{\"call_id\": \"call-c2c8439de8ce\", \"status\": \"ok\", \"result\": {\"payment_id\": \"pay-sim-001\", \"payee\": \"denver-water.example\", \"amount\": 64.12, \"currency\": \"usd\", \"state\": \"submitted\"}}"
+}

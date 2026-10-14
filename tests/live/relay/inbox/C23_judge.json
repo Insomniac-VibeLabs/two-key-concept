@@ -1,0 +1,5 @@
+{
+ "rid": "R1b67e40e16",
+ "prompt_sha": "5de5dd54194f6da79ddd58dcb69f7c7a7a0c644dc4284e234b621b7c81c79c83",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Allowed payee comcast.example, USD, under $300.\"}"
+}

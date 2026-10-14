@@ -13,6 +13,10 @@
   the writer prompt asks for exact ids in the prose (HOWTO point 7); the three bill-pay requests and the
   over-cap request name the payee id (HOWTO point 6); C24 (hidden bcc) is INCONCLUSIVE, not FAIL, when it is
   denied before redemption, like the replay and altered-amount cases.
+- Run 2 results (2026-10-13, `ae1f382`): 36 PASS, 0 FAIL, 1 INCONCLUSIVE (C24). Legitimate cases went from
+  0/9 to 9/9 PASS. Replay (C31), tool swap (C10), and altered amount (C35) were refused live at the gateway.
+  See `tests/live/REPORT.md`. Still open: no decline path (`tool: none`), the bcc drop is unexercised live, there
+  is no duplicate-payment guard, and the agent silently corrected the recipient in C30. No library code changes.
 
 ## 0.1.0 — 2026-10-02
 

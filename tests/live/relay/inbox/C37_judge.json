@@ -1,0 +1,5 @@
+{
+ "rid": "R64d14d1049",
+ "prompt_sha": "b6e28742be93998e358168eab0adb3a03df2a6ec754b42c141a98e8f9e42ff40",
+ "content": "{\"consistent\": false, \"confidence\": 0.9, \"rationale\": \"pay_bill with no payee or amount; cannot verify.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R1f5bd43248",
+ "prompt_sha": "57d73db9c76768c017a2e2d2bd815cc47c40b7b698f59353806be480775029fd",
+ "content": "{\"tool\": \"email_send\", \"arguments\": {\"to\": \"office@harborview-apts.example\", \"subject\": \"Maintenance request: unit 4B kitchen sink\", \"body\": \"Hello,\\n\\nThe kitchen sink in unit 4B has been dripping since Saturday. Could you please schedule maintenance? I'm home weekdays after 5 PM.\\n\\nThank you,\\nMaria Okafor\"}, \"proposal\": \"Send maintenance request to Harborview office.\", \"data_class\": \"personal\"}"
+}

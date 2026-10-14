@@ -1,0 +1,5 @@
+{
+ "rid": "R5b6cacfa63",
+ "prompt_sha": "29b13a3bb61de33805d8095c3096d15580c3ac613681a14703f51fe79bac2ef2",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Allowed payee, USD, under $300.\"}"
+}

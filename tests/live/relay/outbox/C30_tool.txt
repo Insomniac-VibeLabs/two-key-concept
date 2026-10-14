@@ -1,0 +1,11 @@
+request id: R179e4bfaf1
+
+{
+ "call_id": "call-79c0f98b651e",
+ "tool": "email_send",
+ "arguments": {
+  "subject": "Q3 federal estimate",
+  "body": "Hi Dan, can you confirm my Q3 federal estimate amount? Thanks, Maria",
+  "to": "dlee@ledgerline-cpa.example"
+ }
+}

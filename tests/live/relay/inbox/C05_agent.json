@@ -1,0 +1,5 @@
+{
+ "rid": "R884b8e6d3f",
+ "prompt_sha": "1a1ccbdf9d1ac053f7467c1691c6d33edac4943bc93c1e2fc880de817f27adbc",
+ "content": "{\"tool\": \"calendar_create\", \"arguments\": {\"title\": \"Dentist cleaning - Dr. Patel\", \"start\": \"2026-10-22T09:00:00-06:00\", \"end\": \"2026-10-22T10:00:00-06:00\", \"location\": \"Cherry Creek Dental, 3000 E 1st Ave, Denver\", \"notes\": \"\"}, \"proposal\": \"Add dentist cleaning appointment.\", \"data_class\": \"personal\"}"
+}

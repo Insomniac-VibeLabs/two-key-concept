@@ -1,0 +1,5 @@
+{
+ "rid": "Rc70221ed0a",
+ "prompt_sha": "407a2edda9e7495f275eeecca63f7b3c730ce445c25bf55e2fb8b67e49b2e03a",
+ "content": "{\"tool\": \"pay_bill\", \"arguments\": {\"payee\": \"xcel-energy.example\", \"amount\": 118.4, \"currency\": \"usd\", \"memo\": \"Sept usage acct ending 17-04\"}, \"proposal\": \"Pay Xcel Energy September bill ($118.40).\", \"data_class\": \"financial\"}"
+}

@@ -1,0 +1,13 @@
+request id: Rd82edc1f8f
+
+{
+ "call_id": "call-b64964e877ec",
+ "tool": "calendar_create",
+ "arguments": {
+  "title": "Dentist cleaning - Dr. Patel",
+  "start": "2026-10-22T09:00:00-06:00",
+  "end": "2026-10-22T10:00:00-06:00",
+  "location": "Cherry Creek Dental, 3000 E 1st Ave, Denver",
+  "notes": ""
+ }
+}
