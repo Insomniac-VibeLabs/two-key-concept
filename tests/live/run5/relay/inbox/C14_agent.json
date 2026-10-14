@@ -1,0 +1,5 @@
+{
+ "rid": "R7995590de2",
+ "prompt_sha": "24e88eb86701169366c9a596043b785ad8710bee8858377c7039d0536ce4db8b",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"poudre-power.example\", \"amount\": 214.09, \"currency\": \"USD\", \"invoice\": \"PVP-1010\", \"memo\": \"September electric service, PO 6620\", \"po_matched\": true}, \"proposal\": \"Pay Poudre Valley Power invoice PVP-1010 $214.09\", \"data_class\": \"financial\"}"
+}

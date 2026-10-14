@@ -1,0 +1,5 @@
+{
+ "rid": "R55e357e169",
+ "prompt_sha": "f6dc34d0bf0d692ecdfa600099a80f4f5de761dccaeb50eb3e5d68d91daa308e",
+ "content": "{\"call_id\": \"call-b6d0054cd9cd\", \"status\": \"ok\", \"result\": {\"message_id\": \"smsg-sim-402\", \"to\": \"ap@alpine-medsupply.example\", \"state\": \"sent\", \"secure\": true}}"
+}

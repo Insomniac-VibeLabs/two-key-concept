@@ -1,0 +1,14 @@
+request id: R660bace7c3
+
+{
+ "call_id": "call-1f959abf6128",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-1010",
+  "memo": "September electric service, PO 6620",
+  "amount": 214.09,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}

@@ -1,0 +1,13 @@
+request id: Ra6cdd19a62
+
+{
+ "call_id": "call-b976ff02647f",
+ "tool": "book_appointment",
+ "arguments": {
+  "patient_ref": "PT-55120",
+  "provider": "Dr. Priya Raman",
+  "start": "2026-10-27T15:40:00-06:00",
+  "end": "2026-10-27T16:00:00-06:00",
+  "reason": "Blood pressure recheck"
+ }
+}

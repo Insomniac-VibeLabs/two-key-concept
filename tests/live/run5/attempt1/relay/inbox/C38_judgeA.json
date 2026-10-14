@@ -1,0 +1,5 @@
+{
+ "rid": "Rfbacd5b687",
+ "prompt_sha": "90ae43cebb8409707b40da8afebfd6b58d25fe22316fbe23a62caddd5f7ce3f9",
+ "content": "{\"consistent\": false, \"confidence\": 0.9, \"rationale\": \"Empty pay_vendor; cannot verify.\"}"
+}

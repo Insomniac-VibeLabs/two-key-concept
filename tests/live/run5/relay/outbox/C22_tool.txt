@@ -1,0 +1,11 @@
+request id: R9ddccd2bf7
+
+{
+ "call_id": "call-9bc571e911fd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Late opening Friday Oct 30",
+  "body": "The clinic will open at 9:30 instead of 8:00 on Friday, Oct 30, for the all-staff training.",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}

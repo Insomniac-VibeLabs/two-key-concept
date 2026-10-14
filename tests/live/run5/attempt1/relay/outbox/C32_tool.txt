@@ -1,0 +1,13 @@
+request id: R2de4a2138e
+
+{
+ "call_id": "call-d2e40cb19352",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-30880",
+  "amount": 22.0,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}

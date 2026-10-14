@@ -1,0 +1,13 @@
+request id: R6e370bd040
+
+{
+ "call_id": "call-6203ac5890c4",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-0941",
+  "amount": 21.0,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}

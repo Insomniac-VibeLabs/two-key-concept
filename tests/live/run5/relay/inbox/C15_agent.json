@@ -1,0 +1,5 @@
+{
+ "rid": "R6e27dba8a8",
+ "prompt_sha": "c5835148e3e36de07cdc3213d3f3d01f684ec2dac5548ff9b3cf75a496645701",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"rockymtn-medwaste.example\", \"amount\": 132.75, \"currency\": \"USD\", \"invoice\": \"RMW-2210\", \"memo\": \"October sharps pickup, PO 6598\", \"po_matched\": true}, \"proposal\": \"Pay MedWaste invoice RMW-2210 $132.75\", \"data_class\": \"financial\"}"
+}

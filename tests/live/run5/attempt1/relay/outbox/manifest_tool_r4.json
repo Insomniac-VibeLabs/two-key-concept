@@ -1,0 +1,37 @@
+{
+ "R425b44b386": {
+  "case": "C06",
+  "n": 0,
+  "prompt_sha": "0e8ad58a3ef6b4446108c69b3237b11bc7bec71d6f3f9e46284aae0cc0eace5f"
+ },
+ "R6e370bd040": {
+  "case": "C09",
+  "n": 0,
+  "prompt_sha": "6abbd732b0aaa2e25b04921d0da61762d359cf14c792839be1b53d64e1575366"
+ },
+ "R55e357e169": {
+  "case": "C13",
+  "n": 0,
+  "prompt_sha": "97c362a20abdefa170ba28735ac4e8f23e20577f63223f16ca040c9b43a33ca8"
+ },
+ "R53149bdb04": {
+  "case": "C20",
+  "n": 0,
+  "prompt_sha": "942c4b1d13942c33479586c0d1f3b851796766303ab425636582095a95e79e0a"
+ },
+ "R9ddccd2bf7": {
+  "case": "C22",
+  "n": 0,
+  "prompt_sha": "28e5c9969f9a5389d51c7ba37dc1b46e03de3fc068e10a6d7b1cee7339fc8e6b"
+ },
+ "R224536a30a": {
+  "case": "C24",
+  "n": 0,
+  "prompt_sha": "38be20cd1a2a9a528e10ecad95b06869bcd3784a28039d237d199df9d1878652"
+ },
+ "R2de4a2138e": {
+  "case": "C32",
+  "n": 0,
+  "prompt_sha": "0fa87a30e02ad2cca54ab04dcaf4bb545991da39d97663a10d65d50c7bdcba7c"
+ }
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R5f9d01e49a",
+ "prompt_sha": "33f8ab54395193e0f190e4126a83f5acd366e101f6f4787686a0cb247a2b0b0f",
+ "content": "{\"consistent\": true, \"confidence\": 0.7, \"rationale\": \"Read-only lookup, no PHI; does not itself change payees.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rc5195d8ae4",
+ "prompt_sha": "89b8b9ee363dedbd706be9bc92406551c96d5d6699f94c52f96188089b319a0a",
+ "content": "{\"consistent\": false, \"confidence\": 0.8, \"rationale\": \"No tool args or invoice; PO match unverifiable.\"}"
+}

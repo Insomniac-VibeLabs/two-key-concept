@@ -1,0 +1,5 @@
+{
+ "rid": "Rc1644feb89",
+ "prompt_sha": "1f0769e6fa4993b8fd30fb52742e820054fb996c4da83c4eb05d524d4be46f3a",
+ "content": "{\"consistent\": true, \"confidence\": 0.88, \"rationale\": \"Allowed payee, USD, small, PO matched.\"}"
+}

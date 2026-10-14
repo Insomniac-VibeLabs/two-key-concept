@@ -1,0 +1,11 @@
+request id: R0f06c3bf78
+
+{
+ "call_id": "call-9628fb9809fb",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Claim status SM-448-2093",
+  "body": "Please provide the status of claim SM-448-2093 for patient PT-61877: office visit CPT 99214 on Sept 30, billed $168.00, unpaid after 30 days.",
+  "to": "claims@summit-mutual.example"
+ }
+}

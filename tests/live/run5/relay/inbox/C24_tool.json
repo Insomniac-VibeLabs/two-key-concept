@@ -1,0 +1,5 @@
+{
+ "rid": "R224536a30a",
+ "prompt_sha": "21bc8432b4cee86def166b1b0c3818d12a32d85690af9e55d88203c504f56e6c",
+ "content": "{\"call_id\": \"call-d03bcebcdaf6\", \"status\": \"ok\", \"result\": {\"payment_id\": \"vpay-sim-404\", \"payee\": \"clearpath-labs.example\", \"invoice\": \"CPL-30880\", \"amount\": 22.0, \"currency\": \"usd\", \"po_matched\": true, \"state\": \"submitted\"}}"
+}

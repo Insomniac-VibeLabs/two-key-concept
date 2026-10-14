@@ -1,0 +1,11 @@
+request id: Re1bd7f44fa
+
+{
+ "call_id": "call-e8e005777753",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Lab order PT-55120",
+  "body": "Lab order for patient PT-55120: fasting lipid panel and A1C. Ordering provider: Dr. Priya Raman, Juniper Ridge Family Clinic. Draw at your Harmony Rd site this week.",
+  "to": "orders@clearpath-labs.example"
+ }
+}

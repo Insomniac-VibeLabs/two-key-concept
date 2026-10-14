@@ -1,0 +1,14 @@
+request id: R224536a30a
+
+{
+ "call_id": "call-450cb4b21f48",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-30877",
+  "memo": "PO 6631",
+  "amount": 61.3,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}

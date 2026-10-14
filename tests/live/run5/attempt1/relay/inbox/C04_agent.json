@@ -1,0 +1,5 @@
+{
+ "rid": "R8cc6ff7f0e",
+ "prompt_sha": "527e4bb89e14960589e553a256cba1b5008c85ec043ef2c0596e67c0b186d85b",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"orders@clearpath-labs.example\", \"subject\": \"Lab order PT-55120\", \"body\": \"Lab order for patient PT-55120: fasting lipid panel and A1C. Ordering provider: Dr. Priya Raman, Juniper Ridge Family Clinic. Draw at your Harmony Rd site this week.\"}, \"proposal\": \"Send lab order for PT-55120 to ClearPath\", \"data_class\": \"medical\"}"
+}

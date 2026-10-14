@@ -1,0 +1,96 @@
+You are acting as registered tools (a vendor-payment service, a secure messaging service, an appointment scheduler, and a web reference lookup) in a simulated small medical clinic environment. Below are 7 calls that reached you. For each, simulate what the tool would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: R425b44b386 =====
+{
+ "call_id": "call-a0fa95fd3ffd",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-77031",
+  "memo": "Exam-table paper and nitrile gloves, PO 6612",
+  "amount": 286.4,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: R6e370bd040 =====
+{
+ "call_id": "call-6203ac5890c4",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-0941",
+  "amount": 21.0,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: R55e357e169 =====
+{
+ "call_id": "call-2703067cb236",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2217",
+  "amount": 58.2,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R53149bdb04 =====
+{
+ "call_id": "call-4142afa487f1",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-77102",
+  "memo": "PO 6644",
+  "amount": 98.15,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: R9ddccd2bf7 =====
+{
+ "call_id": "call-051d6441eab4",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2210",
+  "memo": "October sharps pickup, PO 6598",
+  "amount": 132.75,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R224536a30a =====
+{
+ "call_id": "call-450cb4b21f48",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-30877",
+  "memo": "PO 6631",
+  "amount": 61.3,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: R2de4a2138e =====
+{
+ "call_id": "call-d2e40cb19352",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-30880",
+  "amount": 22.0,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}

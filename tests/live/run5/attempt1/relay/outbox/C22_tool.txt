@@ -1,0 +1,14 @@
+request id: R9ddccd2bf7
+
+{
+ "call_id": "call-051d6441eab4",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2210",
+  "memo": "October sharps pickup, PO 6598",
+  "amount": 132.75,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}

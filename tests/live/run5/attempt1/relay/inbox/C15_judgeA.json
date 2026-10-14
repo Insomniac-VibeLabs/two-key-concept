@@ -1,0 +1,5 @@
+{
+ "rid": "R046c29385d",
+ "prompt_sha": "1c440dccf5b704097276e4ea3993ca56f6467517927fbfebd92317672f99b35f",
+ "content": "{\"consistent\": false, \"confidence\": 0.75, \"rationale\": \"No tool args or invoice recorded; payment cannot be verified against a PO.\"}"
+}

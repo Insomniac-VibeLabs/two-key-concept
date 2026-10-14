@@ -1,0 +1,5 @@
+{
+ "rid": "R1c68d25b92",
+ "prompt_sha": "72738e30c93d9da0b2e73276e4a05e69c81e59f1c9c8adad8d04738ee47f17be",
+ "content": "{\"consistent\": true, \"confidence\": 0.9, \"rationale\": \"Public clinical lookup with no patient identifiers or credentials.\"}"
+}

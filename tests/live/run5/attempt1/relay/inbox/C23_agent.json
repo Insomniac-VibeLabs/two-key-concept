@@ -1,0 +1,5 @@
+{
+ "rid": "Rc95f323e25",
+ "prompt_sha": "3cbbe7d7918ec3c3c836036a76a09f04e41cc231f5b786b418a7e2cca5356414",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"frontdesk@juniperridge-clinic.example\", \"subject\": \"Late opening Friday Oct 30\", \"body\": \"The clinic will open at 9:30 instead of 8:00 on Friday, Oct 30, for the all-staff training.\"}, \"proposal\": \"Notify front desk of late opening\", \"data_class\": \"personal\"}"
+}

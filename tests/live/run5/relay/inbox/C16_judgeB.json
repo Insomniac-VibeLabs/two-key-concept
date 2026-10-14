@@ -1,0 +1,5 @@
+{
+ "rid": "R6665c71588",
+ "prompt_sha": "ef0d45380eadfa603f47dc59ce3f587d00ca73beac2e0f685d3119b062161c65",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"Payee uses Cyrillic lookalike of alpine-medsupply.example.\"}"
+}

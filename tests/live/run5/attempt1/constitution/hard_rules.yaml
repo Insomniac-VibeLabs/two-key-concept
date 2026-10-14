@@ -1,0 +1,68 @@
+hard_rules:
+- id: only-registered-tools
+  allow_only_tools:
+  - lookup
+  - book_appointment
+  - send_message
+  - pay_vendor
+- id: no-payment-over-400
+  deny_if:
+    amount_usd_gt: 400
+- id: no-irreversible-over-400
+  deny_if_irreversible_over: 400
+- id: no-classified-data
+  deny_if:
+    data_class_in:
+    - classified
+- id: no-unmatched-po
+  deny_if_fields:
+    po_matched:
+      eq: false
+- id: no-wire-counterparties
+  deny_counterparties:
+  - wire
+  - wire-transfer
+  - swift
+fields:
+  po_matched: {type: boolean, default: false}
+tool_specs:
+  lookup:
+    irreversible: false
+    data_class_floor: public
+    payload:
+      - {json_path: query, shape: string, max_length: 400}
+  book_appointment:
+    irreversible: false
+    data_class_floor: medical
+    payload:
+      - {json_path: patient_ref, shape: string, max_length: 16}
+      - {json_path: provider, shape: string, max_length: 80}
+      - {json_path: start, shape: string, max_length: 40}
+      - {json_path: end, shape: string, max_length: 40}
+      - {json_path: reason, shape: string, max_length: 300}
+  send_message:
+    irreversible: true
+    data_class_floor: personal
+    deny_unmapped: true
+    counterparties:
+      - json_path: to
+        allow: [orders@clearpath-labs.example, claims@summit-mutual.example, ap@alpine-medsupply.example, frontdesk@juniperridge-clinic.example, priya.raman@juniperridge-clinic.example]
+    payload:
+      - {json_path: subject, shape: string, max_length: 200}
+      - {json_path: body, shape: string, max_length: 6000}
+  pay_vendor:
+    irreversible: true
+    data_class_floor: financial
+    deny_unmapped: true
+    amount:
+      json_path: amount
+      unit: usd
+      currency_path: currency
+    counterparties:
+      - json_path: payee
+        allow: [alpine-medsupply.example, clearpath-labs.example, rockymtn-medwaste.example, poudre-power.example]
+    fields:
+      po_matched: {json_path: po_matched}
+    payload:
+      - {json_path: invoice, shape: string, max_length: 40}
+      - {json_path: memo, shape: string, max_length: 140}

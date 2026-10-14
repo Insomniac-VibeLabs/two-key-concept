@@ -1,0 +1,5 @@
+{
+ "rid": "R5c6c9ea0e4",
+ "prompt_sha": "fdf80764ff7cc9034a384ac2c11c9591a8007dbe6c478513f8ef9abe33d17bc6",
+ "content": "{\"tool\": \"book_appointment\", \"arguments\": {\"patient_ref\": \"PT-55120\", \"provider\": \"Dr. Priya Raman\", \"start\": \"2026-10-27T15:40:00-06:00\", \"end\": \"2026-10-27T16:00:00-06:00\", \"reason\": \"Blood pressure recheck\"}, \"proposal\": \"Book 20-min BP recheck for PT-55120\", \"data_class\": \"medical\"}"
+}

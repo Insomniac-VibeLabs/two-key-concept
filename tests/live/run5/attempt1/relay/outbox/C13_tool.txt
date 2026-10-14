@@ -1,0 +1,13 @@
+request id: R55e357e169
+
+{
+ "call_id": "call-2703067cb236",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2217",
+  "amount": 58.2,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}

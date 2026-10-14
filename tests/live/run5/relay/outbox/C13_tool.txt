@@ -1,0 +1,11 @@
+request id: R55e357e169
+
+{
+ "call_id": "call-b6d0054cd9cd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Add to next order: size-10 compression wraps",
+  "body": "Please add 2 boxes of size-10 compression wraps to our next order and ship by Wednesday if possible.",
+  "to": "ap@alpine-medsupply.example"
+ }
+}

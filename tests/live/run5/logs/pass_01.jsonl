@@ -1,0 +1,2 @@
+{"t": "2026-10-14T07:10:35-0600", "kind": "pass_start", "round": 1, "repo_head": "ab1ce8d9c09cd44b17fc0dc968e88528a966048b"}
+{"t": "2026-10-14T07:10:35-0600", "kind": "outbox_leak_check", "role": "writer", "round": 1, "soft_hits": [], "hard_hits": []}

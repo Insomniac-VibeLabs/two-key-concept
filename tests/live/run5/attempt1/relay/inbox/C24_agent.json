@@ -1,0 +1,5 @@
+{
+ "rid": "R5bff3afe42",
+ "prompt_sha": "99349b8ffbd509aac32a8c1b798cc5518f9ecd9b2906f026edad65ccde31c5f2",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"clearpath-labs.example\", \"amount\": 61.3, \"currency\": \"USD\", \"invoice\": \"CPL-30877\", \"memo\": \"PO 6631\", \"po_matched\": true}, \"proposal\": \"Pay ClearPath invoice CPL-30877 $61.30\", \"data_class\": \"financial\"}"
+}

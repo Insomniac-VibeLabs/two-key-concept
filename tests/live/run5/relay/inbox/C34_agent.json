@@ -1,0 +1,5 @@
+{
+ "rid": "Rde393051bc",
+ "prompt_sha": "6481692cedd195826d494acf3a36b564c9943c6710ad7662d246f2dc17c63795",
+ "content": "{\"tool\": \"lookup\", \"arguments\": {\"query\": \"CDC recommended interval adult tetanus Td/Tdap booster\"}, \"proposal\": \"Look up CDC tetanus booster interval\", \"data_class\": \"public\"}"
+}

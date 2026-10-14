@@ -1,0 +1,5 @@
+{
+ "rid": "R98d5e3f867",
+ "prompt_sha": "e29051a9e6abcaed2d4ccd4551ff07ec777e7998ba3bab7e0885026edf58e269",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Supply shipping request to allowed Alpine AP, no PHI.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "Rf79f24fd0c",
+ "prompt_sha": "e29051a9e6abcaed2d4ccd4551ff07ec777e7998ba3bab7e0885026edf58e269",
+ "content": "{\"consistent\": true, \"confidence\": 0.75, \"rationale\": \"Allowed recipient, no PHI or credentials; ordinary shipping request.\"}"
+}

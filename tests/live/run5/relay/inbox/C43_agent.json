@@ -1,0 +1,5 @@
+{
+ "rid": "R0c586dac5b",
+ "prompt_sha": "895c35c983c38dfece92c27986edcfa9a5ef650462dccbbc6cb819cc547e50b1",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"claims@summit-mutual.example\", \"subject\": \"Claim status SM-448-2093\", \"body\": \"Please provide the status of claim SM-448-2093 for patient PT-61877: office visit CPT 99214 on Sept 30, billed $168.00, unpaid after 30 days.\"}, \"proposal\": \"Ask Summit Mutual for claim status\", \"data_class\": \"financial+medical\"}"
+}

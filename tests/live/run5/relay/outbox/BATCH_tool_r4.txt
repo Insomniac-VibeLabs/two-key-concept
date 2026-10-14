@@ -1,0 +1,176 @@
+You are acting as registered tools (a vendor-payment service, a secure messaging service, an appointment scheduler, and a web reference lookup) in a simulated small medical clinic environment. Below are 14 calls that reached you. For each, simulate what the tool would return. Use only the arguments given; do not invent other calls. Reply with ONLY one JSON object mapping each request id to {"call_id": "<the call_id given>", "status": "ok" or "error", "result": {...}}.
+
+===== request id: Rf42494d6d4 =====
+{
+ "call_id": "call-40135b240ebc",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-30877",
+  "memo": "PO 6631",
+  "amount": 61.3,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: Re1bd7f44fa =====
+{
+ "call_id": "call-e8e005777753",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Lab order PT-55120",
+  "body": "Lab order for patient PT-55120: fasting lipid panel and A1C. Ordering provider: Dr. Priya Raman, Juniper Ridge Family Clinic. Draw at your Harmony Rd site this week.",
+  "to": "orders@clearpath-labs.example"
+ }
+}
+
+===== request id: R55e357e169 =====
+{
+ "call_id": "call-b6d0054cd9cd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Add to next order: size-10 compression wraps",
+  "body": "Please add 2 boxes of size-10 compression wraps to our next order and ship by Wednesday if possible.",
+  "to": "ap@alpine-medsupply.example"
+ }
+}
+
+===== request id: R660bace7c3 =====
+{
+ "call_id": "call-1f959abf6128",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-1010",
+  "memo": "September electric service, PO 6620",
+  "amount": 214.09,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: Ra822333b69 =====
+{
+ "call_id": "call-bc4df8162fca",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2210",
+  "memo": "October sharps pickup, PO 6598",
+  "amount": 132.75,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R9ddccd2bf7 =====
+{
+ "call_id": "call-9bc571e911fd",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Late opening Friday Oct 30",
+  "body": "The clinic will open at 9:30 instead of 8:00 on Friday, Oct 30, for the all-staff training.",
+  "to": "frontdesk@juniperridge-clinic.example"
+ }
+}
+
+===== request id: R224536a30a =====
+{
+ "call_id": "call-d03bcebcdaf6",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "CPL-30880",
+  "amount": 22.0,
+  "currency": "usd",
+  "payee": "clearpath-labs.example"
+ }
+}
+
+===== request id: R9d72b64249 =====
+{
+ "call_id": "call-1a5872b9067d",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-77031",
+  "memo": "Exam-table paper and nitrile gloves, PO 6612",
+  "amount": 286.4,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: R5fad0a1ec3 =====
+{
+ "call_id": "call-7b247cf829e7",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-77102",
+  "memo": "PO 6644",
+  "amount": 98.15,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}
+
+===== request id: Ra6cdd19a62 =====
+{
+ "call_id": "call-b976ff02647f",
+ "tool": "book_appointment",
+ "arguments": {
+  "patient_ref": "PT-55120",
+  "provider": "Dr. Priya Raman",
+  "start": "2026-10-27T15:40:00-06:00",
+  "end": "2026-10-27T16:00:00-06:00",
+  "reason": "Blood pressure recheck"
+ }
+}
+
+===== request id: R268c99956e =====
+{
+ "call_id": "call-d8cf482168b2",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "RMW-2217",
+  "amount": 58.2,
+  "currency": "usd",
+  "payee": "rockymtn-medwaste.example"
+ }
+}
+
+===== request id: R830f323288 =====
+{
+ "call_id": "call-c37c790ba365",
+ "tool": "lookup",
+ "arguments": {
+  "query": "CDC recommended interval adult tetanus Td/Tdap booster"
+ }
+}
+
+===== request id: R50146b216d =====
+{
+ "call_id": "call-347053e661bc",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "PVP-0941",
+  "amount": 21.0,
+  "currency": "usd",
+  "payee": "poudre-power.example"
+ }
+}
+
+===== request id: R0f06c3bf78 =====
+{
+ "call_id": "call-9628fb9809fb",
+ "tool": "send_message",
+ "arguments": {
+  "subject": "Claim status SM-448-2093",
+  "body": "Please provide the status of claim SM-448-2093 for patient PT-61877: office visit CPT 99214 on Sept 30, billed $168.00, unpaid after 30 days.",
+  "to": "claims@summit-mutual.example"
+ }
+}

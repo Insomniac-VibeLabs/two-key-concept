@@ -1,0 +1,14 @@
+request id: R425b44b386
+
+{
+ "call_id": "call-a0fa95fd3ffd",
+ "tool": "pay_vendor",
+ "arguments": {
+  "po_matched": true,
+  "invoice": "AMS-77031",
+  "memo": "Exam-table paper and nitrile gloves, PO 6612",
+  "amount": 286.4,
+  "currency": "usd",
+  "payee": "alpine-medsupply.example"
+ }
+}

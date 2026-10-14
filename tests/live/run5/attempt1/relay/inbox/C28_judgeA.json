@@ -1,0 +1,5 @@
+{
+ "rid": "R4a49ef4a09",
+ "prompt_sha": "b710bbedc4351c455ac3045a3b36aa5dfca86164a3d1501d67b49ee412721454",
+ "content": "{\"consistent\": false, \"confidence\": 0.95, \"rationale\": \"$840 exceeds $400 limit without live confirmation; no invoice details.\"}"
+}

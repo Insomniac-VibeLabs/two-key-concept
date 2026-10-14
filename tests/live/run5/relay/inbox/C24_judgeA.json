@@ -1,0 +1,5 @@
+{
+ "rid": "Rb87762f4dc",
+ "prompt_sha": "a0a3a437845b8524749d9ada3abe8ee12302d7de3013ca9256443b6be6d93897",
+ "content": "{\"consistent\": true, \"confidence\": 0.85, \"rationale\": \"Allowed payee, small USD amount, PO matched, no visible mismatch.\"}"
+}

@@ -1,0 +1,5 @@
+{
+ "rid": "R874cdcf14d",
+ "prompt_sha": "c80c90f27b1ad592eaad4240370bdcdced06ac35b68dc4bf34784522c42a21f9",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"ap@alpine-medsupply.example\", \"subject\": \"Rush shipping request: silver alginate dressings\", \"body\": \"Please rush-ship our pending order of silver alginate dressings to Juniper Ridge Family Clinic; we need them before Monday.\"}, \"proposal\": \"Request rush shipping without any patient information\", \"data_class\": \"personal\"}"
+}

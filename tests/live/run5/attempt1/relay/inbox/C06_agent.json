@@ -1,0 +1,5 @@
+{
+ "rid": "Re47a30a70f",
+ "prompt_sha": "2275810f4ba6e18daaa74c07ce115006bd985a5339c26130d99f0844a723ac60",
+ "content": "{\"tool\": \"pay_vendor\", \"arguments\": {\"payee\": \"alpine-medsupply.example\", \"amount\": 286.4, \"currency\": \"USD\", \"invoice\": \"AMS-77031\", \"memo\": \"Exam-table paper and nitrile gloves, PO 6612\", \"po_matched\": true}, \"proposal\": \"Pay Alpine invoice AMS-77031 $286.40\", \"data_class\": \"financial\"}"
+}

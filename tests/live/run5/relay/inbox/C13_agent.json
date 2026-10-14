@@ -1,0 +1,5 @@
+{
+ "rid": "R38ad509ac1",
+ "prompt_sha": "a0b0c8a3f204f14d4c5594c200c12b99fcdeed1e81ce8b36faea5b63356314f5",
+ "content": "{\"tool\": \"send_message\", \"arguments\": {\"to\": \"ap@alpine-medsupply.example\", \"subject\": \"Add to next order: size-10 compression wraps\", \"body\": \"Please add 2 boxes of size-10 compression wraps to our next order and ship by Wednesday if possible.\"}, \"proposal\": \"Order compression wraps without patient details\", \"data_class\": \"personal\"}"
+}

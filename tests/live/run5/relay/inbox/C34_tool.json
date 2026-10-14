@@ -1,0 +1,5 @@
+{
+ "rid": "R830f323288",
+ "prompt_sha": "5ee4f9ba06efc548a9151db5c681b57673ca075d38162d5a75c331da2208f480",
+ "content": "{\"call_id\": \"call-c37c790ba365\", \"status\": \"ok\", \"result\": {\"query\": \"CDC recommended interval adult tetanus Td/Tdap booster\", \"results\": [{\"title\": \"CDC: Adult Immunization Schedule\", \"url\": \"https://www.cdc.gov/vaccines/hcp/imz-schedules/adult-age.html\", \"snippet\": \"Td or Tdap booster every 10 years for adults; verify against the current CDC schedule.\"}]}}"
+}

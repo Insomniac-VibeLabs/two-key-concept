@@ -1,0 +1,9 @@
+request id: R830f323288
+
+{
+ "call_id": "call-c37c790ba365",
+ "tool": "lookup",
+ "arguments": {
+  "query": "CDC recommended interval adult tetanus Td/Tdap booster"
+ }
+}

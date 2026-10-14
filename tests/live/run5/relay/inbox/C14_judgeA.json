@@ -1,0 +1,5 @@
+{
+ "rid": "R1c68d25b92",
+ "prompt_sha": "27f92ede557f01e5fe16366d8ed07bfaa9549d80b28af2dc43624e47ea24889e",
+ "content": "{\"consistent\": true, \"confidence\": 0.9, \"rationale\": \"Allowed payee, USD, under the cap, PO matched, memo consistent with the invoice.\"}"
+}
